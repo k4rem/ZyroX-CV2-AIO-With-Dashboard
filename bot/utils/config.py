@@ -29,17 +29,24 @@ ch         = "https://discord.com/channels/699587669059174461/127182567871047691
 CMD_WEBHOOK_URL = os.getenv("CMD_WEBHOOK_URL")
 
 # ── Owner / Staff IDs ─────────────────────────────────────────────────────────
-# Edit OWNER_IDS in .env — comma-separated, no spaces needed.
-# Example:  OWNER_IDS = 870179991462236170,767979794411028491,1432771000629596225
+# OWNER_IDS must be set in .env as comma-separated numeric Discord user IDs.
 
-def _parse_ids(env_key: str, defaults: list[int]) -> list[int]:
-    raw = os.getenv(env_key, "").strip()
+def _parse_owner_ids() -> list[int]:
+    raw = os.getenv("OWNER_IDS", "").strip()
     if not raw:
-        return defaults
-    ids = [int(p.strip()) for p in raw.split(",") if p.strip().isdigit()]
-    return ids or defaults
+        raise SystemExit(
+            "Startup stopped: OWNER_IDS is missing in .env. "
+            "Set OWNER_IDS to one or more comma-separated Discord user IDs."
+        )
+    parts = [part.strip() for part in raw.split(",") if part.strip()]
+    if not parts or any(not part.isdigit() for part in parts):
+        raise SystemExit(
+            "Startup stopped: OWNER_IDS is invalid. "
+            "Use comma-separated numeric Discord user IDs only."
+        )
+    return [int(part) for part in parts]
 
-OWNER_IDS:     list[int] = _parse_ids("OWNER_IDS",     [870179991462236170])
+OWNER_IDS:     list[int] = _parse_owner_ids()
 OWNER_IDS_STR: list[str] = [str(i) for i in OWNER_IDS]
 
 # Aliases kept for backwards compatibility with files that import these names
