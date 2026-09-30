@@ -158,13 +158,21 @@ Status: implemented and committed on `phase-1.5-cls-os-design` (not pushed). Che
 - **Nav visibility:** Verification, Leveling, Docs are hidden from nav (routes untouched). Access and Platform appear only when the server computed `isRoot`; no client component imports `isRootOwner` and the client bundle contains none of the server env values.
 - **Dependencies:** five Radix packages added (dialog, direction, dropdown-menu, popover, tooltip; slot and switch were already present). Nothing else.
 
-**Backend finding (not changed, Phase 1 scope):** `/system/health` returns per-guild permission data for all guilds to any authenticated dashboard user. The shell only displays the current guild, but the endpoint should be scoped server-side.
+**Security closure (commit "close CLS OS task A security review"):** Task A QA found that `/api/v1/system/health` returned per-guild bot-permission data for every guild the bot is in (including the CLS Ops guild) to any authenticated identity, even one with no grant. Fixed server-side, not in React:
+- `api/auth/policy.py`: non-root callers need at least one active grant (same rule as `/api/v1/bot`); an explicit `?guild_id=` is run through `authorize_guild_request` (allowlist, Ops rule, active grant, `guild.view`); malformed or repeated `guild_id` is rejected.
+- `api/routes/system.py`: per-guild data is computed only for `authorized_guild_ids` (allowlisted product guilds, never Ops, grants only for non-root). `?guild_id=` can only narrow. Non-root callers do not receive the API bind host, `root_owner_configured`, optional modules or raw module error text.
+- `cls_platform/health/permissions.py`: `permission_health_summary` now requires an explicit `guild_ids` scope.
+- Proof: `bot/tests/test_system_health_authz.py` (12 integration tests through the real middleware, sessions, JWT and grant tables; 11 fail against the previous code). The dashboard response shape is unchanged for the shell.
+- Test safety: `bot/tests/conftest.py` now aborts unless `DATABASE_URL` names a database ending in `_test`, because `db_reset` truncates platform tables.
+- Side effect: a dashboard identity with no grant now gets 403 from `/system/health` (as it already did from `/bot/status`), so its health chip reads unreachable.
+- Finding for Phase 1 follow-up (not changed): `postgres.connected` mirrors `POSTGRES_ENABLED` instead of probing the database.
 
 **Hand-offs**
 - Task B: root metadata title/description still says "Zyrox"; `Toaster` sits outside `UiProviders` (physical toast position in RTL).
 - Known shell polish (POLISH, unscheduled): at 1024-1279 px the server renders the expanded sidebar content for one frame before hydration switches to the rail.
 - Task C: `/dashboard` legacy home still shows hard-coded uptime; guild overview cards still show fake metrics; `components/ui/table.tsx` and `components/guild-tabs.tsx` are legacy/unused; `max-w-content` cap leaves the breadcrumb left-aligned on 2560 px while content is centred (decide per-page width classes); `isRootOwner` lives in `lib/utils.ts` next to client helpers (move to a server-only module); Select rebuild (above); legacy colour aliases in the LEGACY block of `globals.css` to be removed as pages migrate.
-- Not verified visually: a non-root session (covered by `buildNav` unit tests and server-side gating of Access/Platform).
+- Not verified in a real browser: a non-root session. It would need a forged NextAuth cookie or a second Discord account, so it was not done. Covered instead by the `buildNav` unit tests (root-only items only when the server says `isRoot`), the server layout computing `isRoot` from the server-only `ROOT_OWNER_ID`, and the integration tests above.
+- Known test-suite quirk (pre-existing): `pytest` finishes all tests but the process does not exit on its own on this machine; run it with a timeout.
 
 ---
 

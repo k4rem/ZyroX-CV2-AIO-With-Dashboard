@@ -28,6 +28,8 @@ class FakeGuild:
     member_count: int = 10
     owner_id: int = 1
     icon: object = None
+    # Bot member in this guild (``guild.me``). ``None`` keeps the legacy "no permission data" behaviour.
+    me: object = None
 
     def get_role(self, role_id: int) -> Optional[FakeRole]:
         for r in self.roles:

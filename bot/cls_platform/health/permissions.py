@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import Any
 
 import discord
@@ -16,9 +17,18 @@ MODULE_REQUIRED: dict[str, list[str]] = {
 }
 
 
-async def permission_health_summary(bot) -> dict[str, Any]:
+async def permission_health_summary(bot, *, guild_ids: Collection[int]) -> dict[str, Any]:
+    """Per-guild bot permission health, restricted to ``guild_ids``.
+
+    ``guild_ids`` is required on purpose: callers must pass the set the requesting
+    Dashboard identity is authorized for, so this can never be called "for all guilds"
+    by accident. Guilds outside the set are not read at all.
+    """
+    allowed = {int(g) for g in guild_ids}
     guilds_out = []
     for guild in bot.guilds:
+        if guild.id not in allowed:
+            continue
         me = getattr(guild, "me", None)
         if me is None:
             continue

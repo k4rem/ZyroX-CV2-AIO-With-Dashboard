@@ -105,6 +105,33 @@ async def authorize_guild_request(
         raise HTTPException(status_code=403, detail="Insufficient capability")
 
 
+async def _authorize_system_request(request: Request, auth: DashboardAuthContext, bot) -> None:
+    """``/api/v1/system/*``: grant required for non-root; an explicit ``guild_id`` must be authorized.
+
+    The route additionally filters every per-guild section to ``authorized_guild_ids``, so a
+    client can only ever narrow the response, never widen it.
+    """
+    values = request.query_params.getlist("guild_id")
+    if len(values) > 1:
+        raise HTTPException(status_code=400, detail="Invalid guild_id")
+    if values:
+        try:
+            guild_id = int(values[0])
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid guild_id")
+        if guild_id <= 0:
+            raise HTTPException(status_code=400, detail="Invalid guild_id")
+        # Checks the allowlist, the CLS Ops guild, an active grant and the capability.
+        await authorize_guild_request(auth, guild_id, "guild.view", bot)
+        request.state.guild_id = guild_id
+        return
+
+    if auth.is_root:
+        return
+    if not await grant_service.list_grants_for_user(auth.user_id):
+        raise HTTPException(status_code=403, detail="Dashboard access required")
+
+
 async def apply_request_auth(request: Request, auth: DashboardAuthContext, bot) -> None:
     from api.auth.route_registry import RouteClass, classify_http_route
     from api.validators.discord_resources import validate_mutation_payload
@@ -118,6 +145,7 @@ async def apply_request_auth(request: Request, auth: DashboardAuthContext, bot) 
         return
 
     if route_class == RouteClass.AUTHENTICATED_USER and path.startswith("/api/v1/system"):
+        await _authorize_system_request(request, auth, bot)
         return
 
     if path.startswith("/api/v1/bot"):

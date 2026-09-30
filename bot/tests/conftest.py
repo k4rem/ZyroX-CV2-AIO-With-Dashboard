@@ -85,8 +85,22 @@ def _run_alembic_upgrade():
     )
 
 
+def _assert_disposable_database() -> None:
+    """``db_reset`` TRUNCATEs platform tables. Never let it touch a non-test database (e.g. the local preview DB)."""
+    from urllib.parse import urlparse
+
+    name = urlparse(os.environ.get("DATABASE_URL", "")).path.lstrip("/")
+    if not name.endswith("_test"):
+        pytest.exit(
+            f"Refusing to run DB integration tests against database {name!r}: "
+            "DATABASE_URL must point at a disposable database whose name ends with '_test'.",
+            returncode=2,
+        )
+
+
 @pytest.fixture(scope="session")
 def postgres_ready():
+    _assert_disposable_database()
     if not _postgres_reachable():
         pytest.skip("Local PostgreSQL not reachable (start docker compose postgres)")
     _ensure_test_db()
