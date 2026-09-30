@@ -50,7 +50,7 @@ build/
 
 # Ignore node_modules
 node_modules/
-package-lock.json
+# package-lock.json tracked for Dashboard reproducibility (Phase 1)
 
 # Ignore Next.js build output
 .next/

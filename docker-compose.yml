@@ -1,0 +1,105 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cls
+      POSTGRES_PASSWORD: cls
+      POSTGRES_DB: cls_discord
+    volumes:
+      - cls_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cls -d cls_discord"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cls_internal
+
+  bot-api:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    working_dir: /app
+    env_file:
+      - path: ./bot/.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://cls:cls@postgres:5432/cls_discord
+      POSTGRES_ENABLED: "true"
+      API_ENABLED: "true"
+      API_HOST: "0.0.0.0"
+      API_ALLOW_PUBLIC_BIND: "true"
+    volumes:
+      - cls_bot_data:/app/db
+      - cls_bot_json:/app/jsondb
+      - cls_bot_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cls_internal
+    # Not published publicly in production topology; dev may map loopback if needed:
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    environment:
+      BOT_INTERNAL_URL: http://bot-api:8000
+      NEXTAUTH_URL: http://localhost:3000
+    env_file:
+      - path: ./dashboard/.env
+        required: false
+    depends_on:
+      - bot-api
+    networks:
+      - cls_internal
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    networks:
+      - cls_internal
+    ports:
+      - "127.0.0.1:2333:2333"
+
+  reverse-proxy:
+    image: nginx:alpine
+    volumes:
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - dashboard
+    ports:
+      - "127.0.0.1:8080:80"
+    networks:
+      - cls_internal
+
+  backup-runner:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    entrypoint: ["python", "scripts/cls_backup.py", "run"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://cls:cls@postgres:5432/cls_discord
+    volumes:
+      - cls_backup_staging:/backups
+      - cls_bot_data:/app/db:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cls_internal
+
+networks:
+  cls_internal:
+    driver: bridge
+
+volumes:
+  cls_postgres_data:
+  cls_bot_data:
+  cls_bot_json:
+  cls_bot_storage:
+  cls_backup_staging:
