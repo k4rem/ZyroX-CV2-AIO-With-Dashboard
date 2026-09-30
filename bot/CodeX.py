@@ -17,7 +17,6 @@ import subprocess
 # os.system("")
 import asyncio
 import traceback
-from threading import Thread
 from datetime import datetime
 import random
 import time
@@ -275,40 +274,19 @@ async def reaction(ctx: Context):
         await message.edit(embed=embed)
 
 
-# ---API Server for Dashboard Backend ---
-import uvicorn
-from threading import Thread
+# --- API Server for Dashboard Backend (same asyncio loop as discord.py) ---
 from api.server import create_app
 from api.dependencies import set_bot
+from api.lifecycle import attach_bot_lifecycle
+from utils.api_bind import load_api_bind_config, validate_api_bind_or_exit
 
 fastapi_app = create_app()
 fastapi_app.state.bot = client
 set_bot(client)
 
-from utils.api_bind import load_api_bind_config, validate_api_bind_or_exit
-
 _api_cfg = load_api_bind_config()
 validate_api_bind_or_exit(_api_cfg)
-
-def run_api():
-    uvicorn.run(
-        fastapi_app,
-        host=_api_cfg.host,
-        port=_api_cfg.port,
-        log_level="warning",
-    )
-
-def keep_alive():
-    if not _api_cfg.enabled:
-        print(f"\033[33m[*] API Server: Disabled via API_ENABLED=false\033[0m")
-        return
-    print(
-        f"\033[32m[*] API Server: Starting on {_api_cfg.host}:{_api_cfg.port}\033[0m"
-    )
-    server = Thread(target=run_api, daemon=True)
-    server.start()
-
-keep_alive()
+attach_bot_lifecycle(client, fastapi_app, _api_cfg)
 
 # --- Cloudflare Tunnel (HTTPS for API) ---
 from utils.tunnel import start_tunnel

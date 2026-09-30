@@ -12,7 +12,7 @@
 # ║                                                                  ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-from fastapi import FastAPI, Depends, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
@@ -25,8 +25,9 @@ from slowapi.middleware import SlowAPIMiddleware
 from utils.config import *
 
 
-from api.routes import bot, guilds, admin
-from api.dependencies import verify_api_key, limiter
+from api.routes import bot, guilds, admin, internal_sessions, access, system
+from api.dependencies import limiter
+from api.auth.middleware import register_dashboard_auth_middleware
 from api.db_manager import db_manager
 
 # Configure logging
@@ -39,9 +40,7 @@ if not logger.handlers:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Setup: Nothing special needed for now
     yield
-    # Shutdown: Close all shared database connections
     await db_manager.close_all()
 
 def create_app() -> FastAPI:
@@ -53,9 +52,10 @@ def create_app() -> FastAPI:
         title=f"{BRAND_NAME} Bot API",
         description=f"REST API to manage the {BRAND_NAME} Discord Bot features",
         version="1.0",
-        dependencies=[Depends(verify_api_key)],
         lifespan=lifespan
     )
+
+    register_dashboard_auth_middleware(app)
 
     # Structured Logging Middleware
     @app.middleware("http")
@@ -81,32 +81,23 @@ def create_app() -> FastAPI:
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIMiddleware)
 
-    # Build allowed origins from env + hardcoded fallbacks
-    _extra_origins = [
-        o.strip()
-        for o in os.getenv("CORS_ORIGINS", "").split(",")
-        if o.strip()
-    ]
-    _allowed_origins = list(dict.fromkeys([
-        "http://localhost:3000",
-        "https://localhost:3000",
-        "https://your-vercel-url-here.vercel.app",
-        *_extra_origins,
-    ]))
+    _cors = os.getenv("CORS_ORIGINS", "").strip()
+    if _cors:
+        _allowed_origins = [o.strip() for o in _cors.split(",") if o.strip()]
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=_allowed_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type"],
+        )
 
-    # Enable CORS for Next.js dashboard
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=_allowed_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
-    # Register Routers
+    app.include_router(internal_sessions.router, prefix="/api/internal/v1", tags=["Internal"])
     app.include_router(bot.router, prefix="/api/v1/bot", tags=["Bot"])
     app.include_router(guilds.router, prefix="/api/v1/guilds", tags=["Guilds"])
     app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
+    app.include_router(access.router, prefix="/api/v1/access", tags=["Access"])
+    app.include_router(system.router, prefix="/api/v1/system", tags=["System"])
 
     @app.get("/", summary="API Root", description="Returns basic API information and online status.")
     async def root():

@@ -13,6 +13,7 @@
 # ╚══════════════════════════════════════════════════════════════════╝
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from api.auth.guilds import authorized_guild_ids
 from api.dependencies import get_bot, limiter
 from api.db_manager import db_manager
 from api.schemas import (
@@ -41,13 +42,14 @@ if TYPE_CHECKING:
 router = APIRouter()
 
 
-@router.get("/", response_model=List[GuildSummary], summary="List all guilds", description="Returns a summary of all guilds the bot is currently in.")
-async def list_guilds(bot: "zyrox" = Depends(get_bot)):
-    """
-    Lists detailed information about all guilds the bot is currently in.
-    """
+@router.get("/", response_model=List[GuildSummary], summary="List authorized guilds", description="Returns guilds the caller may access via Dashboard grants.")
+async def list_guilds(request: Request, bot: "zyrox" = Depends(get_bot)):
+    auth = request.state.dashboard_auth
+    allowed = await authorized_guild_ids(auth, bot)
     guilds_list = []
     for guild in bot.guilds:
+        if guild.id not in allowed:
+            continue
         guilds_list.append(GuildSummary(
             id=str(guild.id),
             name=guild.name,
