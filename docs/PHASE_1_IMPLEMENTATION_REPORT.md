@@ -2,9 +2,9 @@
 
 ## 1. Executive result
 
-Phase 1 platform core on branch `phase-1-platform-core` is **implemented and locally validated** against disposable PostgreSQL (port 5433), FastAPI integration tests, Dashboard build, and backup scratch restore.
+Phase 1 platform core on branch `phase-1-platform-core` is **implemented and locally validated** against disposable PostgreSQL (port 5433), FastAPI integration tests, Dashboard build, and **full local backup restore** (PostgreSQL logical dump + SQLite + JSON).
 
-**Final recommendation:** **READY FOR PHASE 1 REVIEW** — production deployment secrets, domain/TLS, and full Compose E2E on VPS remain owner/deployment actions (see §24).
+**Final recommendation:** **READY FOR PHASE 1 REVIEW** and **READY TO CLOSE PHASE 1** — production deployment secrets, domain/TLS, off-host backup destination, and full Compose E2E on VPS remain owner/deployment actions (see §24).
 
 ## 2. Architecture implemented
 
@@ -72,8 +72,13 @@ Phase 1 platform core on branch `phase-1-platform-core` is **implemented and loc
 
 ## 15. Backup system
 
-- `bot/scripts/cls_backup.py` — SQLite backup API, jsondb copy, optional pg_dump/restic hooks.
-- **Local validation:** `test_backup_restore_sqlite_and_json` — stage, backup, restore SQLite + JSON; `.env` not captured.
+- `bot/scripts/cls_backup.py` — SQLite backup API, jsondb copy, **PostgreSQL logical backup via `pg_dump`** (credentials from `DATABASE_URL` env only, not argv/logs), restore via `psql`, optional local restic when configured.
+- **Local validation:** `tests/test_backup_restore.py`
+  - **PostgreSQL:** marker rows in `dashboard_sessions`, `audit_events`, `scheduler_jobs` → `pg_dump` → restore into disposable `cls_discord_restore_test` → marker + `alembic_version` + FK constraints verified.
+  - **SQLite + JSON:** scratch stage/restore (unchanged).
+  - **Error path:** invalid PostgreSQL target → `pg_dump` fails with non-zero / raised error, no successful empty backup.
+  - `.env` not included in backup tree; dump text does not contain `DATABASE_URL` / password.
+- **Off-host backup destination:** **DEFERRED — OWNER/DEPLOYMENT** (does not block Phase 1 code review).
 
 ## 16. Permission/hierarchy health
 
@@ -108,7 +113,7 @@ Phase 1 platform core on branch `phase-1-platform-core` is **implemented and loc
 | Cross-guild resource validation | **PASS** |
 | Scheduler integration | **PASS** |
 | Postgres migrations / tables | **PASS** |
-| Backup restore (SQLite + JSON) | **PASS** |
+| Backup restore (PostgreSQL + SQLite + JSON) | **PASS** |
 | System health (no secret leak) | **PASS** |
 | Phase 0 security / loaders | **PASS** |
 | `npm ci` + `npm run build` (dashboard) | **PASS** |
@@ -151,7 +156,7 @@ See `docs/PHASE_1_MANUAL_ACTIONS.md`.
 | Session + JWT + grants + RBAC | **PASS** (integration tests) |
 | Route auth coverage | **PASS** |
 | Scheduler + role temp | **PASS** (integration; restart persistence) |
-| Backup restore (local) | **PASS** (SQLite + JSON) |
+| Backup restore (local) | **PASS** (PostgreSQL logical → scratch DB + SQLite + JSON) |
 | Compose topology config | **PASS** |
 | Compose runtime E2E | **DEFERRED — OWNER/DEPLOYMENT** |
 | Dashboard build + secret scan | **PASS** |
