@@ -3,34 +3,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { mintInternalIdentityToken } from "@/lib/internalIdentity";
 import { botApiOrigin } from "@/lib/botInternal";
+import {
+  assertSameOriginProxy,
+  isBlockedProxyPath,
+  sanitizeInboundHeaders,
+} from "@/lib/proxyUtils";
 
-const PROXY_PREFIX = "/api/bot";
 const UPSTREAM_PREFIX = "/api/v1";
 
-function assertSameOrigin(request: NextRequest): boolean {
-  if (request.method === "GET" || request.method === "HEAD") {
-    return true;
-  }
-  const host = request.headers.get("host");
-  const origin = request.headers.get("origin");
-  if (!origin || !host) {
-    return false;
-  }
-  try {
-    const o = new URL(origin);
-    return o.host === host;
-  } catch {
-    return false;
-  }
-}
-
 async function proxy(request: NextRequest, pathSegments: string[]) {
-  if (!assertSameOrigin(request)) {
+  if (
+    !assertSameOriginProxy(
+      request.method,
+      request.headers.get("host"),
+      request.headers.get("origin")
+    )
+  ) {
     return NextResponse.json({ detail: "Forbidden" }, { status: 403 });
   }
 
   const rel = pathSegments.join("/");
-  if (rel.startsWith("internal/") || rel.includes("..")) {
+  if (isBlockedProxyPath(rel)) {
     return NextResponse.json({ detail: "Forbidden" }, { status: 403 });
   }
 
@@ -56,7 +49,7 @@ async function proxy(request: NextRequest, pathSegments: string[]) {
   const url = new URL(upstreamPath, botApiOrigin());
   request.nextUrl.searchParams.forEach((v, k) => url.searchParams.set(k, v));
 
-  const headers = new Headers();
+  const headers = sanitizeInboundHeaders(request.headers);
   headers.set("Authorization", `Bearer ${identityToken}`);
   const contentType = request.headers.get("content-type");
   if (contentType) {

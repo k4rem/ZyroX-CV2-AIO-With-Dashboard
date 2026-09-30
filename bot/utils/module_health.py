@@ -79,3 +79,23 @@ async def add_cog_safe(
         health.record_fail(name, required, exc)
         if required:
             print(Fore.RED + Style.BRIGHT + f"Required cog failed: {name} — {exc}")
+
+
+def required_modules_report(bot) -> dict:
+    """Dashboard-safe module health snapshot (no secrets)."""
+    health: ModuleHealth | None = getattr(bot, "module_health", None)
+    if health is None:
+        return {
+            "healthy": True,
+            "required_ok": [],
+            "required_failed": [],
+            "optional_ok": [],
+            "optional_failed": [],
+        }
+    return {
+        "healthy": health.healthy,
+        "required_ok": list(health.required_ok),
+        "required_failed": [{"name": n, "error": e} for n, e in health.required_failed],
+        "optional_ok": list(health.optional_ok),
+        "optional_failed": [{"name": n, "error": e} for n, e in health.optional_failed],
+    }

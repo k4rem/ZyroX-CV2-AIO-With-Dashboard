@@ -12,8 +12,11 @@ _CACHE: dict[str, object] = {}
 
 
 def _ensure_utils_package() -> None:
-    if "utils" in sys.modules:
+    existing = sys.modules.get("utils")
+    if existing is not None and hasattr(existing, "getConfig"):
         return
+    if existing is not None:
+        return  # keep lightweight stub for Phase 0 unit tests
     pkg = types.ModuleType("utils")
     pkg.__path__ = [_UTILS_DIR]  # type: ignore[attr-defined]
     sys.modules["utils"] = pkg

@@ -14,6 +14,7 @@ from pathlib import Path
 
 
 def backup_sqlite(src: Path, dest: Path) -> None:
+    """Consistent SQLite copy using the backup API."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     if not src.is_file():
         return

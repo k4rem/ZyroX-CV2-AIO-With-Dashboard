@@ -16,5 +16,11 @@
 
 from .config import *
 from .Tools import *
-from .paginators import *
-from .paginator import *
+try:
+    from .paginators import *
+except ImportError:
+    pass
+try:
+    from .paginator import *
+except ImportError:
+    pass

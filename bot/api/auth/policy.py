@@ -75,7 +75,7 @@ def resolve_capability(method: str, suffix: Optional[str]) -> str:
             if method == "GET" and cap.endswith(".config"):
                 return "guild.view"
             return cap
-    return "guild.view" if method == "GET" else "bot.settings"
+    raise HTTPException(status_code=403, detail="Unknown guild route capability")
 
 
 async def authorize_guild_request(
@@ -106,13 +106,18 @@ async def authorize_guild_request(
 
 
 async def apply_request_auth(request: Request, auth: DashboardAuthContext, bot) -> None:
+    from api.auth.route_registry import RouteClass, classify_http_route
+    from api.validators.discord_resources import validate_mutation_payload
+
     path = request.url.path
-    if path.startswith("/api/v1/admin") or path.startswith("/api/v1/access"):
+    route_class = classify_http_route(request.method, path)
+
+    if route_class == RouteClass.ROOT_ONLY:
         if not auth.is_root:
             raise HTTPException(status_code=403, detail="Root access required")
         return
 
-    if path.startswith("/api/v1/system"):
+    if route_class == RouteClass.AUTHENTICATED_USER and path.startswith("/api/v1/system"):
         return
 
     if path.startswith("/api/v1/bot"):
@@ -133,3 +138,7 @@ async def apply_request_auth(request: Request, auth: DashboardAuthContext, bot) 
         cap = resolve_capability(request.method, suffix)
         await authorize_guild_request(auth, guild_id, cap, bot)
         request.state.guild_id = guild_id
+        await validate_mutation_payload(request, guild_id, bot)
+        return
+
+    raise HTTPException(status_code=403, detail="Unknown application route")

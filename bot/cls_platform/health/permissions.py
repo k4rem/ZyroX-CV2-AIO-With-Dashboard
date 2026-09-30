@@ -19,8 +19,8 @@ MODULE_REQUIRED: dict[str, list[str]] = {
 async def permission_health_summary(bot) -> dict[str, Any]:
     guilds_out = []
     for guild in bot.guilds:
-        me = guild.me
-        if not me:
+        me = getattr(guild, "me", None)
+        if me is None:
             continue
         perms = me.guild_permissions
         missing_by_module: dict[str, list[str]] = {}

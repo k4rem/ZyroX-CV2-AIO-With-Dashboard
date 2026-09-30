@@ -25,7 +25,7 @@ def test_discord_snowflake_validation():
 
 
 def test_internal_identity_token_roundtrip():
-    os.environ["INTERNAL_IDENTITY_SIGNING_KEY"] = "test-signing-key-phase1"
+    os.environ["INTERNAL_IDENTITY_SIGNING_KEY"] = "phase1-test-signing-key-32bytes!!"
     os.environ["INTERNAL_IDENTITY_AUDIENCE"] = "cls-fastapi"
     from importlib import reload
     import cls_platform.config as cfg
@@ -42,7 +42,7 @@ def test_internal_identity_token_roundtrip():
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=30)).timestamp()),
     }
-    token = jwt.encode(payload, "test-signing-key-phase1", algorithm="HS256")
+    token = jwt.encode(payload, os.environ["INTERNAL_IDENTITY_SIGNING_KEY"], algorithm="HS256")
     decoded = verify_internal_identity_token(token)
     assert decoded["sub"] == payload["sub"]
 

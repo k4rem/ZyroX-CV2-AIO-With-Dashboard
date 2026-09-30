@@ -15,7 +15,7 @@
 import json, sys, os
 import discord
 from discord.ext import commands
-from core import Context
+from core.Context import Context
 from utils.emoji import DENIED
 import aiosqlite
 import asyncio
@@ -31,7 +31,14 @@ async def setup_db():
     await db.commit()
 
 
-asyncio.run(setup_db())
+def _init_prefix_db_if_idle() -> None:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(setup_db())
+
+
+_init_prefix_db_if_idle()
 
 async def is_topcheck_enabled(guild_id: int):
     async with aiosqlite.connect('db/topcheck.db') as db:

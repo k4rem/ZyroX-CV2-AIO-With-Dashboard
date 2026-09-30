@@ -32,7 +32,10 @@ async def create_session(discord_user_id: int, ttl_hours: int = 168) -> uuid.UUI
 
 
 async def get_session(session_id: uuid.UUID) -> Optional[DashboardSession]:
-    async with session_scope() as session:
+    from cls_platform.database import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
         result = await session.execute(
             select(DashboardSession).where(DashboardSession.id == session_id)
         )

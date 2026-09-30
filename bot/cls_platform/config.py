@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from utils.env_parse import parse_discord_snowflake_list, parse_env_bool
+from cls_platform.env_parse import parse_discord_snowflake_list, parse_env_bool
 
 
 def _optional_snowflake(name: str) -> Optional[int]:

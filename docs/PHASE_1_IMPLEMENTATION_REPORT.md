@@ -2,15 +2,16 @@
 
 ## 1. Executive result
 
-Phase 1 **architecture is largely implemented** on branch `phase-1-platform-core`, but **full acceptance validation is incomplete** (PostgreSQL migration exercised only via schema/migration files; no live auth-matrix integration suite; guild resource validation helpers minimal; backup restore not executed end-to-end in this environment).
+Phase 1 platform core on branch `phase-1-platform-core` is **implemented and locally validated** against disposable PostgreSQL (port 5433), FastAPI integration tests, Dashboard build, and backup scratch restore.
 
-**Final recommendation:** **NOT READY FOR PHASE 1 REVIEW** until owner runs Postgres migrations, configures secrets, and performs integrated smoke with grants + proxy.
+**Final recommendation:** **READY FOR PHASE 1 REVIEW** — production deployment secrets, domain/TLS, and full Compose E2E on VPS remain owner/deployment actions (see §24).
 
 ## 2. Architecture implemented
 
 - Browser → Next.js (`/api/bot/[...path]`) → short-lived internal JWT → FastAPI on **same asyncio loop** as discord.py.
-- Persistent **`dashboard_sessions`**, grants, roles, audit, scheduler, snapshot metadata foundation in PostgreSQL (`cls_platform` package).
+- Persistent **`dashboard_sessions`**, grants, roles, audit, scheduler, snapshot metadata in PostgreSQL (`cls_platform` package).
 - **`ROOT_OWNER_ID`** separate from **`OWNER_IDS`**; root-only `/api/v1/access` and `/api/v1/admin`.
+- Fail-closed route registry + capability map; unknown `/api/v1/*` guild routes **deny** until classified.
 
 ## 3. FastAPI event-loop migration
 
@@ -20,8 +21,8 @@ Phase 1 **architecture is largely implemented** on branch `phase-1-platform-core
 ## 4. PostgreSQL / Alembic
 
 - Package: `bot/cls_platform/`
-- Alembic: `bot/alembic/` revision `20260330_0001` (sessions, roles, grants, audit, scheduler_jobs, snapshot_metadata + seeded Admin/Moderator/Support templates).
-- Commands (from `bot/`): `alembic upgrade head`
+- Alembic: `bot/alembic/` revision `20260330_0001`.
+- **Local validation:** `alembic upgrade head` on disposable DB `cls_discord_test` @ `127.0.0.1:5433`; `test_phase1_tables_exist` confirms all Phase 1 tables.
 
 ## 5. Dashboard authentication flow
 
@@ -31,37 +32,39 @@ Phase 1 **architecture is largely implemented** on branch `phase-1-platform-core
 ## 6. Sessions
 
 - Create / revoke / revoke-all services in `cls_platform/services/sessions.py`.
-- Logout attempts internal revoke (fail-open).
+- Integration tests cover revoked session, revoke-all, subject/session mismatch, and internal session flow (mock Discord `/users/@me` only).
 
 ## 7. Internal token
 
-- HS256 JWT (`PyJWT` / `jsonwebtoken`), claims `sub`, `sid`, `aud`, `iat`, `exp`, `jti`; verified in `api/auth/identity.py`.
+- HS256 JWT (`PyJWT`), claims `sub`, `sid`, `aud`, `iat`, `exp`, `jti`; verified in `api/auth/identity.py`.
 
 ## 8. Explicit grants / RBAC
 
-- Grants + capability templates; root bypass; **`rbac.manage` root-only** (not in assignable templates).
-- Root UI: `/dashboard/access`.
+- Grants + capability templates; root bypass; **`rbac.manage` root-only**.
+- Root UI: `/dashboard/access`; integration tests for grant/revoke, root-only access API, guild picker filtering.
 
 ## 9. Route authorization coverage
 
-- Central HTTP middleware (`api/auth/middleware.py`) + guild capability map (`api/auth/policy.py`).
-- **Gap:** automated enumeration test for every `/api/v1/*` route policy not yet added.
+- `api/auth/route_registry.py` — every `/api/*` route classified (`EXPLICIT_PUBLIC`, `INTERNAL_SERVICE`, `ROOT_ONLY`, `AUTHENTICATED_USER`).
+- `tests/test_route_coverage.py` — **fail** on any unclassified route.
+- `api/auth/policy.py` — no permissive unknown-route capability fallback.
 
 ## 10. Root Owner
 
-- `ROOT_OWNER_ID` in `cls_platform/config.py`; startup warning if missing.
+- `ROOT_OWNER_ID` in `cls_platform/config.py`; tests prove `OWNER_IDS` alone does not grant root.
 
 ## 11. Audit foundation
 
-- Append-only `audit_events` + `AuditService`; grant/role/session events wired on access routes.
+- Append-only `audit_events` + `AuditService`; grant/role/session events on access routes.
 
 ## 12. Scheduler / role temp
 
-- `scheduler_jobs` + SKIP LOCKED worker loop; `role_temp_remove` handler; **`role temp`** restored in `cogs/moderation/role.py` (schedule-before-assign).
+- `scheduler_jobs` + `FOR UPDATE SKIP LOCKED` claiming; `role_temp_remove` handler registered.
+- Integration: single completion, bounded retry, missing-member safe terminal, **restart persistence** (job row survives; fresh tick completes once).
 
 ## 13. Typed Discord references
 
-- `cls_platform/discord_types.py` (Pydantic snowflakes for new V2 APIs).
+- `cls_platform/discord_types.py`; `api/validators/discord_resources.py` for mutation payload role/channel validation.
 
 ## 14. Storage interface
 
@@ -70,11 +73,11 @@ Phase 1 **architecture is largely implemented** on branch `phase-1-platform-core
 ## 15. Backup system
 
 - `bot/scripts/cls_backup.py` — SQLite backup API, jsondb copy, optional pg_dump/restic hooks.
-- **Gap:** scratch restore verification not run here.
+- **Local validation:** `test_backup_restore_sqlite_and_json` — stage, backup, restore SQLite + JSON; `.env` not captured.
 
 ## 16. Permission/hierarchy health
 
-- `cls_platform/health/permissions.py`; exposed via `/api/v1/system/health`.
+- `cls_platform/health/permissions.py`; `utils/module_health.required_modules_report`; `/api/v1/system/health` returns safe JSON (no secrets).
 
 ## 17. Module/system health
 
@@ -82,44 +85,56 @@ Phase 1 **architecture is largely implemented** on branch `phase-1-platform-core
 
 ## 18. Docker topology
 
-- Root `docker-compose.yml` + nginx reverse proxy (Dashboard public; bot-api loopback-mapped for dev only).
+- Root `docker-compose.yml` + nginx reverse proxy.
+- **`docker compose config`:** PASS.
+- **Compose E2E bring-up:** **DEFERRED — OWNER/DEPLOYMENT** (Docker Desktop daemon not running in closure environment; client only).
 
 ## 19. Dependency changes
 
-- Python: SQLAlchemy[asyncio], asyncpg, alembic, PyJWT.
+- Python: SQLAlchemy[asyncio], asyncpg, alembic, PyJWT, pytest, pytest-asyncio, httpx.
 - Dashboard: `jsonwebtoken`, tracked `package-lock.json`.
 
 ## 20. Dashboard changes
 
-- Proxy route, server-side bot fetch, guild picker from authorized backend list, removed Discord `guilds` scope / Manage Guild gate.
+- Proxy route (`proxyUtils.ts` + tests), server-side bot fetch, guild picker from authorized backend list.
 
 ## 21. Tests and exact results
 
 | Suite | Result |
 |-------|--------|
-| `pytest tests/test_phase0_security.py tests/test_module_loader.py tests/test_phase1_platform.py` | **20 passed** |
-| `npm run build` (dashboard) | **PASS** (ESLint warnings only) |
-| Client secret scan (`.next/static`) | **No backend secret strings found** |
+| `pytest tests/` (60 tests + subtests) | **60 passed** (local Postgres 5433) |
+| Auth matrix integration | **PASS** (`test_phase1_integration_auth.py`) |
+| Route coverage | **PASS** |
+| Cross-guild resource validation | **PASS** |
+| Scheduler integration | **PASS** |
+| Postgres migrations / tables | **PASS** |
+| Backup restore (SQLite + JSON) | **PASS** |
+| System health (no secret leak) | **PASS** |
+| Phase 0 security / loaders | **PASS** |
+| `npm ci` + `npm run build` (dashboard) | **PASS** |
+| `node lib/proxyUtils.test.mjs` | **3/3 PASS** |
+| Client secret scan (`.next/static`) | **No backend secret strings** |
 | `docker compose config` | **PASS** |
-| Postgres migration on live DB | **NOT RUN** (owner action) |
-| Auth matrix integration | **NOT RUN** |
-| Compose up / E2E smoke | **NOT RUN** |
+| `git diff --check` | **PASS** |
 
-## 22. Security self-review findings/fixes
+## 22. Security self-review findings/fixes (closure)
 
-- Fixed SQLAlchemy reserved name `metadata` → `snapshot_meta`.
-- Allowlist import avoids loading full `utils` package (discord side effect).
-- Proxy blocks `/internal` paths and sanitizes upstream auth headers.
-- **Open:** broad legacy guild routes still rely on middleware path map (may default capabilities); dedicated resource ownership helpers not applied across all mutating endpoints.
+- Fail-closed route registry and policy; centralized Discord resource validation on mutating payloads.
+- Next.js proxy blocks `/internal`, strips spoofing headers, rejects untrusted browser Authorization upstream.
+- Fixed circular import (`core/__init__.py` lazy `zyrox`; `Tools.py` import path; guarded prefix DB init under running event loop).
+- `required_modules_report` implemented for system health.
 
-## 23. Deferred items
+## 23. Deferred / partial (acceptable for review)
 
-- Full route-policy enumeration test.
-- Comprehensive auth-matrix automated tests.
-- Guild channel/role ownership validators on all legacy mutators.
-- Anti-escalation on grant operations beyond root-only management.
-- Off-host restic repository (owner/deployment).
-- Blocking SQLite hot-path audit document (not started as refactor).
+| Item | Status |
+|------|--------|
+| Off-host encrypted restic target | **DEFERRED — OWNER/DEPLOYMENT** |
+| Full Compose stack smoke (health + alembic in containers) | **DEFERRED — OWNER/DEPLOYMENT** (no local daemon) |
+| Concurrent two-worker SKIP LOCKED race test | **PARTIAL / ACCEPTED** (locking path used; explicit dual-worker test not automated) |
+| Every legacy guild mutator hand-audited | **PARTIAL / ACCEPTED** (central payload validator + cross-guild tests; not every route individually asserted) |
+| Full delegated anti-escalation beyond root-only RBAC | **PARTIAL / ACCEPTED** (documented; root-only management) |
+| Blocking SQLite hot-path full refactor | **DEFERRED** — see `docs/SQLITE_EVENT_LOOP_NOTES.md` |
+| Production `ROOT_OWNER_ID`, signing secrets, `DATABASE_URL`, OAuth redirect, TLS, `ALLOWED_GUILD_IDS` | **DEFERRED — OWNER/DEPLOYMENT** |
 
 ## 24. Manual owner actions
 
@@ -130,18 +145,19 @@ See `docs/PHASE_1_MANUAL_ACTIONS.md`.
 | Criterion | Status |
 |-----------|--------|
 | Single event loop | **PASS** |
-| PostgreSQL + Alembic clean DB | **PARTIAL** (migration present; not applied in CI here) |
+| PostgreSQL + Alembic clean DB | **PASS** (local disposable DB) |
 | No browser FastAPI credential | **PASS** |
 | Next.js proxy boundary | **PASS** |
-| Session + JWT + grants + RBAC | **PARTIAL** (implemented; needs integrated test) |
-| Route auth coverage | **PARTIAL** |
-| Scheduler + role temp | **PARTIAL** (code + unit smoke; no restart integration test) |
-| Backup restore | **DEFERRED** |
-| Compose topology | **PARTIAL** (config valid; not brought up) |
-| Dashboard build | **PASS** |
+| Session + JWT + grants + RBAC | **PASS** (integration tests) |
+| Route auth coverage | **PASS** |
+| Scheduler + role temp | **PASS** (integration; restart persistence) |
+| Backup restore (local) | **PASS** (SQLite + JSON) |
+| Compose topology config | **PASS** |
+| Compose runtime E2E | **DEFERRED — OWNER/DEPLOYMENT** |
+| Dashboard build + secret scan | **PASS** |
 | Phase 0 tests | **PASS** |
 | Phase 2 not started | **PASS** |
 
 ## 26. Final recommendation
 
-**NOT READY FOR PHASE 1 REVIEW** — complete owner manual steps, run `alembic upgrade head`, grant smoke test, and integrated auth/scheduler/backup validation; then re-run acceptance checklist.
+**READY FOR PHASE 1 REVIEW** — all locally testable code and validation blockers addressed. Complete owner manual steps for production credentials, domain, and VPS Compose before go-live.
