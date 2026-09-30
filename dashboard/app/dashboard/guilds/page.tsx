@@ -1,20 +1,20 @@
 import React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Users, ShieldCheck, ChevronRight, Hash } from "lucide-react";
-import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { GuildSummary } from "@/types/api";
+import { ChevronRight, Users } from "lucide-react";
+import { api, ApiError } from "@/lib/api";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { ErrorState, EmptyState } from "@/components/ui/state";
+import type { GuildSummary } from "@/types/api";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function GuildsPage() {
   const session = await getServerSession(authOptions);
-
   if (!session?.user?.id) {
     redirect("/");
   }
@@ -25,106 +25,74 @@ export default async function GuildsPage() {
   try {
     guilds = await api.listGuilds();
   } catch (err: unknown) {
+    if (err instanceof ApiError && err.status === 401) {
+      redirect("/?notice=session-ended");
+    }
     console.error("Failed to fetch authorized guilds:", err);
     error = err instanceof Error ? err.message : "Failed to load servers.";
   }
 
+  if (!error && guilds.length === 1) {
+    redirect(`/dashboard/guild/${guilds[0].id}`);
+  }
+
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Your Servers</h1>
-          <p className="text-slate-400 mt-2">
-            Servers where you have explicit Dashboard access (or root visibility).
-          </p>
-        </div>
-        <div className="text-sm font-medium px-4 py-2 bg-slate-800 rounded-xl border border-slate-700 text-slate-300">
-          Showing <span className="text-white">{guilds.length}</span> guilds
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Servers"
+        description="Servers your account is authorized to manage through CLS OS."
+      />
 
       {error ? (
-        <div className="bg-red-500/10 border border-red-500/20 p-8 rounded-2xl text-center">
-          <ShieldCheck className="h-12 w-12 text-red-500 mx-auto mb-4 opacity-50" />
-          <h3 className="text-white font-bold text-lg">Connection Error</h3>
-          <p className="text-slate-400 mt-2">{error}</p>
-        </div>
+        <ErrorState title="Could not load servers" description={error} />
       ) : guilds.length === 0 ? (
-        <div className="bg-slate-800/30 border border-slate-800 border-dashed p-16 rounded-3xl text-center">
-          <div className="h-16 w-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Users className="h-8 w-8 text-slate-600" />
-          </div>
-          <h3 className="text-white font-bold text-xl">No Servers Found</h3>
-          <p className="text-slate-400 mt-2 max-w-sm mx-auto">
-            Ask the root owner for a Dashboard grant, or verify the bot is in your guild.
-          </p>
-        </div>
+        <EmptyState
+          title="No authorized servers"
+          description="Ask the root owner for a dashboard grant, or verify the bot is in your guild."
+          icon={Users}
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <ul className="divide-y divide-line rounded-md border border-line bg-surface-1">
           {guilds.map((guild) => (
-            <div
-              key={guild.id}
-              className="bg-[#141B2D] border border-slate-800 rounded-3xl group hover:border-primary/50 hover:bg-[#202c3f] transition-all duration-300 overflow-hidden shadow-sm hover:shadow-primary/5 shadow-black/20"
-            >
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-6">
-                  <div className="relative">
-                    {guild.icon_url ? (
-                      <Image
-                        src={guild.icon_url}
-                        alt={guild.name}
-                        width={64}
-                        height={64}
-                        className="rounded-2xl border-2 border-slate-800 shadow-xl group-hover:scale-105 transition-transform"
-                      />
-                    ) : (
-                      <div className="h-16 w-16 bg-primary/20 rounded-2xl flex items-center justify-center border-2 border-slate-800 text-primary font-bold text-2xl shadow-xl group-hover:scale-105 transition-transform">
-                        {guild.name.charAt(0)}
-                      </div>
-                    )}
-                    <div
-                      className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 border-2 border-[#141B2D]"
-                      title="Bot Online"
-                    />
+            <li key={guild.id}>
+              <Link
+                href={`/dashboard/guild/${guild.id}`}
+                className="flex items-center gap-3 px-3 py-2.5 transition-colors duration-row hover:bg-surface-2"
+              >
+                {guild.icon_url ? (
+                  <Image
+                    src={guild.icon_url}
+                    alt=""
+                    width={36}
+                    height={36}
+                    className="size-9 shrink-0 rounded-md border border-line object-cover"
+                  />
+                ) : (
+                  <div
+                    className="flex size-9 shrink-0 items-center justify-center rounded-md border border-line bg-surface-2 text-caption font-medium text-fg-2"
+                    aria-hidden="true"
+                  >
+                    {guild.name.charAt(0)}
                   </div>
-                  <div className="flex flex-col items-end text-right">
-                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">
-                      Guild ID
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-body font-medium text-fg-1">{guild.name}</p>
+                  <p className="flex items-center gap-2 text-caption text-fg-3">
+                    <Users className="size-3.5 shrink-0" aria-hidden="true" />
+                    <span className="tabular-nums">{guild.member_count.toLocaleString()} members</span>
+                    <span className="text-fg-4" aria-hidden="true">
+                      ·
                     </span>
-                    <span className="text-xs font-mono text-slate-400 bg-black/20 px-2 py-1 rounded-lg border border-white/5 truncate max-w-[120px]">
+                    <span className="truncate font-mono text-fg-3" dir="ltr">
                       {guild.id}
                     </span>
-                  </div>
+                  </p>
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white truncate group-hover:text-primary transition-colors">
-                    {guild.name}
-                  </h3>
-                  <div className="flex items-center gap-4 mt-4 text-slate-400">
-                    <div className="flex items-center gap-1.5 bg-slate-800/50 px-3 py-1.5 rounded-xl border border-white/5">
-                      <Users className="h-4 w-4 text-slate-500" />
-                      <span className="text-sm font-semibold text-slate-300">
-                        {guild.member_count.toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 bg-slate-800/50 px-3 py-1.5 rounded-xl border border-white/5">
-                      <Hash className="h-4 w-4 text-slate-500" />
-                      <span className="text-sm font-semibold text-slate-300">Active</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="px-6 py-4 bg-slate-800/20 border-t border-slate-800/80 group-hover:bg-primary/5 transition-colors">
-                <Button className="w-full justify-between group/btn py-6" variant="secondary" asChild>
-                  <Link href={`/dashboard/guild/${guild.id}`}>
-                    <span>Manage Server</span>
-                    <ChevronRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
+                <ChevronRight className="size-4 shrink-0 text-fg-3 rtl:rotate-180" aria-hidden="true" />
+              </Link>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

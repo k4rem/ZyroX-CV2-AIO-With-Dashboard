@@ -202,7 +202,7 @@ export function VerificationForm({ initialConfig, channels, roles, guildId }: Ve
           </div>
           <h3 className="text-sm font-bold text-primary mb-2">How It Works</h3>
           <p className="text-xs text-slate-400 leading-relaxed mb-4">
-            Zyrox Verification ensures that no unauthorized bots or malicious users enter your server unverified.
+            Verification assigns a role after the configured check completes. Review channel and role permissions before enabling.
           </p>
           <ul className="text-xs text-slate-500 space-y-2">
              <li>• The bot will create a panel in your Verification Channel.</li>

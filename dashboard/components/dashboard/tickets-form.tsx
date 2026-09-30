@@ -127,7 +127,6 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
       logging_channel: config.logging_channel,
       closed_category: config.closed_category,
       panel_type: config.panel_type,
-      staff_roles: config.staff_roles
     });
   };
 
@@ -135,8 +134,8 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
     <>
       {/* Category Editor Modal */}
       {editingCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-           <div className="bg-[#141B2D] border border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+           <div className="bg-[#141B2D] border border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
               <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
                 <h3 className="font-bold text-lg text-white flex items-center gap-2">
                    {isAdding ? <Plus className="h-5 w-5 text-primary" /> : <Edit3 className="h-5 w-5 text-primary" />}
@@ -228,8 +227,8 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
 
       {/* Embed Appearance Editor Modal */}
       {editingEmbed && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-           <div className="bg-[#141B2D] border border-slate-800 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+           <div className="bg-[#141B2D] border border-slate-800 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden">
               <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
                 <h3 className="font-bold text-lg text-white flex items-center gap-2">
                    <Edit3 className="h-5 w-5 text-primary" />
@@ -346,17 +345,6 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-xs font-black uppercase text-slate-500 tracking-widest">Global Staff Role IDs</label>
-                <Input 
-                  value={config.staff_roles.join(", ")} 
-                  onChange={(e) => {
-                    const roles = e.target.value.split(",").map(id => id.trim()).filter(id => id && !isNaN(Number(id))).map(Number);
-                    setConfig({...config, staff_roles: roles})
-                  }}
-                  placeholder="ID1, ID2... These roles can see all tickets"
-                />
-              </div>
             </div>
 
             <Button onClick={handleSaveGlobal} disabled={saving} className="w-full gap-2" variant="secondary">
@@ -389,7 +377,9 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
                         <span className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{cat.name}</span>
                         <span className="text-[10px] text-slate-500 flex items-center gap-1 font-mono">
                           <Shield className="h-2 w-2" />
-                          {cat.staff_roles && cat.staff_roles.length > 0 ? `${cat.staff_roles.length} Staff Roles` : 'Global Staff'}
+                          {cat.staff_roles && cat.staff_roles.length > 0
+                            ? `${cat.staff_roles.length} staff role${cat.staff_roles.length === 1 ? "" : "s"}`
+                            : "No staff roles"}
                         </span>
                       </div>
                     </div>

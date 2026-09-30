@@ -137,7 +137,7 @@ export function AutomodForm({ initialConfig, guildId }: AutomodFormProps) {
 
                       <div className="flex items-center gap-4">
                          {isEnabled && (
-                           <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-300">
+                           <div className="flex items-center gap-2">
                              <Gavel className="h-4 w-4 text-primary" />
                              <Select 
                                value={config.punishments[rule.id] || "delete"}
@@ -197,7 +197,7 @@ export function AutomodForm({ initialConfig, guildId }: AutomodFormProps) {
               <ShieldAlert className="h-32 w-32 text-white" />
             </div>
             <h3 className="text-sm font-bold text-white mb-2">Automod AI</h3>
-            <p className="text-xs text-slate-400 leading-relaxed mb-4">Our neural network analyzes message context to prevent false positives.</p>
+            <p className="text-xs text-slate-400 leading-relaxed mb-4">Rules run on message content and attachments using configured punishments.</p>
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-primary" />
               <span className="text-[10px] font-black uppercase text-primary">V2 Active</span>

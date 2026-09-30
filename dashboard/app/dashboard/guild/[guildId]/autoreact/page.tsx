@@ -84,7 +84,7 @@ export default function AutoReactPage({ params }: { params: { guildId: string } 
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+    <div className="max-w-6xl mx-auto space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -114,7 +114,7 @@ export default function AutoReactPage({ params }: { params: { guildId: string } 
             ) : (
               <>
                 {config.triggers.map((item: any, index: number) => (
-                  <div key={index} className="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl space-y-4 animate-in zoom-in-95 duration-200">
+                  <div key={index} className="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="p-2.5 rounded-xl bg-yellow-500/10 text-yellow-500">

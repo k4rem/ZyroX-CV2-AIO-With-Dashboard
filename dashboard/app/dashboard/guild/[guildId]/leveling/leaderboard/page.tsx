@@ -69,7 +69,7 @@ export default function LeaderboardPage({ params }: { params: { guildId: string 
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
+    <div className="max-w-6xl mx-auto space-y-8">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <h2 className="text-3xl font-black text-white flex items-center gap-3 tracking-tight">

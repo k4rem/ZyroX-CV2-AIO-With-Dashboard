@@ -358,6 +358,37 @@ Global list (§0), plus: `app/page.tsx`, `app/auth/**`, `app/docs`, `app/privacy
 7. **C-7 dirty state:** a module page with the save bar visible, and the navigation guard prompt.
 8. **C-8 reduced motion:** dialog open and save bar.
 
+### C.10 Task C completion record (2026-09-30)
+
+**Status:** Implemented in workspace; commit `complete CLS OS dashboard visual consolidation` (local, not pushed).
+
+**Delivered**
+
+| Area | Result |
+|---|---|
+| `/dashboard` | Server router via `resolvePostAuthDestination` (no fake home). |
+| `/dashboard/guilds` | Compact list; auto-redirect when exactly one authorized guild. |
+| Guild overview | DS §16 layout from `loadOverview` + `deriveAttention`; real APIs only. |
+| Access / Platform | CLS shell redesign; revoke confirm dialog; template descriptions; honest admin copy + node display-name mapping. |
+| Tickets B7 | Config-level Global Staff Role IDs hidden; `staff_roles` omitted from global save payload. |
+| Branding / motion | User-facing ZyroX/neural/fake metrics removed on kept surfaces; dead `animate-in` stripped on dashboard paths. |
+| Invites | Numeric rank table + legacy unverified notice; emoji medals removed. |
+| Tests | `lib/deriveAttention.test.mjs` added; `npm run build`, `npm run lint`, `node --test lib/*.test.mjs`, branding gate §8 → 0 matches. |
+
+**Deferred (unchanged from plan)**
+
+- Full `SettingRow` / sticky save bar adoption on every KEEP form (legacy save UX remains; no payload changes except tickets B7).
+- Repo-wide physical-direction mechanical replace (surfaced pages use logical utilities where touched; not whole-tree).
+- Phase 4+ feature work (Tickets V2, Security Center, etc.).
+- `components/guild-tabs.tsx` file retained unused (Phase 11).
+- Bot `admin.py` node API names unchanged (display mapping only in UI).
+
+**Audit closure (Task C scope)**
+
+- B2, B3, B6, B7, H7, H8 (user-facing strings), H10, M6: addressed.
+- H9 (Select keyboard): Task A partial; full Radix rebuild still deferred.
+- M3 save bar / M7 full RTL: partial pass as noted above.
+
 ---
 
 ## Completion definition for Phase 1.5

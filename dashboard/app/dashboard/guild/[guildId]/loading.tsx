@@ -18,7 +18,7 @@ import React from "react";
 
 export default function GuildLoading() {
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-2">
           <div className="h-8 w-64 bg-slate-800 rounded-lg animate-pulse" />

@@ -230,3 +230,30 @@ rg -n -i "zyrox|neural|NEXT_PUBLIC_BRAND|add to server|99\.9|edge (region|cluste
 ```
 
 The `rg -v` filter excludes banner comment lines (Section 5, manual review). `bot/` is intentionally excluded (Section 6).
+
+---
+
+## 9. Task C completion (2026-09-30)
+
+**User-facing dashboard cleanup:** **COMPLETE** for `dashboard/app`, `dashboard/components`, `dashboard/lib`, and `dashboard/.env.example` per the §8 gate (0 matches after Task C commit).
+
+| Item | Task C action |
+|---|---|
+| `dashboard/app/dashboard/page.tsx` (fake home) | Replaced with auth router |
+| Guild overview fake metrics / console | Replaced with real-data overview (DS §16) |
+| Guild picker marketing cards | Compact list + single-guild redirect |
+| Access / Platform ZyroX copy | CLS operational copy + UI redesign |
+| Tickets global `staff_roles` UI | Removed; payload field omitted on global save (B7) |
+| Feature form ZyroX / neural strings (automod, antinuke, autorole, customroles, verification) | Factual CLS copy |
+| Invites emoji medals | Removed; legacy notice added |
+| `/docs` surface | Already redirects to `/` (Task B) |
+| `NEXT_PUBLIC_BRAND_NAME` on kept surfaces | Not used for product identity (CLS OS constant/metadata from Task B) |
+
+**Deferred to Phase 11 (unchanged)**
+
+- Internal symbols: `core/zyrox.py`, `cogs/zyrox/*`, `ZYROX_*` constants, codex-dashboard package name, bot `BRAND_NAME` default, tunnel docstrings, file banners (CodeX Devs MIT).
+- Bot API node identifiers in `bot/api/routes/admin.py` (UI maps display names only).
+- Deletion of unused `components/guild-tabs.tsx`.
+- Deep legacy form layout (`#141B2D`, slate cards) on modules not fully rebuilt — shell + headers/copy pass only where Task C touched files.
+
+Historical audit line references in Sections 2–7 are preserved as the pre-Task-C record.

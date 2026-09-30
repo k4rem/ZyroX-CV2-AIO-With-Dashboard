@@ -103,7 +103,7 @@ export default function VanityRolesPage({ params }: { params: { guildId: string 
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+    <div className="max-w-6xl mx-auto space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -189,7 +189,7 @@ export default function VanityRolesPage({ params }: { params: { guildId: string 
                   const role = filteredRoles.find(r => r.id === String(setup.role_id));
                   const channel = channels.find(c => c.id === String(setup.log_channel_id));
                   return (
-                    <div key={index} className="flex items-center justify-between p-4 bg-slate-900/40 rounded-xl border border-slate-800 animate-in zoom-in-95 duration-200">
+                    <div key={index} className="flex items-center justify-between p-4 bg-slate-900/40 rounded-xl border border-slate-800">
                       <div className="flex items-center gap-8">
                         <div className="flex flex-col">
                           <span className="text-[10px] uppercase font-bold text-slate-500">Vanity Text</span>

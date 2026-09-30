@@ -2,6 +2,7 @@
  * Dashboard API client — all traffic goes through same-origin /api/bot proxy.
  */
 
+import type { SystemHealthLike } from "@/lib/shellHealth";
 import {
   BotInfo,
   BotStatus,
@@ -74,6 +75,10 @@ async function request<T>(
 export const api = {
   getBotStatus: () => request<BotStatus>("/bot/status"),
   getBotInfo: () => request<BotInfo>("/bot/info"),
+  getSystemHealth: (guildId?: string) =>
+    request<SystemHealthLike>(
+      `/system/health${guildId ? `?guild_id=${encodeURIComponent(guildId)}` : ""}`,
+    ),
 
   listGuilds: () => request<GuildSummary[]>("/guilds/"),
   getGuildDetails: (guildId: string) => request<GuildDetails>(`/guilds/${guildId}`),

@@ -131,7 +131,7 @@ export function AutoRoleForm({ initialConfig, roles, guildId }: AutoRoleFormProp
                 return (
                   <div 
                     key={roleId} 
-                    className="flex items-center gap-2 bg-slate-800/80 border border-slate-700/50 px-3 py-1.5 rounded-lg text-sm group animate-in zoom-in-95 duration-200"
+                    className="flex items-center gap-2 bg-slate-800/80 border border-slate-700/50 px-3 py-1.5 rounded-lg text-sm group"
                   >
                     <div 
                       className="w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" 
@@ -197,7 +197,7 @@ export function AutoRoleForm({ initialConfig, roles, guildId }: AutoRoleFormProp
             <div className="flex gap-3">
               <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                <span className="text-slate-200 font-bold">Hierarchy Matter:</span> Ensure ZyroX&apos;s top role is <span className="text-primary italic">higher</span> than any role you select here.
+                <span className="text-slate-200 font-bold">Role hierarchy:</span> The bot&apos;s highest role must be above any role assigned here.
               </p>
             </div>
             <div className="flex gap-3">
