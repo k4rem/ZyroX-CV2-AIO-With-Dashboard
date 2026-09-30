@@ -165,4 +165,4 @@ See `docs/PHASE_1_MANUAL_ACTIONS.md`.
 
 ## 26. Final recommendation
 
-**READY FOR PHASE 1 REVIEW** — all locally testable code and validation blockers addressed. Complete owner manual steps for production credentials, domain, and VPS Compose before go-live.
+**READY FOR PHASE 1 REVIEW** and **READY TO CLOSE PHASE 1** — all locally testable code and validation blockers addressed, including PostgreSQL backup round-trip. Complete owner manual steps for production credentials, domain, off-host backup, and VPS Compose before go-live.

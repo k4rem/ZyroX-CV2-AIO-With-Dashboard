@@ -2,28 +2,35 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from typing import Any
 
 import jwt
 from fastapi import HTTPException
 
-from cls_platform.config import (
-    INTERNAL_IDENTITY_AUDIENCE,
-    INTERNAL_IDENTITY_SIGNING_KEY,
-)
 from cls_platform.services import sessions as session_service
 
 
+def _identity_signing_key() -> str | None:
+    key = (os.getenv("INTERNAL_IDENTITY_SIGNING_KEY") or "").strip()
+    return key or None
+
+
+def _identity_audience() -> str:
+    return (os.getenv("INTERNAL_IDENTITY_AUDIENCE") or "cls-fastapi").strip()
+
+
 def verify_internal_identity_token(token: str) -> dict[str, Any]:
-    if not INTERNAL_IDENTITY_SIGNING_KEY:
+    signing_key = _identity_signing_key()
+    if not signing_key:
         raise HTTPException(status_code=503, detail="Identity signing is not configured")
     try:
         payload = jwt.decode(
             token,
-            INTERNAL_IDENTITY_SIGNING_KEY,
+            signing_key,
             algorithms=["HS256"],
-            audience=INTERNAL_IDENTITY_AUDIENCE,
+            audience=_identity_audience(),
             options={"require": ["exp", "iat", "sub", "sid", "jti"]},
         )
     except jwt.PyJWTError:

@@ -5,14 +5,15 @@ discord.ui
 jishaku
 mcstatus
 asyncio
-discord-ext-menus
+discord-ext-menus>=1.1.0,<2
+aiofiles>=23.2.0,<26
 aiohttp
 datetime
 flask
 typing
 psutil
 collection
-requests
+requests>=2.31.0,<3
 pathlib
 pymongo
 wavelink>=2.0.0
@@ -28,7 +29,6 @@ langdetect
 python-dotenv
 pyttsx3
 PyYAML
-Requests
 openai
 duckduckgo-search==6.3.6
 # pillow==11.0.0

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -12,7 +14,9 @@ from api.auth.policy import (
     apply_request_auth,
 )
 from api.dependencies import get_bot
-from cls_platform.config import INTERNAL_SERVICE_KEY
+def _internal_service_key() -> str | None:
+    key = (os.getenv("INTERNAL_SERVICE_KEY") or "").strip()
+    return key or None
 
 
 def _extract_bearer(request: Request) -> str | None:
@@ -23,12 +27,13 @@ def _extract_bearer(request: Request) -> str | None:
 
 
 def verify_internal_service_key(request: Request) -> None:
-    if not INTERNAL_SERVICE_KEY:
+    expected = _internal_service_key()
+    if not expected:
         raise HTTPException(status_code=503, detail="Internal service auth not configured")
     provided = request.headers.get("x-internal-service-key") or request.headers.get(
         "X-Internal-Service-Key"
     )
-    if not provided or provided != INTERNAL_SERVICE_KEY:
+    if not provided or provided != expected:
         raise HTTPException(status_code=401, detail="Invalid internal service credentials")
 
 

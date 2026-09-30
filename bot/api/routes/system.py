@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 
 from api.dependencies import get_bot
 from cls_platform.config import POSTGRES_ENABLED, root_owner_configured
-from cls_platform.services.scheduler import _worker_running
+from cls_platform.services import scheduler as scheduler_service
 from fastapi import Depends
 from typing import TYPE_CHECKING
 
@@ -33,7 +33,7 @@ async def system_health(
         "postgres": {"enabled": POSTGRES_ENABLED, "connected": POSTGRES_ENABLED},
         "root_owner_configured": root_owner_configured(),
         "api": {"enabled": api_cfg.enabled, "host": api_cfg.host},
-        "scheduler": {"worker_running": _worker_running},
+        "scheduler": {"worker_running": scheduler_service._worker_running},
         "modules": modules,
         "permissions": perm,
     }
