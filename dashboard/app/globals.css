@@ -426,6 +426,185 @@
     letter-spacing: 0.04em;
     line-height: 1;
   }
+
+  /* Landing / auth gateway (DS §5.3, §13). Display stays Plex 600 (D7). */
+  .cls-gateway {
+    --cls-font-display: var(--cls-font-ui);
+  }
+  .cls-display-hero {
+    font-family: var(--cls-font-display);
+    font-size: clamp(2.25rem, 4.5vw, 3.25rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
+  .cls-auth-title {
+    font-family: var(--cls-font-display);
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+  }
+  .cls-lead {
+    font-size: 1.125rem;
+    line-height: 1.75rem;
+  }
+  @media (max-width: 767px) {
+    .cls-lead {
+      font-size: 1rem;
+      line-height: 1.5rem;
+    }
+  }
+
+  .cls-lattice-fade {
+    animation: cls-lattice-in 600ms var(--cls-ease-out) both;
+  }
+  @keyframes cls-lattice-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .cls-gateway-reveal {
+    animation: cls-gateway-reveal 500ms var(--cls-ease-emphasized) 700ms both;
+  }
+  @keyframes cls-gateway-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .cls-perimeter-seg {
+    opacity: 0.35;
+  }
+  .cls-perimeter-outer-seg {
+    animation: cls-perimeter-arm 240ms var(--cls-ease-emphasized) both;
+  }
+  .cls-perimeter-inner-seg {
+    animation: cls-perimeter-arm 240ms var(--cls-ease-emphasized) both;
+  }
+  .cls-perimeter-mid-seg {
+    animation: cls-perimeter-fade 300ms var(--cls-ease-out) 850ms both;
+  }
+  .cls-perimeter-label {
+    animation: cls-perimeter-fade 300ms var(--cls-ease-out) 1000ms both;
+  }
+  .cls-perimeter-outer-seg[data-seg="0"] {
+    animation-delay: 1000ms;
+  }
+  .cls-perimeter-outer-seg[data-seg="1"] {
+    animation-delay: 1060ms;
+  }
+  .cls-perimeter-outer-seg[data-seg="2"] {
+    animation-delay: 1120ms;
+  }
+  .cls-perimeter-outer-seg[data-seg="3"] {
+    animation-delay: 1180ms;
+  }
+  .cls-perimeter-outer-seg[data-seg="4"] {
+    animation-delay: 1240ms;
+  }
+  .cls-perimeter-outer-seg[data-seg="5"] {
+    animation-delay: 1300ms;
+  }
+  .cls-perimeter-inner-seg[data-seg="0"] {
+    animation-delay: 600ms;
+  }
+  .cls-perimeter-inner-seg[data-seg="1"] {
+    animation-delay: 660ms;
+  }
+  .cls-perimeter-inner-seg[data-seg="2"] {
+    animation-delay: 720ms;
+  }
+  .cls-perimeter-inner-seg[data-seg="3"] {
+    animation-delay: 780ms;
+  }
+  .cls-perimeter-inner-seg[data-seg="4"] {
+    animation-delay: 840ms;
+  }
+  .cls-perimeter-inner-seg[data-seg="5"] {
+    animation-delay: 900ms;
+  }
+  @keyframes cls-perimeter-arm {
+    from {
+      opacity: 0.15;
+      stroke-dasharray: 1 200;
+      stroke-dashoffset: 40;
+    }
+    to {
+      opacity: 1;
+      stroke-dasharray: none;
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes cls-perimeter-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  [data-perimeter-locked="true"] .cls-perimeter-inner-seg {
+    opacity: 1;
+    stroke: rgb(var(--cls-brand-500));
+    filter: drop-shadow(var(--cls-glow-g2));
+    transition: stroke 500ms var(--cls-ease-emphasized), opacity 500ms;
+  }
+  [data-perimeter-locked="true"] .cls-perimeter-outer-seg,
+  [data-perimeter-locked="true"] .cls-perimeter-mid-seg {
+    opacity: 1;
+    transition: opacity 500ms var(--cls-ease-emphasized);
+  }
+
+  .cls-perimeter-core-glow {
+    animation: cls-core-glow 600ms var(--cls-ease-out) 1600ms both;
+  }
+  @keyframes cls-core-glow {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .cls-perimeter-open .cls-perimeter-inner-seg {
+    animation: cls-perimeter-open 400ms var(--cls-ease-emphasized) both;
+  }
+  @keyframes cls-perimeter-open {
+    to {
+      opacity: 0;
+      transform: translate(var(--cls-dir, 1) * 8px, -8px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cls-lattice-fade,
+    .cls-gateway-reveal,
+    .cls-perimeter-seg,
+    .cls-perimeter-label,
+    .cls-perimeter-core-glow {
+      animation: none !important;
+      opacity: 1 !important;
+      transform: none !important;
+    }
+    .cls-perimeter-outer-seg,
+    .cls-perimeter-inner-seg,
+    .cls-perimeter-mid-seg {
+      stroke-dasharray: none !important;
+      stroke-dashoffset: 0 !important;
+    }
+  }
 }
 
 /* ==========================================================================

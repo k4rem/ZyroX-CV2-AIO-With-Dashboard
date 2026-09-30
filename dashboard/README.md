@@ -109,10 +109,8 @@ NEXTAUTH_SECRET               = a_long_random_string   # generate: openssl rand 
 DISCORD_CLIENT_ID             = your_discord_oauth_client_id
 DISCORD_CLIENT_SECRET         = your_discord_oauth_client_secret
 
-# ── Branding ──────────────────────────────────────────────────────
+# ── Access (legacy; Phase 1.5 shell uses server-side ROOT_OWNER_ID) ──
 NEXT_PUBLIC_ADMIN_IDS         = your_discord_user_id
-NEXT_PUBLIC_BRAND_NAME        = "ZyroX"
-NEXT_PUBLIC_BRAND_NAME_WORD   = "ZX"
 ```
 
 ### 3 — Run locally
@@ -135,9 +133,7 @@ Open [http://localhost:3000](http://localhost:3000)
 | `NEXTAUTH_SECRET` | Random secret for NextAuth session signing |
 | `DISCORD_CLIENT_ID` | Discord OAuth2 client ID |
 | `DISCORD_CLIENT_SECRET` | Discord OAuth2 client secret |
-| `NEXT_PUBLIC_ADMIN_IDS` | Comma-separated Discord user IDs with admin panel access |
-| `NEXT_PUBLIC_BRAND_NAME` | Bot name shown in the dashboard UI |
-| `NEXT_PUBLIC_BRAND_NAME_WORD` | Short abbreviation shown in the dashboard (e.g. `ZX`) |
+| `NEXT_PUBLIC_ADMIN_IDS` | Legacy admin list (prefer server-side `ROOT_OWNER_ID` in production) |
 
 ---
 

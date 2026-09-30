@@ -14,14 +14,13 @@
  * ╚══════════════════════════════════════════════════════════════════╝
  */
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Sans_Arabic, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/components/auth-provider";
 
-// CLS OS type system (DS §5.1). Variables feed --cls-font-* in globals.css.
 const plexSans = IBM_Plex_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
@@ -40,11 +39,35 @@ const plexMono = IBM_Plex_Mono({
   variable: "--font-plex-mono",
   display: "swap",
 });
-const brandName = process.env.NEXT_PUBLIC_BRAND_NAME || "Zyrox";
+
+const siteUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 
 export const metadata: Metadata = {
-  title: `${brandName} - Ultimate Discord Bot`,
-  description: "Advanced Discord community management and security.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "CLS OS",
+    template: "%s · CLS OS",
+  },
+  description: "The private control system for the CLS Discord.",
+  applicationName: "CLS OS",
+  robots: {
+    index: false,
+    follow: false,
+  },
+  openGraph: {
+    title: "CLS OS",
+    description: "The private control system for the CLS Discord.",
+    siteName: "CLS OS",
+    type: "website",
+  },
+  icons: {
+    icon: [{ url: "/brand/cls-mark-128.png", sizes: "128x128", type: "image/png" }],
+    apple: [{ url: "/brand/cls-mark-128.png", sizes: "128x128", type: "image/png" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#040306",
 };
 
 export default function RootLayout({
@@ -58,7 +81,7 @@ export default function RootLayout({
       dir="ltr"
       className={`${plexSans.variable} ${plexArabic.variable} ${plexMono.variable}`}
     >
-      <body>
+      <body className="min-h-[100svh] bg-void font-sans text-fg-1 antialiased">
         <AuthProvider>
           {children}
           <Toaster />
