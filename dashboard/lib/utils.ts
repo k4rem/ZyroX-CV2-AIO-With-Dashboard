@@ -21,8 +21,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function isAdmin(userId?: string | null) {
+/** Root owner (server-side ROOT_OWNER_ID only — not grantable via Dashboard). */
+export function isRootOwner(userId?: string | null) {
   if (!userId) return false;
-  const adminIds = (process.env.NEXT_PUBLIC_ADMIN_IDS || "").split(",");
-  return adminIds.includes(userId);
+  const root = (process.env.ROOT_OWNER_ID || "").trim();
+  return Boolean(root) && root === userId;
+}
+
+/** @deprecated use isRootOwner — admin panel is root-only in Phase 1 */
+export function isAdmin(userId?: string | null) {
+  return isRootOwner(userId);
 }

@@ -1,28 +1,16 @@
 /**
- * ╔══════════════════════════════════════════════════════════════════╗
- * ║                                                                  ║
- * ║   ░█▀▀░█▀█░█▀▄░█▀▀░█░█   ░█▀▄░█▀▀░█░█░█▀▀                     ║
- * ║   ░█░░░█░█░█░█░█▀▀░▄▀▄   ░█░█░█▀▀░▀▄▀░▀▀█                     ║
- * ║   ░▀▀▀░▀▀▀░▀▀░░▀▀▀░▀░▀   ░▀▀░░▀▀▀░░▀░░▀▀▀                     ║
- * ║                                                                  ║
- * ║           © 2026 CodeX Devs — All Rights Reserved               ║
- * ║                                                                  ║
- * ║   discord  ──  https://discord.gg/codexdev                      ║
- * ║   youtube  ──  https://youtube.com/@CodeXDevs                   ║
- * ║   github   ──  https://github.com/RayExo                        ║
- * ║                                                                  ║
- * ╚══════════════════════════════════════════════════════════════════╝
+ * Dashboard API client — all traffic goes through same-origin /api/bot proxy.
  */
 
-import { 
-  BotInfo, 
-  BotStatus, 
-  GuildSummary, 
+import {
+  BotInfo,
+  BotStatus,
+  GuildSummary,
   GuildDetails,
-  PrefixConfig, 
-  AutomodConfig, 
-  TicketConfig, 
-  LevelingConfig, 
+  PrefixConfig,
+  AutomodConfig,
+  TicketConfig,
+  LevelingConfig,
   LoggingConfig,
   PrefixUpdate,
   AutomodUpdate,
@@ -35,18 +23,10 @@ import {
   AutoRoleUpdate,
   AdminStats,
   AdminConfig,
-  AdminConfigUpdate
+  AdminConfigUpdate,
 } from "@/types/api";
 
-import { evaluateLegacyDirectBotApi } from "./legacyDirectApi.mjs";
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
-const API_KEY = process.env.NEXT_PUBLIC_DASHBOARD_API_KEY;
-
-const _legacyGate = evaluateLegacyDirectBotApi({
-  NODE_ENV: process.env.NODE_ENV,
-  NEXT_PUBLIC_LEGACY_DIRECT_BOT_API: process.env.NEXT_PUBLIC_LEGACY_DIRECT_BOT_API,
-});
+const BASE_URL = "/api/bot";
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -59,120 +39,107 @@ async function request<T>(
   endpoint: string,
   options: RequestInit & { next?: NextFetchRequestConfig } = {}
 ): Promise<T> {
-  if (!_legacyGate.allowed) {
-    throw new ApiError(503, _legacyGate.reason || "Legacy direct bot API is disabled.");
-  }
-  if (!API_KEY) {
-    throw new ApiError(
-      503,
-      "NEXT_PUBLIC_DASHBOARD_API_KEY is not configured. Legacy direct API is dev-only."
-    );
+  if (typeof window === "undefined") {
+    const { serverBotRequest } = await import("@/lib/serverBotRequest");
+    return serverBotRequest<T>(endpoint, options);
   }
 
   const url = `${BASE_URL}${endpoint}`;
-  
+
   const headers = new Headers(options.headers);
-  headers.set("Authorization", `Bearer ${API_KEY}`);
-  headers.set("Content-Type", "application/json");
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-      // CRITICAL: Never cache mutation responses. For GETs, use revalidate: 0
-      // to always fetch fresh data from the bot API. Caching was causing
-      // saved data to "disappear" on reload because Next.js served stale cache.
-      next: options.next || { revalidate: 0 },
-    });
-
-    if (!response.ok) {
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { detail: "An unknown error occurred" };
-      }
-      console.error(`[API HTTP Error] Status ${response.status} for ${url}:`, errorData);
-      throw new ApiError(response.status, errorData.detail || response.statusText);
-    }
-
-    return response.json();
-  } catch (error) {
-    console.error(`[API Network/Fetch Error] Failed to fetch ${url}:`, error);
-    throw error;
+  if (!headers.has("Content-Type") && options.body) {
+    headers.set("Content-Type", "application/json");
   }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    credentials: "same-origin",
+    next: options.next || { revalidate: 0 },
+  });
+
+  if (!response.ok) {
+    let errorData: { detail?: string };
+    try {
+      errorData = await response.json();
+    } catch {
+      errorData = { detail: "An unknown error occurred" };
+    }
+    throw new ApiError(response.status, errorData.detail || response.statusText);
+  }
+
+  return response.json();
 }
 
 export const api = {
-  // Bot 
   getBotStatus: () => request<BotStatus>("/bot/status"),
   getBotInfo: () => request<BotInfo>("/bot/info"),
 
-  // Guilds
   listGuilds: () => request<GuildSummary[]>("/guilds/"),
-  getGuildDetails: (guildId: string) => request<any>(`/guilds/${guildId}`),
+  getGuildDetails: (guildId: string) => request<GuildDetails>(`/guilds/${guildId}`),
   getChannels: (guildId: string) => request<DiscordChannel[]>(`/guilds/${guildId}/channels`),
   getRoles: (guildId: string) => request<DiscordRole[]>(`/guilds/${guildId}/roles`),
-  
-  // Module Configs
+
   getPrefix: (guildId: string) => request<PrefixConfig>(`/guilds/${guildId}/prefix`),
-  updatePrefix: (guildId: string, prefix: string) => 
+  updatePrefix: (guildId: string, prefix: string) =>
     request<{ status: string; new_prefix: string }>(`/guilds/${guildId}/prefix`, {
       method: "POST",
       body: JSON.stringify({ prefix }),
     }),
 
   getAutomod: (guildId: string) => request<AutomodConfig>(`/guilds/${guildId}/automod`),
-  updateAutomod: (guildId: string, data: Partial<AutomodConfig>) => 
+  updateAutomod: (guildId: string, data: Partial<AutomodConfig>) =>
     request<{ status: string }>(`/guilds/${guildId}/automod`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
 
   getTickets: (guildId: string) => request<TicketConfig>(`/guilds/${guildId}/tickets`),
-  updateTickets: (guildId: string, data: any) => 
+  updateTickets: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/tickets`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
-  
+
   getLeveling: (guildId: string) => request<LevelingConfig>(`/guilds/${guildId}/leveling`),
-  updateLeveling: (guildId: string, data: any) => 
+  updateLeveling: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/leveling`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
 
   getLogging: (guildId: string) => request<LoggingConfig>(`/guilds/${guildId}/logging`),
-  updateLogging: (guildId: string, data: any) => 
+  updateLogging: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/logging`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
 
-  getLeaderboard: (guildId: string) => request<LeaderboardEntry[]>(`/guilds/${guildId}/leveling/leaderboard`),
+  getLeaderboard: (guildId: string) =>
+    request<LeaderboardEntry[]>(`/guilds/${guildId}/leveling/leaderboard`),
 
   getWelcome: (guildId: string) => request<any>(`/guilds/${guildId}/welcome`),
-  updateWelcome: (guildId: string, data: any) => 
+  updateWelcome: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/welcome`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
 
   getAntiNuke: (guildId: string) => request<any>(`/guilds/${guildId}/antinuke`),
-  updateAntiNuke: (guildId: string, data: any) => 
+  updateAntiNuke: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/antinuke`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
 
   getVerification: (guildId: string) => request<any>(`/guilds/${guildId}/verification`),
-  updateVerification: (guildId: string, data: any) => 
+  updateVerification: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/verification`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
 
-  getVanityRoles: (guildId: string) => request<any[]>(`/guilds/${guildId}/vanityroles`),
+  getVanityRoles: (guildId: string) => request<unknown[]>(`/guilds/${guildId}/vanityroles`),
   addVanityRole: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/vanityroles`, {
       method: "POST",
@@ -238,6 +205,7 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+
   getInvites: (guildId: string) => request<any>(`/guilds/${guildId}/invites`),
   updateInvites: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/invites`, {
@@ -245,12 +213,29 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  // Admin
   getAdminStats: () => request<AdminStats>("/admin/stats"),
   getAdminConfig: () => request<AdminConfig>("/admin/config"),
-  updateAdminConfig: (data: AdminConfigUpdate) => 
+  updateAdminConfig: (data: AdminConfigUpdate) =>
     request<{ status: string }>("/admin/config", {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+
+  listAccessGrants: (guildId?: string) =>
+    request<unknown[]>(`/access/grants${guildId ? `?guild_id=${guildId}` : ""}`),
+  createAccessGrant: (data: any) =>
+    request<{ id: string }>("/access/grants", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  revokeAccessGrant: (grantId: string) =>
+    request<{ revoked: boolean }>(`/access/grants/${grantId}`, { method: "DELETE" }),
+  listAccessRoles: () => request<unknown[]>("/access/roles"),
+  createCustomAccessRole: (data: any) =>
+    request<{ id: string }>("/access/roles/custom", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
+
+export { ApiError };

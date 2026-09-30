@@ -133,19 +133,57 @@ class Role(commands.Cog):
   @commands.has_permissions(manage_roles=True)
   @commands.bot_has_permissions(manage_roles=True)
   async def temp(self, ctx, role: discord.Role, time, *, user: discord.Member):
-    embed_disabled = discord.Embed(
-      description=(
-        "Temporary role assignment is disabled for Phase 0 (not restart-safe). "
-        "Permanent role assignment still works. Persistent scheduling arrives in Phase 1."
-      ),
-      color=self.color,
-    )
-    embed_disabled.set_author(name="Unavailable")
-    embed_disabled.set_footer(
-      text=f"Requested by {ctx.author}",
-      icon_url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url,
-    )
-    return await ctx.send(embed=embed_disabled)
+    if ctx.author != ctx.guild.owner and role.position >= ctx.author.top_role.position:
+        embed = discord.Embed(
+              description=f"You can't manage a role that is higher or equal to your top role!",
+              color=self.color
+          )
+        embed.set_author(name="Error")
+        embed.set_footer(text=f"Requested by {ctx.author}",
+                        icon_url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url)
+        return await ctx.send(embed=embed)
+
+    if role.position >= ctx.guild.me.top_role.position:
+      embed1 = discord.Embed(
+        description=
+        f"{role} is higher than my top role, move my role above {role}.",
+        color=self.color)
+      embed1.set_author(name="Error")
+      embed1.set_footer(text=f"Requested by {ctx.author}",
+                      icon_url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url)
+      return await ctx.send(embed1)
+
+    seconds = convert(time)
+    run_at = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+    dedupe_key = f"role_temp:{ctx.guild.id}:{user.id}:{role.id}"
+    try:
+      from cls_platform.config import POSTGRES_ENABLED
+      from cls_platform.services.scheduler import enqueue_job
+      if not POSTGRES_ENABLED:
+        raise RuntimeError("PostgreSQL scheduler is not enabled")
+      await enqueue_job(
+        "role_temp_remove",
+        run_at,
+        {"guild_id": ctx.guild.id, "user_id": user.id, "role_id": role.id},
+        dedupe_key=dedupe_key,
+      )
+    except Exception:
+      embed_fail = discord.Embed(
+        description="Could not schedule temporary role removal (scheduler unavailable). Role was not assigned.",
+        color=self.color,
+      )
+      embed_fail.set_author(name="Error")
+      return await ctx.send(embed=embed_fail)
+
+    await user.add_roles(role, reason=f"Temporary role ({seconds}s) via {ctx.author}")
+    success = discord.Embed(
+      description=
+      f"Successfully added {role.mention} to {user.mention} for {time}.",
+      color=self.color)
+    success.set_author(name="Success")
+    success.set_footer(text=f"Requested by {ctx.author}",
+                        icon_url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url)
+    await ctx.send(embed=success)
 
   
   @role.command(help="Delete a role in the guild")

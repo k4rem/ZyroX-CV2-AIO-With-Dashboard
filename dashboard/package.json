@@ -16,12 +16,14 @@
     "lucide-react": "^0.378.0",
     "next": "14.2.3",
     "next-auth": "^4.24.13",
+    "jsonwebtoken": "^9.0.2",
     "react": "^18",
     "react-dom": "^18",
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.3.0"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^20.19.37",
     "@types/react": "^18",
     "@types/react-dom": "^18",
