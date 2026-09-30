@@ -6,6 +6,23 @@
 
 Implementation agents: every value here is a decision, not a suggestion. If a value feels wrong in a real screenshot, raise it against the Decision Register (§32) instead of improvising a new value.
 
+### Phase 1.6 amendments ("Graphite Instrument", owner-approved)
+
+These override the sections they name. Source: `CLS_OS_PHASE_1_6_ART_DIRECTION.md` §11. Where a row says *Task B/C*, the rule is binding now but its first consumer ships in that task.
+
+| § | Amendment | Implemented as |
+|---|---|---|
+| 4.1 | `stage` alias for L0 (`#040306`), the sunk plane behind plots and previews | Tailwind `bg-stage` → `--cls-bg-void` |
+| 4.3 | Purple carriers extended: signal tick, signal edge, signal path. Resting screens stay > 97 % non-purple | `.cls-tick`, `.cls-signal-edge` (signal path: Task B) |
+| 6.2 | "Settings max 760 + rail" is no longer universal; pages use archetypes A–F, start-aligned. The guild Overview is fluid (no content max) | `isFluidRoute()` in `lib/shellNav.ts`; other archetypes: Task B/C |
+| 8 | 30° cut `cut-sm/md/lg` (8/12/20 px). Max two cut objects per viewport; never on buttons, rows, inputs or modals | `--cls-cut-sm/md`, `.cls-cut` (RTL-mirrored); `lg` is added with its first consumer |
+| 9.4 | Signal edge is G0 (no blur), one focal object per view | `.cls-signal-edge` |
+| 10.1 | Motion tiers: MICRO 80–120 ms, STATE 160–240 ms, DATA 240–480 ms, MAJOR 280–360 ms. `--cls-dur-data` 400 ms, `--cls-stagger` 30 ms; both 0 under reduced motion | `app/globals.css` tokens, `duration-data` utility |
+| 10.2 | Page-region entrance: ≤ 4 regions, 200 ms, 30 ms stagger. Segment meters fill on mount and animate only the changed cells. A changed factual value gets one brief wash | `.cls-enter`, `.cls-seg`, `.cls-changed` / `ChangeMark` |
+| 15.4 | Page header closes with the engraved rule starting at the signal tick; inline-end slot holds a factual readout or actions | `components/dashboard/page-header.tsx` v2 |
+| 15.5 | Primary save action lives only in the sticky save bar on settings pages | Task B |
+| 24 | Superseded by Phase 1.6 AD §6. Phase 1.6 visuals are limited to segment meters, state distribution bars and mini bars; sparklines only with a real series; no axes, no chart library | `SegmentMeter`, `StateBar`, `MicroBars` |
+
 ---
 
 ## 1. Inputs and reference analysis

@@ -41,6 +41,7 @@ test("deriveAttention: permission gaps for guild", () => {
   assert.equal(items.length, 1);
   assert.match(items[0].message, /Logging/);
   assert.ok(items[0].href.endsWith("/logging"));
+  assert.equal(items[0].origin, "Logging");
 });
 
 test("deriveAttention: antinuke disabled", () => {

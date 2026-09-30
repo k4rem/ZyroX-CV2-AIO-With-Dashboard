@@ -277,6 +277,15 @@ export function parseDashboardPath(pathname: string): ParsedPath {
   return { guildId: m[1], subpath: m[2] ?? "" };
 }
 
+/**
+ * Routes whose layout is composed for the full viewport width (AD §7). Everything
+ * else keeps the `max-w-content` reading measure.
+ */
+export function isFluidRoute(pathname: string): boolean {
+  const { guildId, subpath } = parseDashboardPath(pathname);
+  return guildId !== null && subpath === "";
+}
+
 export function guildBase(guildId: string): string {
   return `/dashboard/guild/${guildId}`;
 }

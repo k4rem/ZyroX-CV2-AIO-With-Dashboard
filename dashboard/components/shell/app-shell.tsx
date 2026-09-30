@@ -3,6 +3,7 @@
 import * as React from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { isFluidRoute } from "@/lib/shellNav";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { UiProviders } from "@/components/providers/ui-providers";
 import { SidebarContent, SIDEBAR_ID } from "./sidebar";
@@ -138,7 +139,10 @@ export function AppShell({ user, isRoot, guilds, guildsError, dir, initialSideba
           >
             <div
               key={pathname}
-              className="cls-route-fade mx-auto w-full max-w-content px-4 py-5 md:px-6 md:py-6 3xl:px-8"
+              className={cn(
+                "cls-route-fade mx-auto w-full px-4 py-5 md:px-6 md:py-6 3xl:px-8",
+                isFluidRoute(pathname) ? "max-w-none" : "max-w-content",
+              )}
             >
               {children}
             </div>

@@ -26,6 +26,8 @@ export interface SystemHealthLike {
       missing_by_module?: Record<string, string[]>;
       critical?: boolean;
     }[];
+    /** Permissions each module needs, keyed by module name. */
+    module_requirements?: Record<string, string[]>;
   };
 }
 

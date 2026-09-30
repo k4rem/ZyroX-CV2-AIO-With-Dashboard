@@ -1,5 +1,5 @@
 import { api, ApiError } from "@/lib/api";
-import type { GuildDetails } from "@/types/api";
+import type { DiscordChannel, GuildDetails } from "@/types/api";
 import type { SystemHealthLike } from "@/lib/shellHealth";
 import { deriveHealth } from "@/lib/shellHealth";
 import {
@@ -8,35 +8,72 @@ import {
   deriveAttention,
   type AttentionItem,
 } from "@/lib/deriveAttention";
+import {
+  channelComposition,
+  j2cEnabled,
+  j2cSteps,
+  loggingRouting,
+  permissionCoverage,
+  rankAttention,
+  stepsDone,
+  summarizeCoverage,
+  ticketSteps,
+  welcomeSteps,
+  type ChannelKind,
+  type ChecklistStep,
+  type CoverageBucket,
+  type ModuleDomain,
+  type PermissionCoverage,
+} from "@/lib/overviewModel";
 import type { Status } from "@/components/ui/status";
+
+/** A discrete, real ratio drawn as a segment meter. */
+export interface ModuleMeter {
+  value: number;
+  total: number;
+  /** Text equivalent, always rendered next to the meter. */
+  label: string;
+  tone: "ok" | "warn" | "neutral";
+  steps?: ChecklistStep[];
+}
 
 export interface ModuleRow {
   key: string;
   name: string;
+  domain: ModuleDomain;
   status: Status;
   statusLabel: string;
+  bucket: CoverageBucket;
   detail: string;
+  meter?: ModuleMeter;
   href: string;
   error?: boolean;
 }
 
 export interface OverviewPayload {
   guild: GuildDetails | null;
+  guildIconUrl: string | null;
   guildError: string | null;
   botOnline: boolean;
   botLatencyMs: number | null;
   healthLevel: ReturnType<typeof deriveHealth>["level"];
   healthReasons: string[];
   systemHealth: SystemHealthLike | null;
-  requiredOk: number;
-  requiredTotal: number;
+  requiredOkNames: string[];
+  requiredFailedNames: string[];
+  permissions: PermissionCoverage;
   postgresConnected: boolean | null;
   postgresEnabled: boolean | null;
   schedulerRunning: boolean | null;
   attention: AttentionItem[];
   modules: ModuleRow[];
+  coverage: Record<CoverageBucket, number>;
+  channels: { kind: ChannelKind; label: string; count: number }[] | null;
+  prefix: string | null;
   accessLabel: string;
   grantsCount: number | null;
+  /** ISO time the loader finished; shown as "Checked hh:mm:ss". */
+  checkedAt: string;
 }
 
 async function settled<T>(p: Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
@@ -47,11 +84,66 @@ async function settled<T>(p: Promise<T>): Promise<{ ok: true; value: T } | { ok:
   }
 }
 
-function moduleStatus(on: boolean | null, configured?: boolean): { status: Status; label: string } {
-  if (on === true) return { status: "online", label: "On" };
-  if (on === false) return { status: "disabled", label: "Off" };
-  if (configured) return { status: "warning", label: "Configured" };
-  return { status: "unknown", label: "Unknown" };
+function bucketFor(status: Status, error?: boolean): CoverageBucket {
+  if (error || status === "unknown") return "unavailable";
+  if (status === "online" || status === "healthy") return "on";
+  if (status === "degraded" || status === "warning") return "partial";
+  return "off";
+}
+
+function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** State from a checklist: all done → `onStatus`, some → Incomplete, none → `offLabel`. */
+function checklistState(
+  steps: ChecklistStep[],
+  onStatus: Status,
+  onLabel: string,
+  offLabel: string,
+): { status: Status; label: string } {
+  const done = stepsDone(steps);
+  if (done === steps.length) return { status: onStatus, label: onLabel };
+  if (done === 0) return { status: "disabled", label: offLabel };
+  return { status: "degraded", label: "Incomplete" };
+}
+
+function stepsMeter(steps: ChecklistStep[]): ModuleMeter {
+  const done = stepsDone(steps);
+  return {
+    value: done,
+    total: steps.length,
+    label: `${done} of ${steps.length} steps`,
+    tone: done === steps.length ? "ok" : done === 0 ? "neutral" : "warn",
+    steps,
+  };
+}
+
+function missingSentence(steps: ChecklistStep[]): string {
+  const missing = steps.filter((s) => !s.done).map((s) => s.label.toLowerCase());
+  if (missing.length === 0) return "";
+  return `Needs ${missing.join(" and ")}`;
+}
+
+function unavailableRow(key: string, name: string, domain: ModuleDomain, href: string): ModuleRow {
+  return {
+    key,
+    name,
+    domain,
+    status: "unknown",
+    statusLabel: "Unavailable",
+    bucket: "unavailable",
+    detail: "Could not load configuration.",
+    href,
+    error: true,
+  };
+}
+
+function guildIcon(guild: GuildDetails | null): string | null {
+  const icon = guild?.icon;
+  if (!icon) return null;
+  if (icon.startsWith("http")) return icon;
+  return `https://cdn.discordapp.com/icons/${guild.id}/${icon}.png?size=64`;
 }
 
 export async function loadOverview(opts: {
@@ -74,6 +166,8 @@ export async function loadOverview(opts: {
     loggingRes,
     autoroleRes,
     rrRes,
+    channelsRes,
+    prefixRes,
     grantsRes,
   ] = await Promise.all([
     settled(api.getGuildDetails(guildId)),
@@ -87,6 +181,8 @@ export async function loadOverview(opts: {
     settled(api.getLogging(guildId)),
     settled(api.getAutoRole(guildId)),
     settled(api.getRR(guildId)),
+    settled(api.getChannels(guildId)),
+    settled(api.getPrefix(guildId)),
     isRoot ? settled(api.listAccessGrants(guildId)) : Promise.resolve({ ok: false as const, error: null }),
   ]);
 
@@ -107,177 +203,182 @@ export async function loadOverview(opts: {
     health: systemHealth,
   });
 
-  const requiredOk = systemHealth?.modules?.required_ok?.length ?? 0;
-  const failed = systemHealth?.modules?.required_failed?.length ?? 0;
-  const requiredTotal = requiredOk + failed;
+  const channelList: DiscordChannel[] = channelsRes.ok && Array.isArray(channelsRes.value) ? channelsRes.value : [];
+  const channelName = (id: string | null | undefined): string | null => {
+    if (!id) return null;
+    const c = channelList.find((ch) => String(ch.id) === String(id));
+    return c ? c.name : null;
+  };
 
   const antinukeStatus = antinukeRes.ok ? Boolean(antinukeRes.value?.status) : null;
   const loggingCfg = loggingRes.ok ? loggingRes.value : null;
   const ticketsCfg = ticketsRes.ok ? ticketsRes.value : null;
 
-  const attention = deriveAttention({
-    guildId,
-    health: systemHealth,
-    antinukeStatus,
-    loggingPartial: loggingCfg
-      ? {
-          enabledWithoutChannel: countLoggingEnabledWithoutChannel(
-            loggingCfg.log_enabled,
-            loggingCfg.log_channels,
-          ),
-        }
-      : null,
-    ticketsGap: ticketsCfg
-      ? {
-          categoriesMissingStaff: countTicketCategoriesMissingStaff(ticketsCfg.categories),
-        }
-      : null,
-  });
+  const attention = rankAttention(
+    deriveAttention({
+      guildId,
+      health: systemHealth,
+      antinukeStatus,
+      loggingPartial: loggingCfg
+        ? { enabledWithoutChannel: countLoggingEnabledWithoutChannel(loggingCfg.log_enabled, loggingCfg.log_channels) }
+        : null,
+      ticketsGap: ticketsCfg
+        ? { categoriesMissingStaff: countTicketCategoriesMissingStaff(ticketsCfg.categories) }
+        : null,
+    }),
+  );
 
   const modules: ModuleRow[] = [];
 
+  // Security
   if (antinukeRes.ok) {
     const wl = antinukeRes.value?.whitelisted_users?.length ?? 0;
-    const st = moduleStatus(antinukeStatus);
     modules.push({
       key: "antinuke",
       name: "Antinuke",
-      status: st.status,
-      statusLabel: st.label,
-      detail: antinukeStatus ? `${wl} whitelisted user${wl === 1 ? "" : "s"}` : "—",
+      domain: "security",
+      status: antinukeStatus ? "online" : "disabled",
+      statusLabel: antinukeStatus ? "On" : "Off",
+      bucket: antinukeStatus ? "on" : "off",
+      detail: plural(wl, "whitelisted user"),
       href: `${base}/antinuke`,
     });
-  } else {
-    modules.push({
-      key: "antinuke",
-      name: "Antinuke",
-      status: "unknown",
-      statusLabel: "Unavailable",
-      detail: "Could not load configuration.",
-      href: `${base}/antinuke`,
-      error: true,
-    });
-  }
+  } else modules.push(unavailableRow("antinuke", "Antinuke", "security", `${base}/antinuke`));
 
+  // Moderation
   if (automodRes.ok) {
+    const on = Boolean(automodRes.value.enabled);
     const rules = Object.keys(automodRes.value.punishments ?? {}).length;
-    const st = moduleStatus(automodRes.value.enabled);
     modules.push({
       key: "automod",
       name: "Automod",
-      status: st.status,
-      statusLabel: st.label,
-      detail: automodRes.value.enabled ? `${rules} rule${rules === 1 ? "" : "s"}` : "—",
+      domain: "moderation",
+      status: on ? "online" : "disabled",
+      statusLabel: on ? "On" : "Off",
+      bucket: on ? "on" : "off",
+      detail: rules > 0 ? `${plural(rules, "punishment rule")} configured` : "No punishment rules configured",
       href: `${base}/automod`,
     });
-  } else {
-    modules.push({
-      key: "automod",
-      name: "Automod",
-      status: "unknown",
-      statusLabel: "Unavailable",
-      detail: "Could not load configuration.",
-      href: `${base}/automod`,
-      error: true,
-    });
-  }
+  } else modules.push(unavailableRow("automod", "Automod", "moderation", `${base}/automod`));
 
-  if (ticketsRes.ok) {
-    const cats = ticketsCfg?.categories?.length ?? 0;
-    const open = ticketsCfg?.open_ticket_count ?? 0;
-    const configured = cats > 0 || Boolean(ticketsCfg?.panel_channel);
-    modules.push({
-      key: "tickets",
-      name: "Tickets",
-      status: configured ? "healthy" : "disabled",
-      statusLabel: configured ? "Configured" : "Not configured",
-      detail: configured ? `${cats} categor${cats === 1 ? "y" : "ies"} · ${open} open` : "—",
-      href: `${base}/tickets`,
-    });
-  } else {
-    modules.push({
-      key: "tickets",
-      name: "Tickets",
-      status: "unknown",
-      statusLabel: "Unavailable",
-      detail: "Could not load configuration.",
-      href: `${base}/tickets`,
-      error: true,
-    });
-  }
-
-  if (welcomeRes.ok) {
-    const w = welcomeRes.value;
-    const on = Boolean(w?.channel_id || w?.welcome_message);
-    const st = moduleStatus(on);
-    modules.push({
-      key: "welcome",
-      name: "Welcome",
-      status: st.status,
-      statusLabel: st.label,
-      detail: on ? "Channel or message set" : "—",
-      href: `${base}/welcome`,
-    });
-  }
-
-  if (j2cRes.ok) {
-    const j = j2cRes.value;
-    const on = Boolean(j?.enabled ?? j?.status);
-    const st = moduleStatus(on);
-    modules.push({
-      key: "j2c",
-      name: "Join to Create",
-      status: st.status,
-      statusLabel: st.label,
-      detail: on ? "Voice channel creation enabled" : "—",
-      href: `${base}/j2c`,
-    });
-  }
-
-  if (loggingRes.ok && loggingCfg) {
-    const enabled = Object.values(loggingCfg.log_enabled ?? {}).filter(Boolean).length;
-    const routed = Object.entries(loggingCfg.log_enabled ?? {}).filter(
-      ([k, on]) => on && loggingCfg.log_channels?.[k],
-    ).length;
+  if (loggingCfg) {
+    const { enabled, routed } = loggingRouting(loggingCfg.log_enabled, loggingCfg.log_channels);
     const partial = enabled > 0 && routed < enabled;
+    const st: Status = enabled === 0 ? "disabled" : partial ? "degraded" : "online";
     modules.push({
       key: "logging",
       name: "Logging",
-      status: partial ? "degraded" : enabled > 0 ? "online" : "disabled",
-      statusLabel: partial ? "Partial" : enabled > 0 ? "On" : "Off",
-      detail: enabled > 0 ? `${routed} of ${enabled} categories routed` : "—",
+      domain: "moderation",
+      status: st,
+      statusLabel: enabled === 0 ? "Off" : partial ? "Incomplete" : "On",
+      bucket: bucketFor(st),
+      detail: enabled === 0 ? "No event categories enabled" : `${routed} of ${enabled} enabled categories have a channel`,
+      meter:
+        enabled > 0
+          ? { value: routed, total: enabled, label: `${routed} of ${enabled} routed`, tone: partial ? "warn" : "ok" }
+          : undefined,
       href: `${base}/logging`,
     });
-  }
+  } else modules.push(unavailableRow("logging", "Logging", "moderation", `${base}/logging`));
+
+  // Tickets
+  if (ticketsCfg) {
+    const steps = ticketSteps(ticketsCfg);
+    const st = checklistState(steps, "healthy", "Configured", "Not set up");
+    const cats = ticketsCfg.categories?.length ?? 0;
+    const open = ticketsCfg.open_ticket_count ?? 0;
+    const panel = channelName(ticketsCfg.panel_channel);
+    const facts = [
+      panel ? `#${panel}` : null,
+      cats > 0 ? plural(cats, "category", "categories") : null,
+      `${open} open`,
+    ].filter(Boolean);
+    modules.push({
+      key: "tickets",
+      name: "Tickets",
+      domain: "tickets",
+      status: st.status,
+      statusLabel: st.label,
+      bucket: bucketFor(st.status),
+      detail: stepsDone(steps) === 0 ? "No panel channel or categories yet" : facts.join(" · "),
+      meter: stepsMeter(steps),
+      href: `${base}/tickets`,
+    });
+  } else modules.push(unavailableRow("tickets", "Tickets", "tickets", `${base}/tickets`));
+
+  // Engagement
+  if (welcomeRes.ok) {
+    const w = welcomeRes.value;
+    const steps = welcomeSteps(w);
+    const st = checklistState(steps, "online", "On", "Off");
+    const ch = channelName(w?.channel_id);
+    modules.push({
+      key: "welcome",
+      name: "Welcome",
+      domain: "engagement",
+      status: st.status,
+      statusLabel: st.label,
+      bucket: bucketFor(st.status),
+      detail:
+        stepsDone(steps) === steps.length
+          ? `Sends ${w?.welcome_type === "embed" ? "an embed" : "a message"} to ${ch ? `#${ch}` : "the set channel"}`
+          : missingSentence(steps),
+      meter: stepsMeter(steps),
+      href: `${base}/welcome`,
+    });
+  } else modules.push(unavailableRow("welcome", "Welcome", "engagement", `${base}/welcome`));
+
+  if (j2cRes.ok) {
+    const j = j2cRes.value;
+    const on = j2cEnabled(j);
+    const steps = j2cSteps(j);
+    const join = channelName(j?.join_channel_id);
+    modules.push({
+      key: "j2c",
+      name: "Join to Create",
+      domain: "engagement",
+      status: on ? "online" : "disabled",
+      statusLabel: on ? "On" : "Off",
+      bucket: on ? "on" : "off",
+      detail: on
+        ? `Join ${join ?? "the set voice channel"}${steps[1].done ? "" : " · control channel not set"}`
+        : "No join channel set",
+      meter: stepsMeter(steps),
+      href: `${base}/j2c`,
+    });
+  } else modules.push(unavailableRow("j2c", "Join to Create", "engagement", `${base}/j2c`));
 
   if (autoroleRes.ok) {
     const humans = autoroleRes.value.humans?.length ?? 0;
     const bots = autoroleRes.value.bots?.length ?? 0;
     const on = humans + bots > 0;
-    const st = moduleStatus(on);
     modules.push({
       key: "autorole",
-      name: "Auto role",
-      status: st.status,
-      statusLabel: st.label,
-      detail: on ? `${humans} human · ${bots} bot role${bots === 1 ? "" : "s"}` : "—",
+      name: "Auto roles",
+      domain: "engagement",
+      status: on ? "online" : "disabled",
+      statusLabel: on ? "On" : "Off",
+      bucket: on ? "on" : "off",
+      detail: on ? `${plural(humans, "member role")} · ${plural(bots, "bot role")}` : "No roles assigned on join",
       href: `${base}/autorole`,
     });
-  }
+  } else modules.push(unavailableRow("autorole", "Auto roles", "engagement", `${base}/autorole`));
 
   if (rrRes.ok) {
     const list = Array.isArray(rrRes.value) ? rrRes.value : rrRes.value?.panels ?? rrRes.value?.roles ?? [];
     const count = Array.isArray(list) ? list.length : 0;
-    const st = moduleStatus(count > 0);
+    const on = count > 0;
     modules.push({
       key: "reactionroles",
       name: "Reaction roles",
-      status: st.status,
-      statusLabel: st.label,
-      detail: count > 0 ? `${count} panel${count === 1 ? "" : "s"}` : "—",
+      domain: "engagement",
+      status: on ? "online" : "disabled",
+      statusLabel: on ? "On" : "Off",
+      bucket: on ? "on" : "off",
+      detail: on ? `${count} configured` : "No reaction roles set up",
       href: `${base}/reactionroles`,
     });
-  }
+  } else modules.push(unavailableRow("reactionroles", "Reaction roles", "engagement", `${base}/reactionroles`));
 
   let accessLabel = "Dashboard access";
   if (isRoot) accessLabel = "Root owner";
@@ -288,25 +389,30 @@ export async function loadOverview(opts: {
     else if (mine?.template_key) accessLabel = mine.template_key.charAt(0).toUpperCase() + mine.template_key.slice(1);
   }
 
-  const grantsCount =
-    grantsRes.ok && Array.isArray(grantsRes.value) ? grantsRes.value.length : isRoot ? null : null;
+  const grantsCount = grantsRes.ok && Array.isArray(grantsRes.value) ? grantsRes.value.length : null;
 
   return {
     guild,
+    guildIconUrl: guildIcon(guild),
     guildError,
     botOnline: !statusFailed && Boolean(status),
     botLatencyMs: snapshot.latencyMs,
     healthLevel: snapshot.level,
     healthReasons: snapshot.reasons,
     systemHealth,
-    requiredOk,
-    requiredTotal,
+    requiredOkNames: systemHealth?.modules?.required_ok ?? [],
+    requiredFailedNames: (systemHealth?.modules?.required_failed ?? []).map((f) => f.name),
+    permissions: permissionCoverage(systemHealth, guildId),
     postgresConnected: systemHealth?.postgres?.connected ?? null,
     postgresEnabled: systemHealth?.postgres?.enabled ?? null,
     schedulerRunning: systemHealth?.scheduler?.worker_running ?? null,
     attention,
     modules,
+    coverage: summarizeCoverage(modules.map((m) => m.bucket)),
+    channels: channelsRes.ok ? channelComposition(channelList) : null,
+    prefix: prefixRes.ok && typeof prefixRes.value?.prefix === "string" ? prefixRes.value.prefix : null,
     accessLabel,
     grantsCount,
+    checkedAt: new Date().toISOString(),
   };
 }

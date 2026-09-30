@@ -209,7 +209,7 @@ export function HealthIndicator() {
             <span className="truncate">{text}</span>
           </StatusLabel>
           {snapshot.latencyMs !== null ? (
-            <span className="cls-mono-data hidden text-fg-3 md:inline">{snapshot.latencyMs} ms</span>
+            <span className="cls-mono-data hidden text-fg-3 md:inline" dir="ltr">{snapshot.latencyMs} ms</span>
           ) : null}
         </button>
       </PopoverTrigger>
@@ -223,7 +223,7 @@ export function HealthIndicator() {
             <StatusLabel status={status}>{text}</StatusLabel>
           </Row>
           <Row label="Gateway latency">
-            {snapshot.latencyMs !== null ? <span className="cls-mono-data">{snapshot.latencyMs} ms</span> : "Unknown"}
+            {snapshot.latencyMs !== null ? <span className="cls-mono-data" dir="ltr">{snapshot.latencyMs} ms</span> : "Unknown"}
           </Row>
           <Row label="Required modules">
             {!modules ? (

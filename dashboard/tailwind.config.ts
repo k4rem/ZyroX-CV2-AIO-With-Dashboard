@@ -39,6 +39,8 @@ const config: Config = {
     extend: {
       colors: {
         void: rgb("bg-void"),
+        // Graphite L0 (AD §2): the stage behind chart plots and previews.
+        stage: rgb("bg-void"),
         chrome: rgb("bg-chrome"),
         canvas: rgb("bg-canvas"),
         surface: {
@@ -111,6 +113,8 @@ const config: Config = {
         "body-prose": ["0.875rem", { lineHeight: "1.375rem" }],
         small: ["0.75rem", { lineHeight: "1rem" }],
         caption: ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.01em" }],
+        // Readout rail value (AD §4): one step above body, tabular.
+        readout: ["0.9375rem", { lineHeight: "1.25rem", fontWeight: "600" }],
         "kpi-sm": ["1.25rem", { lineHeight: "1.5rem", letterSpacing: "-0.01em", fontWeight: "600" }],
         kpi: ["1.75rem", { lineHeight: "2rem", letterSpacing: "-0.02em", fontWeight: "600" }],
       },
@@ -146,6 +150,7 @@ const config: Config = {
         micro: "var(--cls-dur-micro)",
         standard: "var(--cls-dur-standard)",
         emphasized: "var(--cls-dur-emphasized)",
+        data: "var(--cls-dur-data)",
       },
       transitionTimingFunction: {
         "cls-out": "var(--cls-ease-out)",

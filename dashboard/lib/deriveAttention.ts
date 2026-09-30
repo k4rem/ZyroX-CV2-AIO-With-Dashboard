@@ -11,6 +11,8 @@ export interface AttentionItem {
   severity: AttentionSeverity;
   message: string;
   href: string;
+  /** Module or system area the item belongs to (shown as context and in the action label). */
+  origin: string;
 }
 
 export interface DeriveAttentionInput {
@@ -32,6 +34,7 @@ export function deriveAttention(input: DeriveAttentionInput): AttentionItem[] {
       severity: "critical",
       message: `Required module failed: ${failed.name}${failed.error ? ` (${failed.error})` : ""}.`,
       href: base,
+      origin: failed.name,
     });
   }
 
@@ -39,16 +42,18 @@ export function deriveAttention(input: DeriveAttentionInput): AttentionItem[] {
   if (perm?.missing_by_module) {
     for (const [module, missing] of Object.entries(perm.missing_by_module)) {
       if (!missing?.length) continue;
-      const route =
-        module.toLowerCase().includes("log") ? `${base}/logging` :
-        module.toLowerCase().includes("ticket") ? `${base}/tickets` :
-        module.toLowerCase().includes("anti") ? `${base}/antinuke` :
-        `${base}/settings`;
+      const lower = module.toLowerCase();
+      const [route, origin] =
+        lower.includes("log") ? [`${base}/logging`, "Logging"] :
+        lower.includes("ticket") ? [`${base}/tickets`, "Tickets"] :
+        lower.includes("anti") ? [`${base}/antinuke`, "Antinuke"] :
+        [`${base}/settings`, "Bot settings"];
       items.push({
         id: `perm-${module}`,
         severity: "warning",
         message: `${module}: bot lacks ${missing.join(", ")}.`,
         href: route,
+        origin,
       });
     }
   }
@@ -59,6 +64,7 @@ export function deriveAttention(input: DeriveAttentionInput): AttentionItem[] {
       severity: "info",
       message: "Antinuke is disabled.",
       href: `${base}/antinuke`,
+      origin: "Antinuke",
     });
   }
 
@@ -72,6 +78,7 @@ export function deriveAttention(input: DeriveAttentionInput): AttentionItem[] {
           ? "Logging: one category is enabled without a channel."
           : `Logging: ${logGap} categories are enabled without a channel.`,
       href: `${base}/logging`,
+      origin: "Logging",
     });
   }
 
@@ -85,6 +92,7 @@ export function deriveAttention(input: DeriveAttentionInput): AttentionItem[] {
           ? "Tickets: one category has no staff roles assigned."
           : `Tickets: ${ticketGap} categories have no staff roles assigned.`,
       href: `${base}/tickets`,
+      origin: "Tickets",
     });
   }
 

@@ -88,6 +88,13 @@
   --cls-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --cls-ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --cls-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Phase 1.6 DATA tier (AD §5): meters and values settling, and the per-item stagger. */
+  --cls-dur-data: 400ms;
+  --cls-stagger: 30ms;
+
+  /* Instrument geometry (AD §3): the 30° cut. Sparse — panels that anchor a page only. */
+  --cls-cut-sm: 8px;
+  --cls-cut-md: 12px;
 
   /* Overlay enter/exit offsets. Reduced motion zeroes these so only opacity remains. */
   --cls-enter-shift: 4px;
@@ -120,6 +127,8 @@
   :root {
     --cls-dur-standard: 0ms;
     --cls-dur-emphasized: 0ms;
+    --cls-dur-data: 0ms;
+    --cls-stagger: 0ms;
     --cls-enter-shift: 0px;
     --cls-enter-scale: 1;
     --cls-drawer-shift: 0%;
@@ -401,6 +410,148 @@
   /* Route content fade (§10.2): 120 ms opacity, no slide. */
   .cls-route-fade {
     animation: cls-fade-in var(--cls-dur-micro) var(--cls-ease-out) both;
+  }
+
+  /* ------------------------------------------------------------------------
+     Graphite Instrument primitives (Phase 1.6 AD §3–§5)
+     ------------------------------------------------------------------------ */
+
+  /* 30° cut on the top-end corner, with the cut face drawn as a hairline so the
+     border stays continuous. Max ~2 per viewport; never on buttons, rows, inputs. */
+  .cls-cut {
+    --cls-cut: var(--cls-cut-md);
+    position: relative;
+    clip-path: polygon(0 0, calc(100% - var(--cls-cut)) 0, 100% var(--cls-cut), 100% 100%, 0 100%);
+  }
+  .cls-cut::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    inset-inline-end: 0;
+    width: var(--cls-cut);
+    height: var(--cls-cut);
+    pointer-events: none;
+    background: linear-gradient(
+      to top right,
+      transparent calc(50% - 0.75px),
+      rgb(var(--cls-line)) calc(50% - 0.75px),
+      rgb(var(--cls-line)) calc(50% + 0.75px),
+      transparent calc(50% + 0.75px)
+    );
+  }
+  [dir="rtl"] .cls-cut {
+    clip-path: polygon(var(--cls-cut) 0, 100% 0, 100% 100%, 0 100%, 0 var(--cls-cut));
+  }
+  [dir="rtl"] .cls-cut::after {
+    background: linear-gradient(
+      to top left,
+      transparent calc(50% - 0.75px),
+      rgb(var(--cls-line)) calc(50% - 0.75px),
+      rgb(var(--cls-line)) calc(50% + 0.75px),
+      transparent calc(50% + 0.75px)
+    );
+  }
+  .cls-cut-sm {
+    --cls-cut: var(--cls-cut-sm);
+  }
+
+  /* Signal edge: a short brand segment on the top border of the page's anchor panel. */
+  .cls-signal-edge::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    inset-inline-start: 16px;
+    width: 28px;
+    height: 2px;
+    background: rgb(var(--cls-brand-500));
+    pointer-events: none;
+  }
+
+  /* Signal tick: the brand mark that starts a page header rule. End face is cut. */
+  .cls-tick {
+    display: inline-block;
+    flex: none;
+    width: 14px;
+    height: 2px;
+    background: rgb(var(--cls-brand-500));
+    clip-path: polygon(0 0, 100% 0, calc(100% - 2px) 100%, 0 100%);
+  }
+  [dir="rtl"] .cls-tick {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 2px 100%);
+  }
+
+  /* Segment meter cell. Tone comes from --cls-seg-on; only the changed cells
+     transition, each delayed by its index for a left-to-right fill. */
+  .cls-seg {
+    background: rgb(var(--cls-surface-4));
+    transform: skewX(calc(var(--cls-dir) * -30deg));
+    transition: background-color var(--cls-dur-data) var(--cls-ease-out);
+    transition-delay: calc(var(--i, 0) * var(--cls-stagger));
+  }
+  .cls-seg[data-on="true"] {
+    background: rgb(var(--cls-seg-on, var(--cls-brand-500)));
+  }
+
+  /* State bar / mini bar fill settles on the DATA tier. Scales from the inline start
+     (transform only — never width). */
+  .cls-fill {
+    transform-origin: left center;
+    transition: transform var(--cls-dur-data) var(--cls-ease-out);
+  }
+  [dir="rtl"] .cls-fill {
+    transform-origin: right center;
+  }
+
+  /* Page-region entrance: STATE tier, staggered by --i. Reduced motion → instant. */
+  .cls-enter {
+    animation: cls-rise var(--cls-dur-standard) var(--cls-ease-out) both;
+    animation-delay: calc(var(--i, 0) * var(--cls-stagger));
+  }
+  @keyframes cls-rise {
+    from {
+      opacity: 0;
+      transform: translate3d(0, var(--cls-enter-shift), 0);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* A factual value changed since the last read: a brief backing wash, once. */
+  .cls-changed {
+    animation: cls-changed var(--cls-dur-data) var(--cls-ease-out) both;
+  }
+  @keyframes cls-changed {
+    from {
+      background-color: rgb(var(--cls-brand-500) / 0.18);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+
+  /* Attention / matrix row: MICRO-tier hover; the action arrow nudges toward its target. */
+  .cls-row {
+    transition: background-color var(--cls-dur-micro) var(--cls-ease-out);
+  }
+  .cls-row .cls-row-go {
+    transition: transform var(--cls-dur-micro) var(--cls-ease-out), color var(--cls-dur-micro) var(--cls-ease-out);
+  }
+  .cls-row:hover .cls-row-go,
+  .cls-row:focus-within .cls-row-go {
+    transform: translate3d(calc(var(--cls-dir) * 2px), 0, 0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cls-enter,
+    .cls-changed {
+      animation: none !important;
+    }
+    .cls-row:hover .cls-row-go,
+    .cls-row:focus-within .cls-row-go {
+      transform: none;
+    }
   }
 
   /* Shell grid (§10.2): the sidebar width is the one layout property that animates. */

@@ -25,7 +25,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import type { ShellGuild } from "@/components/shell/shell-types";
 
 // Shell-level title only; the landing page metadata belongs to Task B.
-export const metadata = { title: "CLS OS" };
+export const metadata = { title: { absolute: "CLS OS", template: "%s · CLS OS" } };
 
 // Session + authorized guild list are per-request; never cache the shell.
 export const dynamic = "force-dynamic";

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   NAV_ITEMS,
   buildNav,
+  isFluidRoute,
   parseDashboardPath,
   resolveBreadcrumbs,
   switchGuildHref,
@@ -90,4 +91,12 @@ test("switching server keeps the same module", () => {
 test("parseDashboardPath handles trailing slashes and non-guild routes", () => {
   assert.deepEqual(parseDashboardPath("/dashboard/guild/3/j2c/"), { guildId: "3", subpath: "/j2c" });
   assert.deepEqual(parseDashboardPath("/dashboard/access"), { guildId: null, subpath: "" });
+});
+
+test("only the guild overview is a fluid route", () => {
+  assert.equal(isFluidRoute("/dashboard/guild/1543105121804615781"), true);
+  assert.equal(isFluidRoute("/dashboard/guild/1543105121804615781/"), true);
+  assert.equal(isFluidRoute("/dashboard/guild/1543105121804615781/tickets"), false);
+  assert.equal(isFluidRoute("/dashboard/guilds"), false);
+  assert.equal(isFluidRoute("/dashboard/access"), false);
 });

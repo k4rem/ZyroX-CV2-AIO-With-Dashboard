@@ -6,6 +6,8 @@ import { OverviewContent } from "@/components/overview/overview-content";
 
 export const revalidate = 0;
 
+export const metadata = { title: "Overview" };
+
 export default async function GuildOverviewPage({ params }: { params: { guildId: string } }) {
   const session = await getServerSession(authOptions);
   const userId = session?.user?.id ?? "";
