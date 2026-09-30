@@ -166,6 +166,7 @@ Status: implemented and committed on `phase-1.5-cls-os-design` (not pushed). Che
 - Test safety: `bot/tests/conftest.py` now aborts unless `DATABASE_URL` names a database ending in `_test`, because `db_reset` truncates platform tables.
 - Side effect: a dashboard identity with no grant now gets 403 from `/system/health` (as it already did from `/bot/status`), so its health chip reads unreachable.
 - Finding for Phase 1 follow-up (not changed): `postgres.connected` mirrors `POSTGRES_ENABLED` instead of probing the database.
+- Module health wiring (final Task A check): `cogs/__init__.py` stored the load result as `bot._module_health` while `required_modules_report` reads `bot.module_health`, so the live endpoint always returned `healthy: true` with empty module lists, even when a required module failed. Fixed by publishing `bot.module_health`; `bot/tests/test_module_health_wiring.py` runs the real cog `setup()` and fails against the old attribute. Takes effect on the next bot restart.
 
 **Hand-offs**
 - Task B: root metadata title/description still says "Zyrox"; `Toaster` sits outside `UiProviders` (physical toast position in RTL).

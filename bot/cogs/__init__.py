@@ -23,7 +23,7 @@ from utils.config import BotName
 
 async def setup(bot: zyrox):
     health = await load_all_cogs(bot)
-    bot._module_health = health
+    bot.module_health = health
     health.print_summary()
 
     if not health.healthy:
