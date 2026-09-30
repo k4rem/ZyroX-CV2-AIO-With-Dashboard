@@ -6,8 +6,8 @@ import {
   LifeBuoy,
   RotateCcw,
   ShieldAlert,
-  Sparkles,
-  ShieldCheck,
+  Workflow,
+  Gavel,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,7 @@ const DOMAINS: {
   {
     id: "Security",
     name: "Security",
-    line: "Antinuke and automod protect the server from destructive changes and spam.",
+    line: "Antinuke protects the server from destructive changes.",
     availability: "Available now",
     icon: ShieldAlert,
   },
@@ -46,14 +46,14 @@ const DOMAINS: {
     name: "Automation",
     line: "Welcome messages, auto roles, reaction roles, and Join to Create voice channels.",
     availability: "Available now",
-    icon: Sparkles,
+    icon: Workflow,
   },
   {
     id: "Moderation",
     name: "Moderation",
     line: "Automod rules and event logging to channels you choose.",
     availability: "Available now",
-    icon: ShieldCheck,
+    icon: Gavel,
   },
   {
     id: "Audit",
@@ -72,25 +72,32 @@ export function DomainList({
   onActiveDomain: (d: PerimeterDomain | null) => void;
 }) {
   return (
-    <section id="inside-cls-os" className="mx-auto w-full max-w-3xl px-4 pb-16 md:px-6">
+    <section id="inside-cls-os" className="cls-public-container pb-16">
       <p className="cls-overline mb-6 text-fg-3">What runs inside</p>
-      <ul className="divide-y divide-line-subtle border-y border-line-subtle">
-        {DOMAINS.map((d) => {
+      <ul className="grid grid-cols-1 border-y border-line-subtle md:grid-cols-2">
+        {DOMAINS.map((d, index) => {
           const Icon = d.icon;
-          const active = activeDomain === d.id;
           return (
-            <li key={d.id}>
-              <button
-                type="button"
+            <li
+              key={d.id}
+              className={cn(
+                "border-line-subtle",
+                index < 4 && "border-b",
+                index % 2 === 0 && "md:border-e md:pe-6",
+                index % 2 === 1 && "md:ps-6",
+                index >= 2 && "md:border-t",
+              )}
+              onMouseEnter={() => onActiveDomain(d.id)}
+              onMouseLeave={() => onActiveDomain(null)}
+              onFocus={() => onActiveDomain(d.id)}
+              onBlur={() => onActiveDomain(null)}
+            >
+              <div
+                tabIndex={0}
                 className={cn(
-                  "flex w-full gap-4 py-4 text-start transition-colors duration-micro",
-                  "hover:bg-surface-1/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-void",
-                  active && "bg-brand-600/[0.16]",
+                  "flex gap-4 py-4 text-start outline-none transition-colors duration-micro",
+                  "hover:bg-surface-1/50 focus-visible:bg-surface-1/50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400",
                 )}
-                onMouseEnter={() => onActiveDomain(d.id)}
-                onMouseLeave={() => onActiveDomain(null)}
-                onFocus={() => onActiveDomain(d.id)}
-                onBlur={() => onActiveDomain(null)}
               >
                 <Icon className="mt-0.5 size-5 shrink-0 text-fg-3" strokeWidth={1.5} aria-hidden="true" />
                 <div className="min-w-0 flex-1">
@@ -98,7 +105,7 @@ export function DomainList({
                   <p className="mt-1 text-body-prose text-fg-2">{d.line}</p>
                   <p className="mt-2 text-caption text-fg-3">{d.availability}</p>
                 </div>
-              </button>
+              </div>
             </li>
           );
         })}

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-/** Subtle ring parallax (DS §13.4). Disabled for coarse pointers and reduced motion. */
+/** Subtle ring parallax (DS §13.4). Pauses when off-screen or pointer idle. */
 export function usePerimeterParallax(enabled: boolean) {
   const ref = React.useRef<HTMLDivElement>(null);
   const [offset, setOffset] = React.useState({ ox: 0, oy: 0, mx: 0, my: 0, ix: 0, iy: 0 });
@@ -17,6 +17,16 @@ export function usePerimeterParallax(enabled: boolean) {
     let targetY = 0;
     let currentX = 0;
     let currentY = 0;
+    let lastMove = 0;
+    let visible = true;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        visible = entries[0]?.isIntersecting ?? true;
+      },
+      { threshold: 0.05 },
+    );
+    observer.observe(el);
 
     const onMove = (e: PointerEvent) => {
       const rect = el.getBoundingClientRect();
@@ -26,27 +36,50 @@ export function usePerimeterParallax(enabled: boolean) {
       const ny = Math.max(-1, Math.min(1, (e.clientY - cy) / (rect.height / 2)));
       targetX = nx;
       targetY = ny;
+      lastMove = performance.now();
     };
 
-    const tick = () => {
-      currentX += (targetX - currentX) * 0.08;
-      currentY += (targetY - currentY) * 0.08;
-      setOffset({
-        ox: currentX * 2,
-        oy: currentY * 2,
-        mx: currentX * 4,
-        my: currentY * 4,
-        ix: currentX * 6,
-        iy: currentY * 6,
-      });
-      raf = requestAnimationFrame(tick);
+    const tick = (t: number) => {
+      const idle = t - lastMove > 120;
+      const moving =
+        visible &&
+        !idle &&
+        (Math.abs(targetX - currentX) > 0.002 || Math.abs(targetY - currentY) > 0.002);
+
+      if (moving || !idle) {
+        currentX += (targetX - currentX) * 0.12;
+        currentY += (targetY - currentY) * 0.12;
+        setOffset({
+          ox: currentX * 2,
+          oy: currentY * 2,
+          mx: currentX * 3,
+          my: currentY * 3,
+          ix: currentX * 4,
+          iy: currentY * 4,
+        });
+      }
+
+      if (visible && (!idle || moving)) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        raf = 0;
+      }
+    };
+
+    const kick = () => {
+      if (!raf) raf = requestAnimationFrame(tick);
     };
 
     window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("pointermove", kick, { passive: true });
+    lastMove = performance.now();
     raf = requestAnimationFrame(tick);
+
     return () => {
+      observer.disconnect();
       window.removeEventListener("pointermove", onMove);
-      cancelAnimationFrame(raf);
+      window.removeEventListener("pointermove", kick);
+      if (raf) cancelAnimationFrame(raf);
     };
   }, [enabled]);
 

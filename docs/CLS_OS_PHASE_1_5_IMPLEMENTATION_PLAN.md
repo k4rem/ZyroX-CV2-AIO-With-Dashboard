@@ -260,6 +260,18 @@ Global list (§0), plus: everything under `app/dashboard/**` except reading the 
 4. **B-4 RTL:** B-1 at 1440×900 and 390×844, and B-3 No access.
 5. **B-5 legal:** privacy and terms at 1440×900 and 390×844.
 
+### B.10 Task B completion record
+
+**Status:** CLOSED on `phase-1.5-cls-os-design` (commits `d82fc6c` initial gateway + auth; refinement commit after Opus 5.5 review). Not pushed.
+
+**Delivered:** CLS Perimeter landing gateway, auth routes (`/auth/continue`, `/auth/error`, `/auth/no-access`), metadata/favicon policy, privacy/terms drafts, `authRouting`, post-refinement perimeter labels (edge midpoints), 3×2 capability matrix, signed-in `/` → `/auth/continue` interim routing, empty CLS Discord invite until owner URL.
+
+**Refinement (Opus):** See `docs/CLS_OS_TASK_B_VISUAL_REVIEW.md` § Final refinement. Viewport QA captures: `%TEMP%\\cls-phase-1.5\\task-b-final\\`.
+
+**Owner follow-ups:** Official CLS Discord invite in `dashboard/lib/publicLinks.ts`; legal text approval; full Discord OAuth regression optional when second test account unavailable.
+
+**Hand-off to Task C:** `/dashboard/page.tsx` still legacy ZyroX overview (bypassed for signed-in `/` via `/auth/continue`).
+
 ---
 
 ## TASK C: Core Dashboard UI + Branding / Surface Cleanup

@@ -427,16 +427,34 @@
     line-height: 1;
   }
 
+  /* Public gateway shell width (landing, auth header, legal). */
+  .cls-public-container {
+    @apply mx-auto w-full max-w-6xl px-4 md:px-6;
+  }
+  @media (min-width: 1920px) {
+    .cls-public-container {
+      max-width: 90rem;
+    }
+  }
+
   /* Landing / auth gateway (DS §5.3, §13). Display stays Plex 600 (D7). */
   .cls-gateway {
     --cls-font-display: var(--cls-font-ui);
   }
   .cls-display-hero {
     font-family: var(--cls-font-display);
-    font-size: clamp(2.25rem, 4.5vw, 3.25rem);
+    font-size: clamp(2.5rem, 4.4vw, 5rem);
     font-weight: 600;
     letter-spacing: -0.02em;
     line-height: 1.05;
+  }
+  .cls-perimeter-edge-label {
+    @apply font-mono font-medium uppercase tracking-[0.08em];
+  }
+  [dir="rtl"] .cls-perimeter-edge-label,
+  :lang(ar) .cls-perimeter-edge-label {
+    @apply font-sans normal-case tracking-normal;
+    font-size: 12px;
   }
   .cls-auth-title {
     font-family: var(--cls-font-display);
@@ -469,7 +487,7 @@
   }
 
   .cls-gateway-reveal {
-    animation: cls-gateway-reveal 500ms var(--cls-ease-emphasized) 700ms both;
+    animation: cls-gateway-reveal 280ms var(--cls-ease-out) 80ms both;
   }
   @keyframes cls-gateway-reveal {
     from {
@@ -491,10 +509,10 @@
   .cls-perimeter-inner-seg {
     animation: cls-perimeter-arm 240ms var(--cls-ease-emphasized) both;
   }
-  .cls-perimeter-mid-seg {
+  .cls-perimeter-mid-tick {
     animation: cls-perimeter-fade 300ms var(--cls-ease-out) 850ms both;
   }
-  .cls-perimeter-label {
+  .cls-perimeter-edge-label {
     animation: cls-perimeter-fade 300ms var(--cls-ease-out) 1000ms both;
   }
   .cls-perimeter-outer-seg[data-seg="0"] {
@@ -555,15 +573,13 @@
   }
 
   [data-perimeter-locked="true"] .cls-perimeter-inner-seg {
-    opacity: 1;
-    stroke: rgb(var(--cls-brand-500));
-    filter: drop-shadow(var(--cls-glow-g2));
-    transition: stroke 500ms var(--cls-ease-emphasized), opacity 500ms;
+    opacity: 0.55;
+    stroke: rgb(var(--cls-brand-400) / 0.45);
+    transition: stroke 480ms var(--cls-ease-emphasized), opacity 480ms;
   }
-  [data-perimeter-locked="true"] .cls-perimeter-outer-seg,
-  [data-perimeter-locked="true"] .cls-perimeter-mid-seg {
+  [data-perimeter-locked="true"] .cls-perimeter-outer-seg {
     opacity: 1;
-    transition: opacity 500ms var(--cls-ease-emphasized);
+    transition: opacity 480ms var(--cls-ease-emphasized);
   }
 
   .cls-perimeter-core-glow {
@@ -584,7 +600,7 @@
   @keyframes cls-perimeter-open {
     to {
       opacity: 0;
-      transform: translate(var(--cls-dir, 1) * 8px, -8px);
+      transform: translate(calc(var(--cls-dir, 1) * 8px), -8px);
     }
   }
 
@@ -592,7 +608,7 @@
     .cls-lattice-fade,
     .cls-gateway-reveal,
     .cls-perimeter-seg,
-    .cls-perimeter-label,
+    .cls-perimeter-edge-label,
     .cls-perimeter-core-glow {
       animation: none !important;
       opacity: 1 !important;
@@ -600,7 +616,7 @@
     }
     .cls-perimeter-outer-seg,
     .cls-perimeter-inner-seg,
-    .cls-perimeter-mid-seg {
+    .cls-perimeter-mid-tick {
       stroke-dasharray: none !important;
       stroke-dashoffset: 0 !important;
     }

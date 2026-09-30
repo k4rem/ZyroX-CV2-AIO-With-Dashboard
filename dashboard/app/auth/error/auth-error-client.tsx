@@ -9,20 +9,20 @@ function errorCopy(code: string | null): { title: string; body: string; referenc
   switch (code) {
     case "AccessDenied":
       return {
-        title: "Sign-in was cancelled on Discord.",
-        body: "You can try again when you are ready to continue into CLS OS.",
+        title: "Discord sign-in wasn't approved.",
+        body: "If you cancelled on Discord, try again. If you approved it and still see this, contact the CLS owner.",
         reference: code ? `Reference: ${code}` : undefined,
       };
     case "Configuration":
       return {
         title: "Sign-in isn't configured correctly on this server.",
-        body: "Tell the CLS root owner. OAuth client settings must be valid for this dashboard URL.",
+        body: "Tell the CLS owner. OAuth client settings must be valid for this dashboard URL.",
         reference: code ? `Reference: ${code}` : undefined,
       };
     case "ServiceUnavailable":
       return {
         title: "CLS OS can't reach the bot service right now.",
-        body: "Try again in a minute. If this keeps happening, contact the CLS root owner.",
+        body: "Try again in a minute. If this keeps happening, contact the CLS owner.",
         reference: code ? `Reference: ${code}` : undefined,
       };
     case "OAuthCallback":

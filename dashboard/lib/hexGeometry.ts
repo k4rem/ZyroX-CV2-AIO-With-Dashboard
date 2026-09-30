@@ -23,13 +23,37 @@ export function hexEdgeSegment(vertices: Point[], index: number, gap = 0.03): st
   return `M${ax.toFixed(2)} ${ay.toFixed(2)}L${bx.toFixed(2)} ${by.toFixed(2)}`;
 }
 
-/** Label anchor just outside a vertex, along the outward normal. */
-export function hexLabelAnchor(vertices: Point[], index: number, offset: number): Point {
-  const [x, y] = vertices[index];
-  const cx = vertices.reduce((s, p) => s + p[0], 0) / 6;
-  const cy = vertices.reduce((s, p) => s + p[1], 0) / 6;
-  const dx = x - cx;
-  const dy = y - cy;
+/** Midpoint of hex edge `index`. */
+export function hexEdgeMidpoint(vertices: Point[], index: number): Point {
+  const [x1, y1] = vertices[index];
+  const [x2, y2] = vertices[(index + 1) % 6];
+  return [(x1 + x2) / 2, (y1 + y2) / 2];
+}
+
+/** Outward unit normal from centre through the edge midpoint. */
+export function hexEdgeOutwardNormal(vertices: Point[], index: number, cx: number, cy: number): Point {
+  const [mx, my] = hexEdgeMidpoint(vertices, index);
+  const dx = mx - cx;
+  const dy = my - cy;
   const len = Math.hypot(dx, dy) || 1;
-  return [x + (dx / len) * offset, y + (dy / len) * offset];
+  return [dx / len, dy / len];
+}
+
+/** Short tick mark on a ring, tangent to the hex edge at its midpoint. */
+export function hexEdgeTick(
+  vertices: Point[],
+  index: number,
+  cx: number,
+  cy: number,
+  tickHalf = 3,
+): string {
+  const [mx, my] = hexEdgeMidpoint(vertices, index);
+  const [x1, y1] = vertices[index];
+  const [x2, y2] = vertices[(index + 1) % 6];
+  const tx = x2 - x1;
+  const ty = y2 - y1;
+  const tlen = Math.hypot(tx, ty) || 1;
+  const ux = tx / tlen;
+  const uy = ty / tlen;
+  return `M${(mx - ux * tickHalf).toFixed(2)} ${(my - uy * tickHalf).toFixed(2)}L${(mx + ux * tickHalf).toFixed(2)} ${(my + uy * tickHalf).toFixed(2)}`;
 }

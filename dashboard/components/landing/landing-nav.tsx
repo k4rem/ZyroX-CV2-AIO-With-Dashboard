@@ -23,12 +23,15 @@ export function LandingNav({ onSignInLock }: { onSignInLock?: () => void }) {
         scrolled ? "border-line bg-chrome/80 backdrop-blur-md" : "border-transparent bg-transparent",
       )}
     >
-      <div className="mx-auto flex h-topbar max-w-6xl items-center justify-between gap-4 px-4 md:px-6">
-        <Link href="/" className="flex items-center gap-2 rounded-sm focus-visible:outline-none">
-          <Wordmark markHeight={20} />
+      <div className="cls-public-container flex h-topbar items-center justify-between gap-4">
+        <Link
+          href="/"
+          className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-void"
+        >
+          <Wordmark markHeight={28} />
         </Link>
         <div className="hidden sm:block">
-          <SignInButton onLock={onSignInLock} />
+          <SignInButton emphasis="nav" onLock={onSignInLock} />
         </div>
       </div>
     </header>

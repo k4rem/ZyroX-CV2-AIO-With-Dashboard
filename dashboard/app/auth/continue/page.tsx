@@ -40,11 +40,5 @@ export default async function AuthContinuePage({
     redirect("/auth/no-access");
   }
 
-  return (
-    <AuthContinueClient
-      destination={destination}
-      userName={session.user?.name ?? null}
-      userImage={session.user?.image ?? null}
-    />
-  );
+  return <AuthContinueClient destination={destination} />;
 }

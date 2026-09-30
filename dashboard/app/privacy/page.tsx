@@ -9,7 +9,7 @@ export default function PrivacyPage() {
         <h2 className="text-section text-fg-1">What CLS OS is</h2>
         <p>
           CLS OS is a private web dashboard used to configure and operate CLS Discord bot and platform services.
-          Access is limited to accounts granted by the CLS root owner.
+          Access is limited to accounts granted by the CLS owner.
         </p>
       </section>
       <section>
@@ -36,17 +36,10 @@ export default function PrivacyPage() {
         </ul>
       </section>
       <section>
-        <h2 className="text-section text-fg-1">What we do not claim</h2>
-        <p>
-          This page does not describe marketing analytics, advertising profiles, or public user directories. CLS OS
-          is not a consumer social network.
-        </p>
-      </section>
-      <section>
         <h2 className="text-section text-fg-1">Retention and contact</h2>
         <p>
           Retention periods depend on server configuration and operational backups. For access or deletion questions,
-          contact the CLS root owner. Discord&apos;s own privacy policy applies to your Discord account.
+          contact the CLS owner. Discord&apos;s own privacy policy applies to your Discord account.
         </p>
       </section>
     </LegalPageShell>

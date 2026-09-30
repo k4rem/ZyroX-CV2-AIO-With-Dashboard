@@ -79,3 +79,43 @@ Prepared for independent Opus visual critique. Screenshots are **outside the rep
 ### POLISH
 - Optional outer-ring idle sweep (DS §13.4) not implemented.
 - Screenshot `/auth/continue` with real session for Opus.
+
+---
+
+## Final refinement (post–Opus 5.5 review)
+
+### Implemented
+
+- Removed upstream Discord invite; `CLS_DISCORD_INVITE_URL` empty until owner supplies URL; footer link hidden when unset.
+- Perimeter labels moved to HTML at **edge midpoints** (not vertices); active outer segment + label sync with capability list hover/focus.
+- Official mark scales to **~26%** of perimeter height; inner ring subdued; middle ring replaced with **control ticks**.
+- Hero copy/access note updated; purple CLS OS overline removed; nav sign-in demoted to **ghost**; wordmark mark **28px** in public shells.
+- Text reveal **~80ms** delay; sign-in navigates immediately; gap **closes on lock** over 480ms; parallax pauses when idle/off-screen; mark moves with inner parallax.
+- Domain section → **3×2** hairline matrix aligned to `cls-public-container`; distinct icons (Workflow, Gavel).
+- `/auth/continue` → “Access confirmed” / immediate `router.replace`; AccessDenied copy softened; **CLS owner** public wording.
+- Authenticated `/` → `/auth/continue` (avoids legacy ZyroX `/dashboard` home until Task C).
+- Shared **cls-public-container** (max **90rem** at ≥1920px); focus rings restored on public wordmark links; footer touch targets ≥44px.
+- Privacy draft: removed uncertain “What we do not claim” section; triangular lattice background.
+
+### Deliberately not implemented
+
+- Outer-ring idle sweep (DS §13.4) — polish deferred.
+- Chakra Petch or any new display font.
+- Live `/auth/continue` / no-access screenshots without owner session (same as initial QA).
+
+### Final viewport screenshots (outside repo)
+
+`C:\Users\aero\AppData\Local\Temp\cls-phase-1.5\task-b-final\`
+
+- `vp-2560x1440.png`, `vp-1440x900.png`, `vp-1024x768.png`, `vp-390x844.png`
+- `vp-rtl-1440x900.png`
+- `vp-motion-normal-1440x900.png`, `vp-motion-reduced-1440x900.png`
+- `auth-error-1440x900.png`, `auth-continue-1440x900.png` (if session), `auth-no-access-1440x900.png` (if session)
+- `notice-session-ended-1440x900.png`, `notice-signed-out-1440x900.png`
+- `privacy-1440x900.png`, `terms-1440x900.png`
+
+### Remaining Task C dependencies
+
+- Replace `/dashboard/page.tsx` fake ZyroX overview (routing bypasses it via `/auth/continue` for now).
+- Owner: official CLS Discord invite URL in `lib/publicLinks.ts`.
+- Owner/legal: privacy & terms final approval.

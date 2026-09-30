@@ -25,19 +25,17 @@ export default async function NoAccessPage() {
         </>
       }
     >
-      <p>
-        You&apos;re signed in as <span className="text-fg-1">{name}</span>. Access to CLS OS is granted by the
-        CLS root owner. Discord Administrator permission does not grant dashboard access.
+      <p className="text-center text-body-prose">
+        You&apos;re signed in as <span className="text-fg-1">{name}</span>. Access to CLS OS is granted by the CLS
+        owner. Discord Administrator permission does not grant dashboard access. Share your Discord ID below if you
+        need access.
       </p>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
         <span className="cls-mono-data text-fg-2" dir="ltr">
           {userId}
         </span>
         <CopyIdButton value={userId} />
       </div>
-      <p className="mt-4 text-small text-fg-3">
-        If you believe you should have access, contact the CLS root owner with your Discord ID above.
-      </p>
     </AuthLayout>
   );
 }
