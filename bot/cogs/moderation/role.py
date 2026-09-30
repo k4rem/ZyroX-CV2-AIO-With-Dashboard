@@ -133,38 +133,19 @@ class Role(commands.Cog):
   @commands.has_permissions(manage_roles=True)
   @commands.bot_has_permissions(manage_roles=True)
   async def temp(self, ctx, role: discord.Role, time, *, user: discord.Member):
-    if ctx.author != ctx.guild.owner and role.position >= ctx.author.top_role.position:
-        embed = discord.Embed(
-              description=f"You can't manage a role that is higher or equal to your top role!",
-              color=self.color
-          )
-        embed.set_author(name="Error")
-        embed.set_footer(text=f"Requested by {ctx.author}",
-                        icon_url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url)
-        return await ctx.send(embed=embed)
-          
-    else:
-      if role.position >= ctx.guild.me.top_role.position:
-        embed1 = discord.Embed(
-          description=
-          f"{role} is higher than my top role, move my role above {role}.",
-          color=self.color)
-        embed1.set_author(name="Error")
-        embed1.set_footer(text=f"Requested by {ctx.author}",
-                        icon_url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url)
-        return await ctx.send(embed=embed1)
-    seconds = convert(time)
-    await user.add_roles(role, reason=None)
-    success = discord.Embed(
-      description=
-      f"Successfully added {role.mention} to {user.mention} .",
-      color=self.color)
-    success.set_author(name="Success")
-    success.set_footer(text=f"Requested by {ctx.author}",
-                        icon_url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url)
-    await ctx.send(embed=success)
-    await asyncio.sleep(seconds)
-    await user.remove_roles(role)
+    embed_disabled = discord.Embed(
+      description=(
+        "Temporary role assignment is disabled for Phase 0 (not restart-safe). "
+        "Permanent role assignment still works. Persistent scheduling arrives in Phase 1."
+      ),
+      color=self.color,
+    )
+    embed_disabled.set_author(name="Unavailable")
+    embed_disabled.set_footer(
+      text=f"Requested by {ctx.author}",
+      icon_url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url,
+    )
+    return await ctx.send(embed=embed_disabled)
 
   
   @role.command(help="Delete a role in the guild")

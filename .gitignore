@@ -61,6 +61,8 @@ out/
 *.db-journal
 *.db-wal
 *.db-shm
+bot/j2c_data.db
+bot/rr.db
 bot/db/*.json
 bot/jsondb/*.json
 bot/events.json

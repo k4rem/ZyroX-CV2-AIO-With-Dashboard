@@ -556,6 +556,13 @@ async def get_guild_verification(guild_id: int):
 
 @router.patch("/{guild_id}/verification", summary="Update Verification config")
 async def patch_guild_verification(guild_id: int, data: VerificationUpdate):
+    from fastapi import HTTPException
+    from utils.legacy_verification import legacy_verification_block_reason
+
+    block = legacy_verification_block_reason()
+    if block:
+        raise HTTPException(status_code=403, detail=block)
+
     import aiosqlite
     
     async with aiosqlite.connect("db/verification.db") as db:

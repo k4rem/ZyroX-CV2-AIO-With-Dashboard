@@ -38,8 +38,15 @@ import {
   AdminConfigUpdate
 } from "@/types/api";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+import { evaluateLegacyDirectBotApi } from "./legacyDirectApi.mjs";
+
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
 const API_KEY = process.env.NEXT_PUBLIC_DASHBOARD_API_KEY;
+
+const _legacyGate = evaluateLegacyDirectBotApi({
+  NODE_ENV: process.env.NODE_ENV,
+  NEXT_PUBLIC_LEGACY_DIRECT_BOT_API: process.env.NEXT_PUBLIC_LEGACY_DIRECT_BOT_API,
+});
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -52,12 +59,20 @@ async function request<T>(
   endpoint: string,
   options: RequestInit & { next?: NextFetchRequestConfig } = {}
 ): Promise<T> {
+  if (!_legacyGate.allowed) {
+    throw new ApiError(503, _legacyGate.reason || "Legacy direct bot API is disabled.");
+  }
+  if (!API_KEY) {
+    throw new ApiError(
+      503,
+      "NEXT_PUBLIC_DASHBOARD_API_KEY is not configured. Legacy direct API is dev-only."
+    );
+  }
+
   const url = `${BASE_URL}${endpoint}`;
   
   const headers = new Headers(options.headers);
-  if (API_KEY) {
-    headers.set("Authorization", `Bearer ${API_KEY}`);
-  }
+  headers.set("Authorization", `Bearer ${API_KEY}`);
   headers.set("Content-Type", "application/json");
   try {
     const response = await fetch(url, {

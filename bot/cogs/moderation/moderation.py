@@ -963,8 +963,11 @@ class Moderation(commands.Cog):
         if not icon.startswith("https://"):
             return await ctx.reply("Please provide a valid link.")
         try:
-            async with aiohttp.request("GET", icon) as r:
-                image_data = await r.read()
+            from utils.safe_outbound import safe_get_bytes, UnsafeURLError
+            try:
+                image_data = await safe_get_bytes(icon)
+            except UnsafeURLError as exc:
+                return await ctx.reply(str(exc))
             await role.edit(display_icon=image_data)
             success_embed = discord.Embed(
                 description=f"{TICK}>| Successfully changed the icon for {role.mention}.",

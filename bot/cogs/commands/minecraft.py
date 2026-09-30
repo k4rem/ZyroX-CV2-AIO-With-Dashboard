@@ -25,6 +25,7 @@ import io
 import asyncio
 import base64
 from utils.emoji import SUCCESS, ERROR, WARNING_UNICODE, CLOCK, REFRESH, JAVA_COFFEE
+from utils.env_parse import parse_env_bool
 
 # --- Updated Asset Paths ---
 ASSETS_DIR = "assets"
@@ -95,11 +96,15 @@ class MinecraftView(ui.View):
 class Minecraft(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.server_probe_enabled = parse_env_bool(
+            "MINECRAFT_SERVER_PROBE_ENABLED", "false"
+        )
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
         os.makedirs(os.path.dirname(FONT_PATH), exist_ok=True)
         os.makedirs(os.path.dirname(BACKGROUND_PATH), exist_ok=True)
         self.bot.loop.create_task(self.init_db())
-        self.refresh_all_statuses.start()
+        if self.server_probe_enabled:
+            self.refresh_all_statuses.start()
 
     async def init_db(self):
         async with aiosqlite.connect(DB_PATH) as db:
@@ -114,6 +119,8 @@ class Minecraft(commands.Cog):
         return re.sub(r'§.', '', motd).strip()
 
     async def auto_detect_server(self, ip: str, port: int = None):
+        if not self.server_probe_enabled:
+            return None, None, None
         try:
             java_port = port or 25565
             server = JavaServer(ip, java_port)

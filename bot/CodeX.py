@@ -71,6 +71,11 @@ async def on_ready():
     print(f"Connected to: {len(client.guilds)} guilds")
     print(f"Connected to: {len(client.users)} users")
 
+    from utils.guild_allowlist import guild_allowlist_startup_message
+    allowlist_msg = guild_allowlist_startup_message()
+    if allowlist_msg:
+        print(f"\033[33m[*] {allowlist_msg}\033[0m")
+
     # Sync application emojis on startup
     await run_sync(TOKEN)
 
@@ -280,17 +285,26 @@ fastapi_app = create_app()
 fastapi_app.state.bot = client
 set_bot(client)
 
-API_ENABLED = os.getenv("API_ENABLED", "true").strip().lower() == "true"
-API_PORT = int(os.getenv("API_PORT", "8000"))
+from utils.api_bind import load_api_bind_config, validate_api_bind_or_exit
+
+_api_cfg = load_api_bind_config()
+validate_api_bind_or_exit(_api_cfg)
 
 def run_api():
-    uvicorn.run(fastapi_app, host='0.0.0.0', port=API_PORT, log_level="warning")
+    uvicorn.run(
+        fastapi_app,
+        host=_api_cfg.host,
+        port=_api_cfg.port,
+        log_level="warning",
+    )
 
 def keep_alive():
-    if not API_ENABLED:
-        print(f"\033[33m◈ API Server: Disabled via API_ENABLED=false\033[0m")
+    if not _api_cfg.enabled:
+        print(f"\033[33m[*] API Server: Disabled via API_ENABLED=false\033[0m")
         return
-    print(f"\033[32m◈ API Server: Starting on port {API_PORT}\033[0m")
+    print(
+        f"\033[32m[*] API Server: Starting on {_api_cfg.host}:{_api_cfg.port}\033[0m"
+    )
     server = Thread(target=run_api, daemon=True)
     server.start()
 

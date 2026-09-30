@@ -12,20 +12,21 @@
 # ║                                                                  ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-import discord 
+import discord
 from utils.emoji import TICK
-from discord .ext import commands 
-from discord import app_commands 
-import aiosqlite 
-import random 
-import string 
-import io 
-from PIL import Image ,ImageDraw ,ImageFont 
-import asyncio 
-import logging 
-from datetime import datetime ,timezone ,timedelta 
-from typing import Optional 
+from discord .ext import commands
+from discord import app_commands
+import aiosqlite
+import random
+import string
+import io
+from PIL import Image ,ImageDraw ,ImageFont
+import asyncio
+import logging
+from datetime import datetime ,timezone ,timedelta
+from typing import Optional
 from utils .Tools import *
+from utils .legacy_verification import legacy_verification_block_reason
 
 
 logger =logging .getLogger ('discord')
@@ -39,8 +40,24 @@ DISCORD_COLORS ={
 'warning':0xFF0000 ,
 'error':0xFF0000 ,
 'secondary':0xFF0000 ,
-'neutral':0xFF0000 
+'neutral':0xFF0000
 }
+
+
+async def _send_legacy_verification_blocked (target ,*, ephemeral :bool =False ):
+    reason =legacy_verification_block_reason ()
+    if not reason :
+        return False
+    embed =discord .Embed (description =reason ,color =DISCORD_COLORS ['error'])
+    embed .set_author (name ="Legacy verification disabled")
+    if isinstance (target ,discord .Interaction ):
+        if target .response .is_done ():
+            await target .followup .send (embed =embed ,ephemeral =ephemeral )
+        else :
+            await target .response .send_message (embed =embed ,ephemeral =ephemeral )
+    else :
+        await target .send (embed =embed )
+    return True
 
 
 def utc_to_ist (dt :datetime )->datetime :
@@ -50,7 +67,7 @@ def utc_to_ist (dt :datetime )->datetime :
 
 async def check_bot_permissions (guild :discord .Guild ,channel =None )->dict :
     """Check if bot has necessary permissions"""
-    bot_member =guild .me 
+    bot_member =guild .me
     required_perms ={
     'guild':['manage_roles','manage_channels','send_messages','manage_messages'],
     'channel':['view_channel','send_messages','attach_files','embed_links','manage_messages']
@@ -70,21 +87,23 @@ async def check_bot_permissions (guild :discord .Guild ,channel =None )->dict :
             if not getattr (channel_perms ,perm ):
                 missing_perms ['channel'].append (perm .replace ('_',' ').title ())
 
-    return missing_perms 
+    return missing_perms
 
 
 def validate_role_hierarchy (guild :discord .Guild ,role :discord .Role )->bool :
     """Check if bot can manage the specified role"""
-    bot_top_role =guild .me .top_role 
-    return bot_top_role .position >role .position 
+    bot_top_role =guild .me .top_role
+    return bot_top_role .position >role .position
 
 async def create_verified_role (guild :discord .Guild )->discord .Role :
     """Create a verified role with proper permissions"""
+    if legacy_verification_block_reason ():
+        raise RuntimeError (legacy_verification_block_reason ())
     try :
 
         existing_role =discord .utils .get (guild .roles ,name ="Verified")
         if existing_role :
-            return existing_role 
+            return existing_role
 
 
         verified_role =await guild .create_role (
@@ -101,28 +120,30 @@ async def create_verified_role (guild :discord .Guild )->discord .Role :
         embed_links =True ,
         connect =True ,
         speak =True ,
-        use_voice_activation =True 
+        use_voice_activation =True
         )
         )
 
 
         bot_roles =[role for role in guild .roles if role .managed and role .members and guild .me in role .members ]
-        position =1 
+        position =1
         if bot_roles :
-            position =min (role .position for role in bot_roles )-1 
+            position =min (role .position for role in bot_roles )-1
 
         await verified_role .edit (position =max (1 ,position ))
 
-        return verified_role 
+        return verified_role
     except Exception as e :
         logger .error (f"Error creating verified role: {e}")
-        raise 
+        raise
 
 async def auto_fix_permissions (guild :discord .Guild ,verification_channel :discord .TextChannel ,verified_role :discord .Role ):
     """Automatically fix channel permissions for verification system"""
+    if legacy_verification_block_reason ():
+        return 0
     try :
-        everyone_role =guild .default_role 
-        bot_member =guild .me 
+        everyone_role =guild .default_role
+        bot_member =guild .me
         failed_channels =[]
 
 
@@ -157,7 +178,7 @@ async def auto_fix_permissions (guild :discord .Guild ,verification_channel :dis
                 if channel .id !=verification_channel .id :
                     try :
 
-                        current_overwrites =channel .overwrites 
+                        current_overwrites =channel .overwrites
 
 
                         everyone_perms =current_overwrites .get (everyone_role )
@@ -186,24 +207,26 @@ async def auto_fix_permissions (guild :discord .Guild ,verification_channel :dis
 
     except Exception as e :
         logger .error (f"Error in auto-fix permissions: {e}")
-        return -1 
+        return -1
 
 class VerificationModal (discord .ui .Modal ,title ="Enter Verification Code"):
     def __init__ (self ,bot ,captcha_code :str ,guild_id :int ):
         super ().__init__ ()
-        self .bot =bot 
-        self .captcha_code =captcha_code 
-        self .guild_id =guild_id 
+        self .bot =bot
+        self .captcha_code =captcha_code
+        self .guild_id =guild_id
 
     captcha_input =discord .ui .TextInput (
     label ="Verification Code",
     placeholder ="Enter the 6-character code from the image",
     required =True ,
     max_length =6 ,
-    min_length =6 
+    min_length =6
     )
 
     async def on_submit (self ,interaction :discord .Interaction ):
+        if await _send_legacy_verification_blocked (interaction ,ephemeral =True ):
+            return
         try :
             if self .captcha_input .value .strip ()!=self .captcha_code :
                 embed =discord .Embed (
@@ -212,17 +235,17 @@ class VerificationModal (discord .ui .Modal ,title ="Enter Verification Code"):
                 color =DISCORD_COLORS ['error']
                 )
                 await interaction .response .send_message (embed =embed ,ephemeral =True )
-                return 
+                return
 
             guild =self .bot .get_guild (self .guild_id )
             if not guild :
                 await interaction .response .send_message ("Server not found.",ephemeral =True )
-                return 
+                return
 
             member =guild .get_member (interaction .user .id )
             if not member :
                 await interaction .response .send_message ("You are not in the server.",ephemeral =True )
-                return 
+                return
 
 
             async with aiosqlite .connect (DATABASE_PATH )as db :
@@ -235,12 +258,12 @@ class VerificationModal (discord .ui .Modal ,title ="Enter Verification Code"):
 
                     if not result :
                         await interaction .response .send_message ("Verification system is not configured.",ephemeral =True )
-                        return 
+                        return
 
                     verified_role =guild .get_role (result [0 ])
                     if not verified_role :
                         await interaction .response .send_message ("Verified role not found.",ephemeral =True )
-                        return 
+                        return
 
 
                     if verified_role in member .roles :
@@ -250,7 +273,7 @@ class VerificationModal (discord .ui .Modal ,title ="Enter Verification Code"):
                         color =DISCORD_COLORS ['success']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
 
             await member .add_roles (verified_role ,reason ="CAPTCHA verification completed")
@@ -264,7 +287,7 @@ class VerificationModal (discord .ui .Modal ,title ="Enter Verification Code"):
             description =f"Welcome to **{guild.name}**!\n\n"
             f"You have been successfully verified and can now access all channels.",
             color =DISCORD_COLORS ['success'],
-            timestamp =current_time 
+            timestamp =current_time
             )
             embed .set_footer (text =f"Verified at {current_time.strftime('%I:%M %p IST')}")
 
@@ -277,7 +300,7 @@ class VerificationModal (discord .ui .Modal ,title ="Enter Verification Code"):
             await interaction .response .send_message ("Bot lacks permission to assign roles.",ephemeral =True )
         except Exception as e :
             logger .error (f"Error in verification modal: {e}")
-            pass 
+            pass
 
     async def log_verification (self ,guild_id :int ,user_id :int ,method :str ):
         try :
@@ -309,17 +332,17 @@ class VerificationModal (discord .ui .Modal ,title ="Enter Verification Code"):
                             embed =discord .Embed (
                             title ="User Verification Log",
                             color =DISCORD_COLORS ['success']if success else DISCORD_COLORS ['error'],
-                            timestamp =current_time 
+                            timestamp =current_time
                             )
                             embed .add_field (
                             name ="User Information",
                             value =f"**User:** {user.mention}\n**ID:** {user.id}\n**Username:** {user.name}",
-                            inline =False 
+                            inline =False
                             )
                             embed .add_field (
                             name ="Verification Details",
                             value =f"**Method:** {method}\n**Status:** {'Success' if success else 'Failed'}\n**Time:** {current_time.strftime('%I:%M %p IST')}",
-                            inline =False 
+                            inline =False
                             )
                             embed .set_thumbnail (url =user .avatar .url if user .avatar else user .default_avatar .url )
                             await log_channel .send (embed =embed )
@@ -329,10 +352,12 @@ class VerificationModal (discord .ui .Modal ,title ="Enter Verification Code"):
 class VerificationView (discord .ui .View ):
     def __init__ (self ,bot ):
         super ().__init__ (timeout =None )
-        self .bot =bot 
+        self .bot =bot
 
     @discord .ui .button (label ="Quick Verify",style =discord .ButtonStyle .green ,custom_id ="verify_button_quick")
     async def verify_button (self ,interaction :discord .Interaction ,button :discord .ui .Button ):
+        if await _send_legacy_verification_blocked (interaction ,ephemeral =True ):
+            return
         try :
 
             async with aiosqlite .connect (DATABASE_PATH )as db :
@@ -350,7 +375,7 @@ class VerificationView (discord .ui .View ):
                         color =DISCORD_COLORS ['error']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
                     verified_role =interaction .guild .get_role (result [0 ])
                     verification_method =result [1 ]
@@ -361,7 +386,7 @@ class VerificationView (discord .ui .View ):
                         color =DISCORD_COLORS ['error']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
 
                     if verified_role in interaction .user .roles :
@@ -371,7 +396,7 @@ class VerificationView (discord .ui .View ):
                         color =DISCORD_COLORS ['success']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
 
             if verification_method not in ["button","both"]:
@@ -381,7 +406,7 @@ class VerificationView (discord .ui .View ):
                 color =DISCORD_COLORS ['warning']
                 )
                 await interaction .response .send_message (embed =embed ,ephemeral =True )
-                return 
+                return
 
 
             await interaction .user .add_roles (verified_role ,reason ="Quick button verification")
@@ -398,7 +423,7 @@ class VerificationView (discord .ui .View ):
             f"Welcome to {interaction.guild.name}!\n"
             f"You now have access to all channels.",
             color =DISCORD_COLORS ['success'],
-            timestamp =current_time 
+            timestamp =current_time
             )
             embed .set_footer (text =f"Verified at {current_time.strftime('%I:%M %p IST')}")
 
@@ -421,6 +446,8 @@ class VerificationView (discord .ui .View ):
 
     @discord .ui .button (label ="CAPTCHA Verify",style =discord .ButtonStyle .primary ,custom_id ="verify_captcha_secure")
     async def verify_captcha (self ,interaction :discord .Interaction ,button :discord .ui .Button ):
+        if await _send_legacy_verification_blocked (interaction ,ephemeral =True ):
+            return
         try :
 
             async with aiosqlite .connect (DATABASE_PATH )as db :
@@ -438,7 +465,7 @@ class VerificationView (discord .ui .View ):
                         color =DISCORD_COLORS ['error']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
                     verified_role =interaction .guild .get_role (result [0 ])
                     if not verified_role :
@@ -447,7 +474,7 @@ class VerificationView (discord .ui .View ):
                         color =DISCORD_COLORS ['error']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
 
                     if verified_role in interaction .user .roles :
@@ -457,7 +484,7 @@ class VerificationView (discord .ui .View ):
                         color =DISCORD_COLORS ['success']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
 
             captcha_code =self .generate_captcha_code ()
@@ -525,7 +552,7 @@ class VerificationView (discord .ui .View ):
     def create_captcha_image (self ,code :str )->io .BytesIO :
         """Create a CAPTCHA image with the given code"""
 
-        width ,height =300 ,120 
+        width ,height =300 ,120
         image =Image .new ('RGB',(width ,height ),color ='white')
         draw =ImageDraw .Draw (image )
 
@@ -556,7 +583,7 @@ class VerificationView (discord .ui .View ):
             try :
                 font =ImageFont .load_default ()
             except :
-                font =None 
+                font =None
 
 
         if font :
@@ -564,11 +591,11 @@ class VerificationView (discord .ui .View ):
             text_width =bbox [2 ]-bbox [0 ]
             text_height =bbox [3 ]-bbox [1 ]
         else :
-            text_width =len (code )*20 
-            text_height =20 
+            text_width =len (code )*20
+            text_height =20
 
-        start_x =(width -text_width )//2 
-        start_y =(height -text_height )//2 
+        start_x =(width -text_width )//2
+        start_y =(height -text_height )//2
 
 
         for i ,char in enumerate (code ):
@@ -591,17 +618,19 @@ class VerificationView (discord .ui .View ):
         image .save (img_buffer ,format ='PNG',quality =95 )
         img_buffer .seek (0 )
 
-        return img_buffer 
+        return img_buffer
 
 
 
 class CaptchaOnlyVerificationView (discord .ui .View ):
     def __init__ (self ,bot ):
         super ().__init__ (timeout =None )
-        self .bot =bot 
+        self .bot =bot
 
     @discord .ui .button (label ="Verify with CAPTCHA",style =discord .ButtonStyle .primary ,custom_id ="verify_captcha_only")
     async def verify_captcha (self ,interaction :discord .Interaction ,button :discord .ui .Button ):
+        if await _send_legacy_verification_blocked (interaction ,ephemeral =True ):
+            return
         try :
 
             async with aiosqlite .connect (DATABASE_PATH )as db :
@@ -619,7 +648,7 @@ class CaptchaOnlyVerificationView (discord .ui .View ):
                         color =DISCORD_COLORS ['error']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
                     verified_role =interaction .guild .get_role (result [0 ])
                     if not verified_role :
@@ -628,7 +657,7 @@ class CaptchaOnlyVerificationView (discord .ui .View ):
                         color =DISCORD_COLORS ['error']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
 
                     if verified_role in interaction .user .roles :
@@ -638,7 +667,7 @@ class CaptchaOnlyVerificationView (discord .ui .View ):
                         color =DISCORD_COLORS ['success']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
 
             captcha_code =self .generate_captcha_code ()
@@ -706,7 +735,7 @@ class CaptchaOnlyVerificationView (discord .ui .View ):
     def create_captcha_image (self ,code :str )->io .BytesIO :
         """Create a CAPTCHA image with the given code"""
 
-        width ,height =300 ,120 
+        width ,height =300 ,120
         image =Image .new ('RGB',(width ,height ),color ='white')
         draw =ImageDraw .Draw (image )
 
@@ -737,7 +766,7 @@ class CaptchaOnlyVerificationView (discord .ui .View ):
             try :
                 font =ImageFont .load_default ()
             except :
-                font =None 
+                font =None
 
 
         if font :
@@ -745,11 +774,11 @@ class CaptchaOnlyVerificationView (discord .ui .View ):
             text_width =bbox [2 ]-bbox [0 ]
             text_height =bbox [3 ]-bbox [1 ]
         else :
-            text_width =len (code )*20 
-            text_height =20 
+            text_width =len (code )*20
+            text_height =20
 
-        start_x =(width -text_width )//2 
-        start_y =(height -text_height )//2 
+        start_x =(width -text_width )//2
+        start_y =(height -text_height )//2
 
 
         for i ,char in enumerate (code ):
@@ -772,12 +801,12 @@ class CaptchaOnlyVerificationView (discord .ui .View ):
         image .save (img_buffer ,format ='PNG',quality =95 )
         img_buffer .seek (0 )
 
-        return img_buffer 
+        return img_buffer
 
 class CaptchaModalView (discord .ui .View ):
     def __init__ (self ,modal :VerificationModal ):
         super ().__init__ (timeout =600 )
-        self .modal =modal 
+        self .modal =modal
 
     @discord .ui .button (label ="Enter Code",style =discord .ButtonStyle .secondary ,custom_id ="enter_captcha_code")
     async def enter_captcha (self ,interaction :discord .Interaction ,button :discord .ui .Button ):
@@ -786,10 +815,10 @@ class CaptchaModalView (discord .ui .View ):
 class VerificationSetupView (discord .ui .View ):
     def __init__ (self ,bot ,ctx ):
         super ().__init__ (timeout =300 )
-        self .bot =bot 
-        self .ctx =ctx 
-        self .verification_channel =None 
-        self .log_channel =None 
+        self .bot =bot
+        self .ctx =ctx
+        self .verification_channel =None
+        self .log_channel =None
         self .verification_method ="both"
 
     @discord .ui .select (
@@ -838,6 +867,8 @@ class VerificationSetupView (discord .ui .View ):
 
     @discord .ui .button (label ="Setup Verification System",style =discord .ButtonStyle .green )
     async def setup_verification (self ,interaction :discord .Interaction ,button :discord .ui .Button ):
+        if await _send_legacy_verification_blocked (interaction ,ephemeral =True ):
+            return
         if not self .verification_channel :
             embed =discord .Embed (
             title ="Missing Configuration",
@@ -845,7 +876,7 @@ class VerificationSetupView (discord .ui .View ):
             color =DISCORD_COLORS ['error']
             )
             await interaction .response .send_message (embed =embed ,ephemeral =True )
-            return 
+            return
 
         try :
             await interaction .response .defer (ephemeral =True )
@@ -860,8 +891,8 @@ class VerificationSetupView (discord .ui .View ):
             async with aiosqlite .connect (DATABASE_PATH )as db :
                 async with db .cursor ()as cur :
                     await cur .execute (
-                    """INSERT OR REPLACE INTO verification_config 
-                           (guild_id, verification_channel_id, verified_role_id, log_channel_id, verification_method, enabled) 
+                    """INSERT OR REPLACE INTO verification_config
+                           (guild_id, verification_channel_id, verified_role_id, log_channel_id, verification_method, enabled)
                            VALUES (?, ?, ?, ?, ?, ?)""",
                     (
                     interaction .guild .id ,
@@ -869,7 +900,7 @@ class VerificationSetupView (discord .ui .View ):
                     verified_role .id ,
                     self .log_channel .id if self .log_channel else None ,
                     self .verification_method ,
-                    True 
+                    True
                     )
                     )
                     await db .commit ()
@@ -883,9 +914,9 @@ class VerificationSetupView (discord .ui .View ):
                 if hasattr (interaction ,'message')and interaction .message :
                     await interaction .message .delete ()
             except discord .NotFound :
-                pass 
+                pass
             except discord .Forbidden :
-                pass 
+                pass
             except Exception as e :
                 logger .error (f"Error deleting setup embed: {e}")
 
@@ -893,7 +924,7 @@ class VerificationSetupView (discord .ui .View ):
             embed =discord .Embed (
             title ="Verification System Setup Complete",
             color =DISCORD_COLORS ['success'],
-            timestamp =current_time 
+            timestamp =current_time
             )
             embed .add_field (
             name ="Configuration Summary",
@@ -901,7 +932,7 @@ class VerificationSetupView (discord .ui .View ):
             f"**Verified Role:** {verified_role.mention}\n"
             f"**Log Channel:** {self.log_channel.mention if self.log_channel else 'None'}\n"
             f"**Method:** {self.verification_method.title()}",
-            inline =False 
+            inline =False
             )
 
             security_features ="All channels made private to unverified users\n" "Verification channel locked for unverified users\n" "Auto-message deletion in verification channel\n" "DM-based CAPTCHA system\n" "Comprehensive logging enabled"
@@ -912,12 +943,12 @@ class VerificationSetupView (discord .ui .View ):
             embed .add_field (
             name ="Security Features",
             value =security_features ,
-            inline =False 
+            inline =False
             )
             embed .add_field (
             name ="System Status",
             value =f"{TICK} **Verification system is now ENABLED and ready to use!**",
-            inline =False 
+            inline =False
             )
             embed .set_footer (text =f"Setup completed and enabled at {current_time.strftime('%I:%M %p IST')}")
 
@@ -930,9 +961,9 @@ class VerificationSetupView (discord .ui .View ):
                 if hasattr (interaction ,'message')and interaction .message :
                     await interaction .message .delete ()
             except discord .NotFound :
-                pass 
+                pass
             except discord .Forbidden :
-                pass 
+                pass
             except Exception as e :
                 logger .error (f"Error deleting setup embed: {e}")
 
@@ -948,7 +979,7 @@ class VerificationSetupView (discord .ui .View ):
     async def send_verification_panel (self ,verified_role :discord .Role ):
         """Send the verification panel to the verification channel"""
         try :
-            channel =self .verification_channel 
+            channel =self .verification_channel
             current_time =utc_to_ist (discord .utils .utcnow ())
 
             embed =discord .Embed (
@@ -957,21 +988,21 @@ class VerificationSetupView (discord .ui .View ):
             f"To access all channels and features, you need to verify yourself first.\n\n"
             f"**Choose your verification method:**",
             color =DISCORD_COLORS ['primary'],
-            timestamp =current_time 
+            timestamp =current_time
             )
 
             if self .verification_method in ["button","both"]:
                 embed .add_field (
                 name ="Quick Verification",
                 value ="Instant access with one click! Perfect for trusted users.",
-                inline =True 
+                inline =True
                 )
 
             if self .verification_method in ["captcha","both"]:
                 embed .add_field (
                 name ="CAPTCHA Verification",
                 value ="Secure verification via DM. Proves you're human!",
-                inline =True 
+                inline =True
                 )
 
             embed .add_field (
@@ -980,7 +1011,7 @@ class VerificationSetupView (discord .ui .View ):
             f"• Ability to chat and participate\n"
             f"• Access to all server features\n"
             f"• **{verified_role.name}** role assigned",
-            inline =False 
+            inline =False
             )
 
             embed .set_footer (text =f"Verification panel • {current_time.strftime('%I:%M %p IST')}")
@@ -1001,10 +1032,12 @@ class VerificationSetupView (discord .ui .View ):
 class ButtonOnlyVerificationView (discord .ui .View ):
     def __init__ (self ,bot ):
         super ().__init__ (timeout =None )
-        self .bot =bot 
+        self .bot =bot
 
     @discord .ui .button (label ="Verify Now",style =discord .ButtonStyle .green ,custom_id ="verify_button_only")
     async def verify_button (self ,interaction :discord .Interaction ,button :discord .ui .Button ):
+        if await _send_legacy_verification_blocked (interaction ,ephemeral =True ):
+            return
         try :
 
             async with aiosqlite .connect (DATABASE_PATH )as db :
@@ -1022,7 +1055,7 @@ class ButtonOnlyVerificationView (discord .ui .View ):
                         color =DISCORD_COLORS ['error']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
                     verified_role =interaction .guild .get_role (result [0 ])
                     verification_method =result [1 ]
@@ -1033,7 +1066,7 @@ class ButtonOnlyVerificationView (discord .ui .View ):
                         color =DISCORD_COLORS ['error']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
 
                     if verified_role in interaction .user .roles :
@@ -1043,7 +1076,7 @@ class ButtonOnlyVerificationView (discord .ui .View ):
                         color =DISCORD_COLORS ['success']
                         )
                         await interaction .response .send_message (embed =embed ,ephemeral =True )
-                        return 
+                        return
 
 
             await interaction .user .add_roles (verified_role ,reason ="Quick button verification")
@@ -1060,7 +1093,7 @@ class ButtonOnlyVerificationView (discord .ui .View ):
             f"Welcome to {interaction.guild.name}!\n"
             f"You now have access to all channels.",
             color =DISCORD_COLORS ['success'],
-            timestamp =current_time 
+            timestamp =current_time
             )
             embed .set_footer (text =f"Verified at {current_time.strftime('%I:%M %p IST')}")
 
@@ -1083,7 +1116,7 @@ class ButtonOnlyVerificationView (discord .ui .View ):
 
 class Verification (commands .Cog ):
     def __init__ (self ,bot ):
-        self .bot =bot 
+        self .bot =bot
         self .bot .loop .create_task (self .create_tables ())
 
         self .bot .add_view (VerificationView (self .bot ))
@@ -1118,7 +1151,7 @@ class Verification (commands .Cog ):
                 """)
 
                 await db .commit ()
-                pass 
+                pass
         except Exception as e :
             logger .error (f"Error creating verification tables: {e}")
 
@@ -1126,7 +1159,11 @@ class Verification (commands .Cog ):
     async def on_message (self ,message ):
         """Auto-delete messages in verification channel from non-bot users"""
         if message .author .bot :
-            return 
+            return
+        if legacy_verification_block_reason ():
+            return
+        if not message .guild :
+            return
 
         try :
             async with aiosqlite .connect (DATABASE_PATH )as db :
@@ -1151,9 +1188,9 @@ class Verification (commands .Cog ):
                                 try :
                                     await message .author .send (embed =embed )
                                 except discord .Forbidden :
-                                    pass 
+                                    pass
                             except discord .Forbidden :
-                                pass 
+                                pass
         except Exception as e :
             logger .error (f"Error in verification message handler: {e}")
 
@@ -1167,6 +1204,8 @@ class Verification (commands .Cog ):
     @ignore_check ()
     @commands .has_permissions (administrator =True )
     async def verification_setup (self ,ctx ):
+        if await _send_legacy_verification_blocked (ctx ):
+            return
         try :
 
             missing_perms =await check_bot_permissions (ctx .guild )
@@ -1179,7 +1218,7 @@ class Verification (commands .Cog ):
                 color =DISCORD_COLORS ['error']
                 )
                 await ctx .send (embed =embed )
-                return 
+                return
 
             current_time =utc_to_ist (discord .utils .utcnow ())
             embed =discord .Embed (
@@ -1193,7 +1232,7 @@ class Verification (commands .Cog ):
             "• **Comprehensive logging** and analytics\n\n"
             "**Configure your system using the dropdowns below:**",
             color =DISCORD_COLORS ['primary'],
-            timestamp =current_time 
+            timestamp =current_time
             )
             embed .set_footer (text =f"Setup wizard started at {current_time.strftime('%I:%M %p IST')}")
 
@@ -1216,8 +1255,8 @@ class Verification (commands .Cog ):
             async with aiosqlite .connect (DATABASE_PATH )as db :
                 async with db .cursor ()as cur :
                     await cur .execute (
-                    """SELECT verification_channel_id, verified_role_id, log_channel_id, 
-                                  verification_method, enabled FROM verification_config 
+                    """SELECT verification_channel_id, verified_role_id, log_channel_id,
+                                  verification_method, enabled FROM verification_config
                            WHERE guild_id = ?""",
                     (ctx .guild .id ,)
                     )
@@ -1230,11 +1269,11 @@ class Verification (commands .Cog ):
                         color =DISCORD_COLORS ['error']
                         )
                         await ctx .send (embed =embed )
-                        return 
+                        return
 
                     verification_channel =ctx .guild .get_channel (result [0 ])
                     verified_role =ctx .guild .get_role (result [1 ])
-                    log_channel =ctx .guild .get_channel (result [2 ])if result [2 ]else None 
+                    log_channel =ctx .guild .get_channel (result [2 ])if result [2 ]else None
                     verification_method =result [3 ]
                     enabled =result [4 ]
 
@@ -1246,7 +1285,7 @@ class Verification (commands .Cog ):
                     total_verifications =(await cur .fetchone ())[0 ]
 
                     await cur .execute (
-                    """SELECT verification_method, COUNT(*) FROM verification_logs 
+                    """SELECT verification_method, COUNT(*) FROM verification_logs
                            WHERE guild_id = ? GROUP BY verification_method""",
                     (ctx .guild .id ,)
                     )
@@ -1279,7 +1318,7 @@ class Verification (commands .Cog ):
             embed =discord .Embed (
             title ="Verification System Status",
             color =DISCORD_COLORS ['success']if enabled and not issues else DISCORD_COLORS ['warning']if enabled else DISCORD_COLORS ['error'],
-            timestamp =current_time 
+            timestamp =current_time
             )
 
 
@@ -1290,7 +1329,7 @@ class Verification (commands .Cog ):
             value =f"**Status:** {status_text}\n"
             f"**Method:** {verification_method.title()}\n"
             f"**Enabled:** {'Yes' if enabled else 'No'}",
-            inline =True 
+            inline =True
             )
 
             embed .add_field (
@@ -1298,7 +1337,7 @@ class Verification (commands .Cog ):
             value =f"**Channel:** {verification_channel.mention if verification_channel else 'Not found'}\n"
             f"**Role:** {verified_role.mention if verified_role else 'Not found'}\n"
             f"**Log Channel:** {log_channel.mention if log_channel else 'None'}",
-            inline =True 
+            inline =True
             )
 
             embed .add_field (
@@ -1306,7 +1345,7 @@ class Verification (commands .Cog ):
             value =f"**Total Verifications:** {total_verifications}\n"
             f"**Last 24 Hours:** {recent_verifications}\n"
             f"**Verified Members:** {len([m for m in ctx.guild.members if verified_role in m.roles]) if verified_role else 0}",
-            inline =True 
+            inline =True
             )
 
             if method_stats :
@@ -1314,14 +1353,14 @@ class Verification (commands .Cog ):
                 embed .add_field (
                 name ="Method Breakdown",
                 value =stats_text ,
-                inline =True 
+                inline =True
                 )
 
             if issues :
                 embed .add_field (
                 name ="Issues Detected",
                 value ="\n".join ([f"• {issue}"for issue in issues ]),
-                inline =False 
+                inline =False
                 )
 
             embed .set_footer (text =f"Status checked at {current_time.strftime('%I:%M %p IST')}")
@@ -1339,6 +1378,8 @@ class Verification (commands .Cog ):
     @ignore_check ()
     @commands .has_permissions (administrator =True )
     async def verification_fix (self ,ctx ):
+        if await _send_legacy_verification_blocked (ctx ):
+            return
         try :
             async with aiosqlite .connect (DATABASE_PATH )as db :
                 async with db .cursor ()as cur :
@@ -1355,7 +1396,7 @@ class Verification (commands .Cog ):
                         color =DISCORD_COLORS ['error']
                         )
                         await ctx .send (embed =embed )
-                        return 
+                        return
 
                     verification_channel =ctx .guild .get_channel (result [0 ])
                     verified_role =ctx .guild .get_role (result [1 ])
@@ -1366,7 +1407,7 @@ class Verification (commands .Cog ):
                         color =DISCORD_COLORS ['error']
                         )
                         await ctx .send (embed =embed )
-                        return 
+                        return
 
 
             failed_count =await auto_fix_permissions (ctx .guild ,verification_channel ,verified_role )
@@ -1403,6 +1444,8 @@ class Verification (commands .Cog ):
     @ignore_check ()
     @commands .has_permissions (administrator =True )
     async def verification_disable (self ,ctx ):
+        if await _send_legacy_verification_blocked (ctx ):
+            return
         try :
             async with aiosqlite .connect (DATABASE_PATH )as db :
                 async with db .cursor ()as cur :
@@ -1414,7 +1457,7 @@ class Verification (commands .Cog ):
 
                     if not result :
                         await ctx .send ("Verification system is not set up.")
-                        return 
+                        return
 
 
                     await cur .execute (
@@ -1424,11 +1467,11 @@ class Verification (commands .Cog ):
                     await db .commit ()
 
 
-            verification_channel =ctx .guild .get_channel (result [0 ])if result [0 ]else None 
-            verified_role =ctx .guild .get_role (result [1 ])if result [1 ]else None 
-            everyone_role =ctx .guild .default_role 
-            count =0 
-            failed_count =0 
+            verification_channel =ctx .guild .get_channel (result [0 ])if result [0 ]else None
+            verified_role =ctx .guild .get_role (result [1 ])if result [1 ]else None
+            everyone_role =ctx .guild .default_role
+            count =0
+            failed_count =0
 
 
             for channel in ctx .guild .channels :
@@ -1445,12 +1488,12 @@ class Verification (commands .Cog ):
 
 
                         await channel .edit (overwrites =overwrites ,reason ="Verification system disabled - restoring public access")
-                        count +=1 
+                        count +=1
                     except discord .Forbidden :
-                        failed_count +=1 
+                        failed_count +=1
                     except Exception as e :
                         logger .error (f"Error resetting permissions for channel {channel.name}: {e}")
-                        failed_count +=1 
+                        failed_count +=1
 
             current_time =utc_to_ist (discord .utils .utcnow ())
             embed =discord .Embed (
@@ -1459,7 +1502,7 @@ class Verification (commands .Cog ):
             f"**Channels Reset:** {count}\n"
             f"**Failed to Reset:** {failed_count}"+(f" (due to permission restrictions)"if failed_count >0 else ""),
             color =DISCORD_COLORS ['success']if failed_count ==0 else DISCORD_COLORS ['warning'],
-            timestamp =current_time 
+            timestamp =current_time
             )
             embed .set_footer (text =f"Disabled and reset at {current_time.strftime('%I:%M %p IST')}")
             await ctx .send (embed =embed )
@@ -1476,6 +1519,8 @@ class Verification (commands .Cog ):
     @ignore_check ()
     @commands .has_permissions (administrator =True )
     async def verification_enable (self ,ctx ):
+        if await _send_legacy_verification_blocked (ctx ):
+            return
         try :
             async with aiosqlite .connect (DATABASE_PATH )as db :
                 async with db .cursor ()as cur :
@@ -1487,17 +1532,17 @@ class Verification (commands .Cog ):
 
                     if not result :
                         await ctx .send ("Verification system is not set up. Use `/verification setup` first.")
-                        return 
+                        return
 
 
                     verified_role =ctx .guild .get_role (result [0 ])
                     if not verified_role :
                         await ctx .send ("Verified role no longer exists. Please run setup again.")
-                        return 
+                        return
 
                     if not validate_role_hierarchy (ctx .guild ,verified_role ):
                         await ctx .send ("Bot cannot manage the verified role due to role hierarchy. Please fix role positions.")
-                        return 
+                        return
 
 
                     missing_perms =await check_bot_permissions (ctx .guild )
@@ -1506,7 +1551,7 @@ class Verification (commands .Cog ):
                         f"Bot is missing required permissions: "
                         f"{', '.join(missing_perms['guild'])}. Please grant these permissions first."
                         )
-                        return 
+                        return
 
                     await cur .execute (
                     "UPDATE verification_config SET enabled = 1 WHERE guild_id = ?",
@@ -1519,14 +1564,14 @@ class Verification (commands .Cog ):
             title ="Verification System Enabled",
             description ="The verification system has been enabled.",
             color =DISCORD_COLORS ['success'],
-            timestamp =current_time 
+            timestamp =current_time
             )
             embed .set_footer (text =f"Enabled at {current_time.strftime('%I:%M %p IST')}")
             await ctx .send (embed =embed )
 
         except Exception as e :
             logger .error (f"Error enabling verification: {e}")
-            pass 
+            pass
 
     @verification .command (name ="logs",description ="View recent verification logs.")
     @blacklist_check ()
@@ -1535,13 +1580,13 @@ class Verification (commands .Cog ):
     async def verification_logs (self ,ctx ,limit :int =10 ):
         try :
             if limit >50 :
-                limit =50 
+                limit =50
 
             async with aiosqlite .connect (DATABASE_PATH )as db :
                 async with db .cursor ()as cur :
                     await cur .execute (
-                    """SELECT user_id, verification_method, verified_at 
-                           FROM verification_logs WHERE guild_id = ? 
+                    """SELECT user_id, verification_method, verified_at
+                           FROM verification_logs WHERE guild_id = ?
                            ORDER BY verified_at DESC LIMIT ?""",
                     (ctx .guild .id ,limit )
                     )
@@ -1549,13 +1594,13 @@ class Verification (commands .Cog ):
 
                     if not logs :
                         await ctx .send ("No verification logs found.")
-                        return 
+                        return
 
             current_time =utc_to_ist (discord .utils .utcnow ())
             embed =discord .Embed (
             title =f"Recent Verification Logs ({len(logs)})",
             color =DISCORD_COLORS ['primary'],
-            timestamp =current_time 
+            timestamp =current_time
             )
 
             log_text =""
@@ -1564,19 +1609,21 @@ class Verification (commands .Cog ):
                 user_name =user .display_name if user else f"Unknown User ({user_id})"
                 log_text +=f"**{user_name}** - {method.upper()} - {verified_at}\n"
 
-            embed .description =log_text 
+            embed .description =log_text
             embed .set_footer (text =f"Logs retrieved at {current_time.strftime('%I:%M %p IST')}")
             await ctx .send (embed =embed )
 
         except Exception as e :
             logger .error (f"Error retrieving verification logs: {e}")
-            pass 
+            pass
 
     @verification .command (name ="reset",description ="Reset all channel permissions (remove verification restrictions).")
     @blacklist_check ()
     @ignore_check ()
     @commands .has_permissions (administrator =True )
     async def verification_reset (self ,ctx ):
+        if await _send_legacy_verification_blocked (ctx ):
+            return
         try :
             embed =discord .Embed (
             title ="Reset Channel Permissions",
@@ -1591,14 +1638,16 @@ class Verification (commands .Cog ):
             async def confirm_reset (interaction ):
                 if interaction .user !=ctx .author :
                     await interaction .response .send_message ("This action is not for you!",ephemeral =True )
-                    return 
+                    return
+                if await _send_legacy_verification_blocked (interaction ,ephemeral =True ):
+                    return
 
                 await interaction .response .defer ()
 
 
-                everyone_role =ctx .guild .default_role 
-                count =0 
-                failed_count =0 
+                everyone_role =ctx .guild .default_role
+                count =0
+                failed_count =0
 
                 for channel in ctx .guild .channels :
                     if isinstance (channel ,(discord .TextChannel ,discord .VoiceChannel ,discord .CategoryChannel )):
@@ -1608,9 +1657,9 @@ class Verification (commands .Cog ):
                             overwrite =None ,
                             reason ="Verification system reset"
                             )
-                            count +=1 
+                            count +=1
                         except discord .Forbidden :
-                            failed_count +=1 
+                            failed_count +=1
 
                 current_time =utc_to_ist (discord .utils .utcnow ())
                 success_embed =discord .Embed (
@@ -1620,7 +1669,7 @@ class Verification (commands .Cog ):
                 f"The verification system configuration has been preserved.\n"
                 f"You can re-enable restrictions using `/verification setup`.",
                 color =DISCORD_COLORS ['success'],
-                timestamp =current_time 
+                timestamp =current_time
                 )
                 success_embed .set_footer (text =f"Reset completed at {current_time.strftime('%I:%M %p IST')}")
                 await interaction .edit_original_response (embed =success_embed ,view =None )
@@ -1628,14 +1677,14 @@ class Verification (commands .Cog ):
             async def cancel_reset (interaction ):
                 if interaction .user !=ctx .author :
                     await interaction .response .send_message ("This action is not for you!",ephemeral =True )
-                    return 
+                    return
                 await interaction .response .edit_message (content ="Reset cancelled.",embed =None ,view =None )
 
             confirm_button =discord .ui .Button (label ="Confirm Reset",style =discord .ButtonStyle .red )
             cancel_button =discord .ui .Button (label ="Cancel",style =discord .ButtonStyle .grey )
 
-            confirm_button .callback =confirm_reset 
-            cancel_button .callback =cancel_reset 
+            confirm_button .callback =confirm_reset
+            cancel_button .callback =cancel_reset
 
             view .add_item (confirm_button )
             view .add_item (cancel_button )
@@ -1644,13 +1693,15 @@ class Verification (commands .Cog ):
 
         except Exception as e :
             logger .error (f"Error in verification reset: {e}")
-            pass 
+            pass
 
     @verification .command (name ="verify",description ="Manually verify a user (Admin only).")
     @blacklist_check ()
     @ignore_check ()
     @commands .has_permissions (administrator =True )
     async def verification_verify (self ,ctx ,user :discord .Member ):
+        if await _send_legacy_verification_blocked (ctx ):
+            return
         try :
             async with aiosqlite .connect (DATABASE_PATH )as db :
                 async with db .cursor ()as cur :
@@ -1662,25 +1713,25 @@ class Verification (commands .Cog ):
 
                     if not result :
                         await ctx .send ("Verification system is not set up or disabled.")
-                        return 
+                        return
 
                     verified_role =ctx .guild .get_role (result [0 ])
                     if not verified_role :
                         await ctx .send ("Verified role not found.")
-                        return 
+                        return
 
                     if not validate_role_hierarchy (ctx .guild ,verified_role ):
                         await ctx .send ("Bot cannot manage the verified role due to role hierarchy.")
-                        return 
+                        return
 
                     if verified_role in user .roles :
                         await ctx .send (f"{user.mention} is already verified.")
-                        return 
+                        return
 
 
             if not ctx .guild .me .guild_permissions .manage_roles :
                 await ctx .send ("Bot lacks 'Manage Roles' permission.")
-                return 
+                return
 
 
             await user .add_roles (verified_role ,reason =f"Manual verification by {ctx.author}")
@@ -1700,7 +1751,7 @@ class Verification (commands .Cog ):
             title ="User Manually Verified",
             description =f"{user.mention} has been manually verified by {ctx.author.mention}.",
             color =DISCORD_COLORS ['success'],
-            timestamp =current_time 
+            timestamp =current_time
             )
             embed .set_footer (text =f"Verified at {current_time.strftime('%I:%M %p IST')}")
             await ctx .send (embed =embed )
@@ -1709,7 +1760,7 @@ class Verification (commands .Cog ):
             await ctx .send ("Bot lacks permission to assign roles.")
         except Exception as e :
             logger .error (f"Error manually verifying user: {e}")
-            pass 
+            pass
 
 async def setup (bot):
     await bot.add_cog(Verification (bot))
