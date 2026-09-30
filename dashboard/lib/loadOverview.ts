@@ -186,11 +186,10 @@ export async function loadOverview(opts: {
     const cats = ticketsCfg?.categories?.length ?? 0;
     const open = ticketsCfg?.open_ticket_count ?? 0;
     const configured = cats > 0 || Boolean(ticketsCfg?.panel_channel);
-    const st = moduleStatus(null, configured);
     modules.push({
       key: "tickets",
       name: "Tickets",
-      status: st.status,
+      status: configured ? "healthy" : "disabled",
       statusLabel: configured ? "Configured" : "Not configured",
       detail: configured ? `${cats} categor${cats === 1 ? "y" : "ies"} · ${open} open` : "—",
       href: `${base}/tickets`,

@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from api.auth.guilds import authorized_guild_ids
 from api.dependencies import get_bot, limiter
 from api.db_manager import db_manager
+from cls_platform.discord_types import snowflake_list_to_str, snowflake_str_to_int, snowflake_to_str
 from api.schemas import (
     GuildSummary, GuildDetails, PrefixConfig, AutomodConfig, 
     TicketConfig, LevelingConfig, LoggingConfig, TicketEmbed, 
@@ -135,12 +136,12 @@ async def get_guild_automod(guild_id: int):
     logging_channel = logging_row[0] if logging_row else None
 
     return AutomodConfig(
-        guild_id=guild_id,
+        guild_id=str(guild_id),
         enabled=enabled,
         punishments=punishments,
-        ignored_roles=ignored_roles,
-        ignored_channels=ignored_channels,
-        logging_channel=logging_channel
+        ignored_roles=snowflake_list_to_str(ignored_roles),
+        ignored_channels=snowflake_list_to_str(ignored_channels),
+        logging_channel=snowflake_to_str(logging_channel),
     )
 
 @router.patch("/{guild_id}/automod", summary="Update AutoMod config", description="Partially updates the AutoMod configuration components.")
@@ -167,7 +168,7 @@ async def patch_guild_automod(guild_id: int, data: AutomodUpdate):
         for role_id in data.ignored_roles:
             await db.execute(
                 "INSERT OR REPLACE INTO automod_ignored (guild_id, type, id) VALUES (?, 'role', ?)",
-                (guild_id, role_id)
+                (guild_id, snowflake_str_to_int(role_id)),
             )
 
     if data.ignored_channels is not None:
@@ -175,13 +176,13 @@ async def patch_guild_automod(guild_id: int, data: AutomodUpdate):
         for channel_id in data.ignored_channels:
             await db.execute(
                 "INSERT OR REPLACE INTO automod_ignored (guild_id, type, id) VALUES (?, 'channel', ?)",
-                (guild_id, channel_id)
+                (guild_id, snowflake_str_to_int(channel_id)),
             )
 
     if data.logging_channel is not None:
         await db.execute(
             "INSERT OR REPLACE INTO automod_logging (guild_id, log_channel) VALUES (?, ?)",
-            (guild_id, data.logging_channel)
+            (guild_id, snowflake_str_to_int(data.logging_channel)),
         )
 
     await db.commit()
@@ -219,13 +220,17 @@ async def get_guild_tickets(guild_id: int):
         else:
             category_roles = []
 
-        categories.append(TicketCategory(
-            name=row["name"],
-            emoji=row["emoji"],
-            staff_roles=category_roles,
-            button_style=row["button_style"],
-            discord_category_id=row["discord_category_id"]
-        ))
+        categories.append(
+            TicketCategory(
+                name=row["name"],
+                emoji=row["emoji"],
+                staff_roles=snowflake_list_to_str(category_roles),
+                button_style=row["button_style"],
+                discord_category_id=snowflake_to_str(row["discord_category_id"])
+                if row["discord_category_id"]
+                else None,
+            )
+        )
 
     # Get open ticket count
     cursor = await db.execute(
@@ -236,22 +241,22 @@ async def get_guild_tickets(guild_id: int):
     open_ticket_count = count_row[0] if count_row else 0
 
     return TicketConfig(
-        guild_id=guild_id,
-        panel_channel=config_row["panel_channel_id"] if config_row else None,
-        panel_message=config_row["panel_message_id"] if config_row else None,
-        logging_channel=config_row["logging_channel_id"] if config_row else None,
-        closed_category=config_row["closed_category_id"] if config_row else None,
+        guild_id=str(guild_id),
+        panel_channel=snowflake_to_str(config_row["panel_channel_id"]) if config_row else None,
+        panel_message=snowflake_to_str(config_row["panel_message_id"]) if config_row else None,
+        logging_channel=snowflake_to_str(config_row["logging_channel_id"]) if config_row else None,
+        closed_category=snowflake_to_str(config_row["closed_category_id"]) if config_row else None,
         panel_type=config_row["panel_type"] if config_row else "button",
         embed=TicketEmbed(
             title=config_row["embed_title"] if config_row else "Support Department",
             description=config_row["embed_description"] if config_row else "Open a ticket below to talk to our staff.",
             color=config_row["embed_color"] if config_row else None,
             image_url=config_row["embed_image_url"] if config_row else None,
-            thumbnail_url=config_row["embed_thumbnail_url"] if config_row else None
+            thumbnail_url=config_row["embed_thumbnail_url"] if config_row else None,
         ),
         categories=categories,
-        staff_roles=list(staff_roles),
-        open_ticket_count=open_ticket_count
+        staff_roles=snowflake_list_to_str(staff_roles),
+        open_ticket_count=open_ticket_count,
     )
 
 @router.patch("/{guild_id}/tickets", summary="Update Ticket config", description="Updates the ticket system configuration, including categories and embed details.")
@@ -267,13 +272,22 @@ async def patch_guild_tickets(guild_id: int, data: TicketUpdate):
         await db.execute("INSERT INTO guild_configs (guild_id) VALUES (?)", (guild_id,))
 
     if data.panel_channel is not None:
-        await db.execute("UPDATE guild_configs SET panel_channel_id = ? WHERE guild_id = ?", (data.panel_channel, guild_id))
-    
+        await db.execute(
+            "UPDATE guild_configs SET panel_channel_id = ? WHERE guild_id = ?",
+            (snowflake_str_to_int(data.panel_channel), guild_id),
+        )
+
     if data.logging_channel is not None:
-        await db.execute("UPDATE guild_configs SET logging_channel_id = ? WHERE guild_id = ?", (data.logging_channel, guild_id))
-        
+        await db.execute(
+            "UPDATE guild_configs SET logging_channel_id = ? WHERE guild_id = ?",
+            (snowflake_str_to_int(data.logging_channel), guild_id),
+        )
+
     if data.closed_category is not None:
-        await db.execute("UPDATE guild_configs SET closed_category_id = ? WHERE guild_id = ?", (data.closed_category, guild_id))
+        await db.execute(
+            "UPDATE guild_configs SET closed_category_id = ? WHERE guild_id = ?",
+            (snowflake_str_to_int(data.closed_category), guild_id),
+        )
 
     if data.panel_type is not None:
         await db.execute("UPDATE guild_configs SET panel_type = ? WHERE guild_id = ?", (data.panel_type, guild_id))
@@ -301,10 +315,13 @@ async def patch_guild_tickets(guild_id: int, data: TicketUpdate):
         # Clear existing categories
         await db.execute("DELETE FROM ticket_categories WHERE guild_id = ?", (guild_id,))
         for cat in data.categories:
-            roles_str = ",".join(map(str, cat.staff_roles))
+            roles_str = ",".join(str(r) for r in cat.staff_roles)
+            cat_discord_id = (
+                snowflake_str_to_int(cat.discord_category_id) if cat.discord_category_id else None
+            )
             await db.execute(
                 "INSERT INTO ticket_categories (guild_id, name, emoji, notified_roles, button_style, discord_category_id) VALUES (?, ?, ?, ?, ?, ?)",
-                (guild_id, cat.name, cat.emoji, roles_str, cat.button_style, cat.discord_category_id)
+                (guild_id, cat.name, cat.emoji, roles_str, cat.button_style, cat_discord_id),
             )
 
     await db.commit()
@@ -336,11 +353,11 @@ async def get_guild_leveling(guild_id: int):
     color_hex = f"#{embed_color:06x}"
 
     return LevelingConfig(
-        guild_id=guild_id,
+        guild_id=snowflake_to_str(guild_id),
         enabled=bool(row["enabled"]),
         xp_per_message=row["xp_per_message"],
         cooldown=row["cooldown_seconds"],
-        level_up_channel=row["channel_id"],
+        level_up_channel=snowflake_to_str(row["channel_id"]) if row["channel_id"] else None,
         embed_style=LevelingEmbedStyle(
             color=color_hex,
             thumbnail=bool(row["thumbnail_enabled"]),
@@ -375,7 +392,8 @@ async def patch_guild_leveling(guild_id: int, data: LevelingUpdate):
         await db.execute("UPDATE leveling_settings SET cooldown_seconds = ? WHERE guild_id = ?", (data.cooldown, guild_id))
         
     if data.level_up_channel is not None:
-        await db.execute("UPDATE leveling_settings SET channel_id = ? WHERE guild_id = ?", (data.level_up_channel, guild_id))
+        channel_id = snowflake_str_to_int(data.level_up_channel) if data.level_up_channel else None
+        await db.execute("UPDATE leveling_settings SET channel_id = ? WHERE guild_id = ?", (channel_id, guild_id))
         
     if data.embed_color is not None:
         try:
@@ -1027,23 +1045,26 @@ async def get_guild_logging(guild_id: int, bot: "zyrox" = Depends(get_bot)):
 
     if not config:
         return LoggingConfig(
-            guild_id=guild_id,
+            guild_id=str(guild_id),
             log_enabled={},
             log_channels={},
             ignore_channels=[],
             ignore_roles=[],
             ignore_users=[],
-            auto_delete_duration=None
+            auto_delete_duration=None,
         )
 
+    log_channels_raw = config.get("log_channels", {}) or {}
+    log_channels = {k: str(v) for k, v in log_channels_raw.items() if v is not None}
+
     return LoggingConfig(
-        guild_id=guild_id,
+        guild_id=str(guild_id),
         log_enabled=config.get("log_enabled", {}),
-        log_channels=config.get("log_channels", {}),
-        ignore_channels=config.get("ignore_channels", []),
-        ignore_roles=config.get("ignore_roles", []),
-        ignore_users=config.get("ignore_users", []),
-        auto_delete_duration=config.get("auto_delete_duration")
+        log_channels=log_channels,
+        ignore_channels=snowflake_list_to_str(config.get("ignore_channels", []) or []),
+        ignore_roles=snowflake_list_to_str(config.get("ignore_roles", []) or []),
+        ignore_users=snowflake_list_to_str(config.get("ignore_users", []) or []),
+        auto_delete_duration=config.get("auto_delete_duration"),
     )
 
 @router.patch("/{guild_id}/logging", summary="Update Logging config", description="Updates which Discord events are logged and where they are posted.")
@@ -1060,7 +1081,7 @@ async def patch_guild_logging(guild_id: int, data: LoggingUpdate, bot: "zyrox" =
     
     log_channels = current_config.get("log_channels", {})
     if data.log_channels is not None:
-        log_channels.update(data.log_channels)
+        log_channels.update({k: snowflake_str_to_int(v) for k, v in data.log_channels.items()})
         
     log_enabled = current_config.get("log_enabled", {})
     if data.log_enabled is not None:
@@ -1378,13 +1399,13 @@ async def patch_guild_rr(guild_id: int, data: RRUpdate):
                          (guild_id, 1 if data.dm_enabled else 0))
     
     if data.add_role is not None:
-        msg_id = int(data.add_role.message_id)
-        role_id = int(data.add_role.role_id)
+        msg_id = snowflake_str_to_int(str(data.add_role.message_id))
+        role_id = snowflake_str_to_int(str(data.add_role.role_id))
         await db.execute("INSERT INTO reaction_roles (guild_id, message_id, emoji, role_id) VALUES (?, ?, ?, ?)",
                          (guild_id, msg_id, data.add_role.emoji, role_id))
     
     if data.remove_role_message_id is not None and data.remove_role_emoji is not None:
-        msg_id = int(data.remove_role_message_id)
+        msg_id = snowflake_str_to_int(str(data.remove_role_message_id))
         await db.execute("DELETE FROM reaction_roles WHERE guild_id = ? AND message_id = ? AND emoji = ?",
                          (guild_id, msg_id, data.remove_role_emoji))
     

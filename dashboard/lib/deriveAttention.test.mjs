@@ -83,7 +83,7 @@ test("countLoggingEnabledWithoutChannel", () => {
   assert.equal(
     countLoggingEnabledWithoutChannel(
       { messages: true, joins: false, bans: true },
-      { messages: 123, bans: 0 },
+      { messages: "123", bans: "0" },
     ),
     1,
   );

@@ -94,21 +94,21 @@ export function deriveAttention(input: DeriveAttentionInput): AttentionItem[] {
 /** Count logging categories that are on but have no destination channel. */
 export function countLoggingEnabledWithoutChannel(
   logEnabled: Record<string, boolean> | undefined,
-  logChannels: Record<string, number> | undefined,
+  logChannels: Record<string, string> | undefined,
 ): number {
   if (!logEnabled) return 0;
   let n = 0;
   for (const [key, on] of Object.entries(logEnabled)) {
     if (!on) continue;
     const ch = logChannels?.[key];
-    if (ch == null || ch === 0) n += 1;
+    if (ch == null || ch === "" || ch === "0") n += 1;
   }
   return n;
 }
 
 /** Categories with empty staff_roles array. */
 export function countTicketCategoriesMissingStaff(
-  categories: { staff_roles?: number[] }[] | undefined,
+  categories: { staff_roles?: string[] }[] | undefined,
 ): number {
   if (!categories?.length) return 0;
   return categories.filter((c) => !c.staff_roles || c.staff_roles.length === 0).length;

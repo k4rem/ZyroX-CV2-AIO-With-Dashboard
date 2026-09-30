@@ -15,6 +15,14 @@
 from pydantic import BaseModel, HttpUrl
 from typing import Dict, List, Optional
 
+from cls_platform.discord_types import (
+    ChannelIdStr,
+    GuildIdStr,
+    MessageIdStr,
+    RoleIdStr,
+    UserIdStr,
+)
+
 # --- Bot Schemas ---
 
 class BotInfo(BaseModel):
@@ -69,19 +77,19 @@ class PrefixConfig(BaseModel):
     prefix: str
 
 class AutomodConfig(BaseModel):
-    guild_id: int
+    guild_id: GuildIdStr
     enabled: bool
     punishments: Dict[str, str]
-    ignored_roles: List[int]
-    ignored_channels: List[int]
-    logging_channel: Optional[int]
+    ignored_roles: List[RoleIdStr]
+    ignored_channels: List[ChannelIdStr]
+    logging_channel: Optional[ChannelIdStr] = None
 
 class TicketCategory(BaseModel):
     name: str
     emoji: Optional[str]
-    staff_roles: List[int] = []
+    staff_roles: List[RoleIdStr] = []
     button_style: Optional[int] = 2 # Blurple
-    discord_category_id: Optional[int] = None
+    discord_category_id: Optional[ChannelIdStr] = None
 
 class TicketEmbed(BaseModel):
     title: Optional[str]
@@ -91,15 +99,15 @@ class TicketEmbed(BaseModel):
     thumbnail_url: Optional[str] = None
 
 class TicketConfig(BaseModel):
-    guild_id: int
-    panel_channel: Optional[int]
-    panel_message: Optional[int]
-    logging_channel: Optional[int] = None
-    closed_category: Optional[int] = None
+    guild_id: GuildIdStr
+    panel_channel: Optional[ChannelIdStr] = None
+    panel_message: Optional[MessageIdStr] = None
+    logging_channel: Optional[ChannelIdStr] = None
+    closed_category: Optional[ChannelIdStr] = None
     panel_type: Optional[str] = "button"
     embed: TicketEmbed
     categories: List[TicketCategory]
-    staff_roles: List[int]
+    staff_roles: List[RoleIdStr]
     open_ticket_count: int
 
 class LevelingEmbedStyle(BaseModel):
@@ -108,20 +116,20 @@ class LevelingEmbedStyle(BaseModel):
     image: Optional[str] = None
 
 class LevelingConfig(BaseModel):
-    guild_id: int
+    guild_id: GuildIdStr
     enabled: bool
     xp_per_message: int
     cooldown: int
-    level_up_channel: Optional[int]
+    level_up_channel: Optional[ChannelIdStr] = None
     embed_style: LevelingEmbedStyle
 
 class LoggingConfig(BaseModel):
-    guild_id: int
+    guild_id: GuildIdStr
     log_enabled: Dict[str, bool]
-    log_channels: Dict[str, int]
-    ignore_channels: List[int]
-    ignore_roles: List[int]
-    ignore_users: List[int]
+    log_channels: Dict[str, ChannelIdStr]
+    ignore_channels: List[ChannelIdStr]
+    ignore_roles: List[RoleIdStr]
+    ignore_users: List[UserIdStr]
     auto_delete_duration: Optional[int]
 
 class WelcomeEmbedData(BaseModel):
@@ -286,9 +294,9 @@ class PrefixUpdate(BaseModel):
     prefix: str
 
 class TicketUpdate(BaseModel):
-    panel_channel: Optional[int] = None
-    logging_channel: Optional[int] = None
-    closed_category: Optional[int] = None
+    panel_channel: Optional[ChannelIdStr] = None
+    logging_channel: Optional[ChannelIdStr] = None
+    closed_category: Optional[ChannelIdStr] = None
     panel_type: Optional[str] = None
     embed_title: Optional[str] = None
     embed_description: Optional[str] = None
@@ -296,25 +304,25 @@ class TicketUpdate(BaseModel):
     embed_image_url: Optional[str] = None
     embed_thumbnail_url: Optional[str] = None
     categories: Optional[List[TicketCategory]] = None
-    staff_roles: Optional[List[int]] = None
+    staff_roles: Optional[List[RoleIdStr]] = None
 
 class AutomodUpdate(BaseModel):
     enabled: Optional[bool] = None
     punishments: Optional[Dict[str, str]] = None
-    ignored_roles: Optional[List[int]] = None
-    ignored_channels: Optional[List[int]] = None
-    logging_channel: Optional[int] = None
+    ignored_roles: Optional[List[RoleIdStr]] = None
+    ignored_channels: Optional[List[ChannelIdStr]] = None
+    logging_channel: Optional[ChannelIdStr] = None
 
 class LevelingUpdate(BaseModel):
     enabled: Optional[bool] = None
     xp_per_message: Optional[int] = None
     cooldown: Optional[int] = None
-    level_up_channel: Optional[int] = None
+    level_up_channel: Optional[ChannelIdStr] = None
     embed_color: Optional[str] = None
 
 class LoggingUpdate(BaseModel):
     log_enabled: Optional[Dict[str, bool]] = None
-    log_channels: Optional[Dict[str, int]] = None
+    log_channels: Optional[Dict[str, ChannelIdStr]] = None
 
 class LeaderboardEntry(BaseModel):
     user_id: str

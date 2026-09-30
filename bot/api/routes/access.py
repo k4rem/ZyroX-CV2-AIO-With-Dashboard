@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from cls_platform.capabilities import ROOT_ONLY, SYSTEM_ROLE_TEMPLATES
+from cls_platform.discord_types import snowflake_str_to_int
 from cls_platform.services import audit as audit_service
 from cls_platform.services import grants as grant_service
 from cls_platform.services import sessions as session_service
@@ -20,8 +21,8 @@ router = APIRouter()
 
 
 class GrantCreateBody(BaseModel):
-    guild_id: int
-    discord_user_id: int
+    guild_id: str
+    discord_user_id: str
     template_key: str = Field(description="admin|moderator|support|custom")
     custom_role_id: Optional[str] = None
 
@@ -32,12 +33,12 @@ class CustomRoleBody(BaseModel):
 
 
 @router.get("/grants")
-async def list_grants(request: Request, guild_id: Optional[int] = None):
+async def list_grants(request: Request, guild_id: Optional[str] = None):
     auth = request.state.dashboard_auth
     if not auth.is_root:
         raise HTTPException(status_code=403, detail="Root access required")
     if guild_id is not None:
-        grants = await grant_service.list_grants_for_guild(guild_id)
+        grants = await grant_service.list_grants_for_guild(snowflake_str_to_int(guild_id))
     else:
         from cls_platform.models import DashboardGrant
         from sqlalchemy import select
@@ -87,13 +88,15 @@ async def create_grant(request: Request, body: GrantCreateBody):
         if any(c in ROOT_ONLY for c in (role_row.capabilities or [])):
             raise HTTPException(status_code=400, detail="Cannot assign root-only role")
 
-    grant = await grant_service.create_grant(body.guild_id, body.discord_user_id, role_id)
+    gid = snowflake_str_to_int(body.guild_id)
+    uid = snowflake_str_to_int(body.discord_user_id)
+    grant = await grant_service.create_grant(gid, uid, role_id)
     await audit_service.record_audit(
         action="dashboard.grant.create",
         actor_user_id=auth.user_id,
-        guild_id=body.guild_id,
+        guild_id=gid,
         session_id=auth.session_id,
-        target=str(body.discord_user_id),
+        target=body.discord_user_id,
         after_state={"grant_id": str(grant.id), "role_id": str(role_id)},
     )
     return {"id": str(grant.id)}

@@ -125,7 +125,10 @@ export function LevelingForm({ initialConfig, guildId }: LevelingFormProps) {
               </label>
               <Input 
                 value={config.level_up_channel || ""}
-                onChange={(e) => setConfig({...config, level_up_channel: e.target.value ? parseInt(e.target.value.replace(/\D/g, "")) : null})}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/\D/g, "");
+                  setConfig({ ...config, level_up_channel: raw || null });
+                }}
                 placeholder="Discord Channel ID"
                 disabled={!config.enabled}
                 className="py-6 font-mono"

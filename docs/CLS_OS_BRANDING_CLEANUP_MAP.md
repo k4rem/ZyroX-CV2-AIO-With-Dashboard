@@ -225,7 +225,7 @@ The entire file is replaced by the CLS OS gateway in **Task B**. Occurrence-leve
 After Task C, this command must return **no matches** in user-facing dashboard code:
 
 ```bash
-rg -n -i "zyrox|neural|NEXT_PUBLIC_BRAND|add to server|99\.9|edge (region|cluster|shard|network)|global (shard|edges|reach|uptime)|support matrix|deauthorize|initialize console|12M|5,000|5\.2K|cortex|uplink" dashboard/app dashboard/components dashboard/lib dashboard/.env.example \
+rg -n -i "zyrox|neural|NEXT_PUBLIC_BRAND|add to server|99\.9|edge (region|cluster|shard|network)|global (shard|edges|reach|uptime)|support matrix|deauthorize|initialize console|12M|5,000|5\.2K|cortex|uplink|live system|automod ai|v2 active|logging engine|intelligent routing|instant response|fixed punishments|elastic systems" dashboard/app dashboard/components dashboard/lib dashboard/.env.example \
   | rg -v "^\S+:\d+:\s*\*"
 ```
 
@@ -257,3 +257,16 @@ The `rg -v` filter excludes banner comment lines (Section 5, manual review). `bo
 - Deep legacy form layout (`#141B2D`, slate cards) on modules not fully rebuilt — shell + headers/copy pass only where Task C touched files.
 
 Historical audit line references in Sections 2–7 are preserved as the pre-Task-C record.
+
+---
+
+## 10. Phase 1.5 refinement — removed pseudo-product strings (2026-10-01)
+
+| Surface | Removed / replaced |
+|---|---|
+| Tickets page | **LIVE SYSTEM** badge (removed entirely) |
+| Automod form | **Automod AI**, **V2 Active** side marketing card |
+| Antinuke form | **Instant response**, **FIXED PUNISHMENTS**, red decorative glow card |
+| Logging form | **Logging Engine**, **Intelligent Routing**, elastic-systems marketing copy |
+
+Gate §8 extended with the removed phrases so they cannot regress on kept dashboard paths.

@@ -135,7 +135,7 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
       {/* Category Editor Modal */}
       {editingCategory && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-           <div className="bg-[#141B2D] border border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
+           <div className="rounded-md border border-line bg-surface-1 w-full max-w-lg shadow-2xl overflow-hidden">
               <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
                 <h3 className="font-bold text-lg text-white flex items-center gap-2">
                    {isAdding ? <Plus className="h-5 w-5 text-primary" /> : <Edit3 className="h-5 w-5 text-primary" />}
@@ -168,7 +168,10 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
                     <Input 
                         value={editingCategory.data.staff_roles.join(", ")} 
                         onChange={(e) => {
-                          const roles = e.target.value.split(",").map(id => id.trim()).filter(id => id && !isNaN(Number(id))).map(Number);
+                          const roles = e.target.value
+                            .split(",")
+                            .map((id) => id.trim())
+                            .filter((id) => /^\d{17,20}$/.test(id));
                           setEditingCategory({
                             ...editingCategory, 
                             data: { ...editingCategory.data, staff_roles: roles }
@@ -228,7 +231,7 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
       {/* Embed Appearance Editor Modal */}
       {editingEmbed && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-           <div className="bg-[#141B2D] border border-slate-800 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden">
+           <div className="rounded-md border border-line bg-surface-1 w-full max-w-xl shadow-2xl overflow-hidden">
               <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
                 <h3 className="font-bold text-lg text-white flex items-center gap-2">
                    <Edit3 className="h-5 w-5 text-primary" />
@@ -296,10 +299,9 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
       )}
 
       {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Stats & Setup */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-[#141B2D] border border-slate-800 rounded-3xl p-8 shadow-xl space-y-8">
+      <div className="space-y-6">
+        <div className="space-y-6">
+          <div className="rounded-md border border-line bg-surface-1 p-8 shadow-xl space-y-8">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-primary/10 text-primary"><Settings2 className="h-5 w-5" /></div>
               <h3 className="text-xl font-bold text-white">Global Configuration</h3>
@@ -312,6 +314,9 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
                   value={config.panel_channel || ""} 
                   onChange={(e) => setConfig({...config, panel_channel: e.target.value})}
                   placeholder="Where the ticket panel lives"
+                  className="font-mono"
+                  dir="ltr"
+                  inputMode="numeric"
                 />
               </div>
               <div className="space-y-2">
@@ -320,6 +325,9 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
                   value={config.logging_channel || ""} 
                   onChange={(e) => setConfig({...config, logging_channel: e.target.value})}
                   placeholder="Where transcripts go"
+                  className="font-mono"
+                  dir="ltr"
+                  inputMode="numeric"
                 />
               </div>
               <div className="space-y-2">
@@ -328,6 +336,9 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
                   value={config.closed_category || ""} 
                   onChange={(e) => setConfig({...config, closed_category: e.target.value})}
                   placeholder="Archive closed tickets here"
+                  className="font-mono"
+                  dir="ltr"
+                  inputMode="numeric"
                 />
               </div>
               <div className="space-y-2">
@@ -347,14 +358,16 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
               </div>
             </div>
 
-            <Button onClick={handleSaveGlobal} disabled={saving} className="w-full gap-2" variant="secondary">
-              {saving ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save Core Settings
-            </Button>
+            <div className="flex justify-end">
+              <Button onClick={handleSaveGlobal} disabled={saving} className="gap-2">
+                {saving ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save core settings
+              </Button>
+            </div>
           </div>
 
           {/* Categories Section */}
-          <section className="bg-[#141B2D] border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
+          <section className="rounded-md border border-line bg-surface-1 overflow-hidden shadow-xl">
             <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/20">
               <div className="flex items-center gap-2">
                 <Tag className="h-5 w-5 text-primary" />
@@ -401,48 +414,18 @@ export function TicketsForm({ initialConfig, guildId }: TicketsFormProps) {
           </section>
         </div>
 
-        {/* Right Column: Stats & Configuration */}
-        <div className="space-y-6">
-          <div className="bg-[#141B2D] border border-slate-800 p-6 rounded-3xl group shadow-lg">
-              <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 bg-primary/10 rounded-2xl text-primary group-hover:scale-110 transition-transform">
-                    <MessageSquare className="h-6 w-6" />
-                  </div>
-                  <div className="h-2 w-2 rounded-full bg-primary shadow-[0_0_10px_rgba(88,101,242,0.5)]" />
-              </div>
-              <p className="text-sm font-medium text-slate-500">Currently Open</p>
-              <h3 className="text-3xl font-black text-white mt-1">{config.open_ticket_count} Tickets</h3>
-          </div>
-
-          <section className="bg-gradient-to-br from-primary/10 to-transparent border border-primary/20 rounded-3xl p-6 relative overflow-hidden group">
-            <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:scale-110 transition-transform">
-              <Mail className="h-32 w-32 text-white" />
+        <section className="rounded-md border border-line bg-surface-1 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-caption text-fg-2">Open tickets</p>
+              <p className="text-section-title text-fg-1">{config.open_ticket_count}</p>
             </div>
-            <div className="flex items-center gap-2 mb-4">
-              <Zap className="h-5 w-5 text-primary" />
-              <h3 className="font-bold text-white">Panel Appearance</h3>
-            </div>
-            <div className="space-y-3 relative z-10">
-               <div className="p-3 bg-black/20 rounded-xl border border-white/5">
-                  <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Title</p>
-                  <p className="text-sm text-slate-200 font-medium truncate">{config.embed.title || 'Support Department'}</p>
-               </div>
-               <div className="p-3 bg-black/20 rounded-xl border border-white/5">
-                  <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Description</p>
-                  <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                    {config.embed.description || 'Open a ticket below to talk to our staff.'}
-                  </p>
-               </div>
-            </div>
-            <Button 
-              variant="secondary" 
-              className="w-full mt-6 py-5 text-xs font-bold uppercase tracking-wider"
-              onClick={() => setEditingEmbed({...config.embed})}
-            >
-              Edit Appearance
+            <Button type="button" variant="secondary" size="sm" onClick={() => setEditingEmbed({ ...config.embed })}>
+              Edit panel appearance
             </Button>
-          </section>
-        </div>
+          </div>
+          <p className="mt-2 text-caption text-fg-2 truncate">{config.embed.title || "Support Department"}</p>
+        </section>
       </div>
     </>
   );

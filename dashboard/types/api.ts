@@ -56,18 +56,18 @@ export interface PrefixConfig {
 }
 
 export interface AutomodConfig {
-  guild_id: number;
+  guild_id: string;
   enabled: boolean;
   punishments: Record<string, string>;
-  ignored_roles: number[];
-  ignored_channels: number[];
-  logging_channel: number | null;
+  ignored_roles: string[];
+  ignored_channels: string[];
+  logging_channel: string | null;
 }
 
 export interface TicketCategory {
   name: string;
   emoji: string | null;
-  staff_roles: number[];
+  staff_roles: string[];
   button_style?: number;
   discord_category_id?: string | null;
 }
@@ -89,7 +89,7 @@ export interface TicketConfig {
   panel_type?: string;
   embed: TicketEmbed;
   categories: TicketCategory[];
-  staff_roles: number[];
+  staff_roles: string[];
   open_ticket_count: number;
 }
 
@@ -104,17 +104,17 @@ export interface LevelingConfig {
   enabled: boolean;
   xp_per_message: number;
   cooldown: number;
-  level_up_channel: number | null;
+  level_up_channel: string | null;
   embed_style: LevelingEmbedStyle;
 }
 
 export interface LoggingConfig {
-  guild_id: number;
+  guild_id: string;
   log_enabled: Record<string, boolean>;
-  log_channels: Record<string, number>;
-  ignore_channels: number[];
-  ignore_roles: number[];
-  ignore_users: number[];
+  log_channels: Record<string, string>;
+  ignore_channels: string[];
+  ignore_roles: string[];
+  ignore_users: string[];
   auto_delete_duration: number | null;
 }
 
@@ -126,22 +126,22 @@ export interface PrefixUpdate {
 export interface AutomodUpdate {
   enabled?: boolean;
   punishments?: Record<string, string>;
-  ignored_roles?: number[];
-  ignored_channels?: number[];
-  logging_channel?: number;
+  ignored_roles?: string[];
+  ignored_channels?: string[];
+  logging_channel?: string | null;
 }
 
 export interface LevelingUpdate {
   enabled?: boolean;
   xp_per_message?: number;
   cooldown?: number;
-  level_up_channel?: number;
+  level_up_channel?: string | null;
   embed_color?: string;
 }
 
 export interface LoggingUpdate {
   log_enabled?: Record<string, boolean>;
-  log_channels?: Record<string, number>;
+  log_channels?: Record<string, string>;
 }
 
 export interface LeaderboardEntry {

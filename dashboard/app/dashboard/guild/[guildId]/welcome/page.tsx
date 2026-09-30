@@ -1,48 +1,23 @@
-/**
- * ╔══════════════════════════════════════════════════════════════════╗
- * ║                                                                  ║
- * ║   ░█▀▀░█▀█░█▀▄░█▀▀░█░█   ░█▀▄░█▀▀░█░█░█▀▀                     ║
- * ║   ░█░░░█░█░█░█░█▀▀░▄▀▄   ░█░█░█▀▀░▀▄▀░▀▀█                     ║
- * ║   ░▀▀▀░▀▀▀░▀▀░░▀▀▀░▀░▀   ░▀▀░░▀▀▀░░▀░░▀▀▀                     ║
- * ║                                                                  ║
- * ║           © 2026 CodeX Devs — All Rights Reserved               ║
- * ║                                                                  ║
- * ║   discord  ──  https://discord.gg/codexdev                      ║
- * ║   youtube  ──  https://youtube.com/@CodeXDevs                   ║
- * ║   github   ──  https://github.com/RayExo                        ║
- * ║                                                                  ║
- * ╚══════════════════════════════════════════════════════════════════╝
- */
-
 import React from "react";
-import { SmilePlus } from "lucide-react";
 import dynamic from "next/dynamic";
 import { api } from "@/lib/api";
+import { PageHeader } from "@/components/dashboard/page-header";
 
-const WelcomeForm = dynamic(() => import("@/components/dashboard/welcome-form").then(mod => mod.WelcomeForm), {
-  loading: () => <div className="h-96 w-full animate-pulse bg-slate-800/20 rounded-3xl" />
+const WelcomeForm = dynamic(() => import("@/components/dashboard/welcome-form").then((mod) => mod.WelcomeForm), {
+  loading: () => <div className="h-24 w-full animate-pulse rounded-md bg-surface-2" />,
 });
 
 export default async function WelcomePage({ params }: { params: { guildId: string } }) {
   const [welcomeData, channelsData] = await Promise.all([
     api.getWelcome(params.guildId),
-    api.getChannels(params.guildId)
+    api.getChannels(params.guildId),
   ]);
 
   if (!welcomeData) return null;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <SmilePlus className="h-6 w-6 text-primary" />
-            Welcomer
-          </h2>
-          <p className="text-slate-400 mt-1">Greet new members to your server.</p>
-        </div>
-      </div>
-
+    <div className="space-y-6">
+      <PageHeader title="Welcome" description="Configure join messages and channels for new members." />
       <WelcomeForm initialConfig={welcomeData} channels={channelsData} guildId={params.guildId} />
     </div>
   );

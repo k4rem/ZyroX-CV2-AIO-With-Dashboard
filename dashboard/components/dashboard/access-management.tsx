@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { CopyIdButton } from "@/components/auth/copy-id-button";
 import { ACCESS_TEMPLATES, templateLabel } from "@/lib/accessTemplates";
+import { normalizeSnowflakeInput } from "@/lib/snowflake";
 import {
   Dialog,
   DialogContent,
@@ -67,14 +68,16 @@ export function AccessManagement({ guilds }: { guilds: GuildOption[] }) {
   }, []);
 
   const onGrant = async () => {
-    if (!guildId.trim() || !userId.trim()) {
-      toast.error("Enter a server ID and Discord user ID");
+    const gid = normalizeSnowflakeInput(guildId);
+    const uid = normalizeSnowflakeInput(userId);
+    if (!gid || !uid) {
+      toast.error("Enter valid 17–20 digit server and user IDs");
       return;
     }
     try {
       await api.createAccessGrant({
-        guild_id: Number(guildId),
-        discord_user_id: Number(userId),
+        guild_id: gid,
+        discord_user_id: uid,
         template_key: template,
       });
       toast.success("Grant created");
@@ -112,32 +115,56 @@ export function AccessManagement({ guilds }: { guilds: GuildOption[] }) {
       <section className="space-y-4 rounded-md border border-line bg-surface-1 p-4">
         <h2 className="text-section-title text-fg-1">New grant</h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <Input
-            placeholder="Server ID"
-            value={guildId}
-            onChange={(e) => setGuildId(e.target.value)}
-            dir="ltr"
-            className="font-mono"
-          />
-          <Input
-            placeholder="Discord user ID"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            dir="ltr"
-            className="font-mono"
-          />
-          <select
-            className="h-9 rounded-md border border-line bg-surface-2 px-3 text-body text-fg-1"
-            value={template}
-            onChange={(e) => setTemplate(e.target.value)}
-          >
-            {ACCESS_TEMPLATES.map((t) => (
-              <option key={t.key} value={t.key}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-          <Button onClick={() => void onGrant()}>Grant access</Button>
+          <div className="space-y-1">
+            <label htmlFor="grant-guild-id" className="text-caption text-fg-2">
+              Guild / server ID
+            </label>
+            <Input
+              id="grant-guild-id"
+              placeholder="17–20 digit ID"
+              value={guildId}
+              onChange={(e) => setGuildId(e.target.value)}
+              dir="ltr"
+              className="font-mono"
+              inputMode="numeric"
+              autoComplete="off"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="grant-user-id" className="text-caption text-fg-2">
+              Discord user ID
+            </label>
+            <Input
+              id="grant-user-id"
+              placeholder="17–20 digit ID"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              dir="ltr"
+              className="font-mono"
+              inputMode="numeric"
+              autoComplete="off"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="grant-template" className="text-caption text-fg-2">
+              Access template
+            </label>
+            <select
+              id="grant-template"
+              className="h-9 w-full rounded-md border border-line bg-surface-2 px-3 text-body text-fg-1"
+              value={template}
+              onChange={(e) => setTemplate(e.target.value)}
+            >
+              {ACCESS_TEMPLATES.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end">
+            <Button onClick={() => void onGrant()}>Grant access</Button>
+          </div>
         </div>
         {selectedTemplate && (
           <p className="text-caption text-fg-2">{selectedTemplate.description}</p>
@@ -177,7 +204,7 @@ export function AccessManagement({ guilds }: { guilds: GuildOption[] }) {
                           <span className="font-mono text-body text-fg-1" dir="ltr">
                             {g.discord_user_id}
                           </span>
-                          <CopyIdButton value={g.discord_user_id} label="Copy user ID" />
+                          <CopyIdButton value={g.discord_user_id} label="Copy ID" />
                         </div>
                       </TableCell>
                       <TableCell>

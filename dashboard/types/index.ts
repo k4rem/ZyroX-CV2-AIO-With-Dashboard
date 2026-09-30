@@ -75,7 +75,7 @@ export interface LevelingConfig {
   enabled: boolean;
   xp_per_message: number;
   cooldown: number;
-  level_up_channel: number | null;
+  level_up_channel: string | null;
   embed_style: {
     color: string;
     thumbnail: boolean;

@@ -397,3 +397,33 @@ Global list (§0), plus: `app/page.tsx`, `app/auth/**`, `app/docs`, `app/privacy
 - All audit BLOCKER and HIGH findings closed; MEDIUM closed or registered; POLISH best-effort.
 - The branding gate and detector are at 0; the untracked preview helpers are still untracked.
 - The decision register items marked REVISIT AFTER VISUAL PROTOTYPE are resolved with the owner after the B-1/C-1 screenshots and updated in `CLS_OS_DESIGN_SYSTEM.md` §32.
+
+---
+
+## Phase 1.5 final refinement pass (2026-10-01)
+
+**Commit:** `close CLS OS phase 1.5 visual foundation` (local, not pushed).
+
+### P0 — Discord snowflake integrity (BLOCKER)
+
+| Item | Detail |
+|---|---|
+| **Root cause** | Dashboard used `Number()` / `parseInt()` on grant and config IDs; FastAPI/Pydantic returned many snowflakes as JSON **numbers**, so `JSON.parse` in the browser rounded IDs above `2^53-1`. |
+| **Fix** | `bot/cls_platform/discord_types.py` string validators; ticket/automod/logging/access/leveling API models and guild routes emit **string** snowflakes; dashboard `lib/snowflake.ts` + string state on Access, Tickets, Logging, Automod, Reaction Roles, Antinuke whitelist, Leveling channel. |
+| **Tests** | `bot/tests/test_snowflake_api_models.py`; `dashboard/lib/snowflake.test.mjs`, `accessGrantPayload.test.mjs`. |
+
+### P1 — Unbacked claims
+
+Removed pseudo-product strings (see `CLS_OS_BRANDING_CLEANUP_MAP.md` §10); branding gate §8 extended.
+
+### P2 — Legacy skin pass (shallow)
+
+Antinuke, Automod, Logging, Welcome, Bot settings, Tickets forms/pages + `guild/[guildId]/loading.tsx`: CLS surfaces, `PageHeader`, end-aligned save buttons, no `#141B2D` / oversized radii / watermark side cards on touched modules.
+
+### P3 / P4
+
+Overview tickets **Configured** → healthy (not warning). Access Management visible labels for guild ID, user ID, template.
+
+### Safe deferrals (unchanged)
+
+Fleet-wide `SettingRow`, sticky save bar, Radix Select rebuild, Tickets V2 pickers, platform formatting polish, per-page browser titles, RTL latency isolate, multi-guild / no-access visual QA, full legacy skin on non–Phase-1.5 modules (verification, vanity, etc.).
