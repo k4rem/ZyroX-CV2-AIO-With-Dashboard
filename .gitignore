@@ -72,6 +72,9 @@ bot/channels.json
 # Ignore locally provisioned tunnel binaries
 bot/bin/
 
+# Impeccable skill engine (downloaded on install / first run)
+.cursor/skills/impeccable/scripts/bin/
+
 # Ignore Python cache
 __pycache__/
 *.pyc
