@@ -13,14 +13,17 @@
 # ╚══════════════════════════════════════════════════════════════════╝
 
 from __future__ import annotations
-import os 
 import discord
 from utils.config import BotName
 try:
     from discord.ext import menus
     from discord.ext import commands
-except ModuleNotFoundError:
-    os.system("pip install git+https://github.com/Rapptz/discord-ext-menus")
+except ModuleNotFoundError as exc:
+    raise ModuleNotFoundError(
+        "discord-ext-menus is a required startup dependency. "
+        "bot/utils/__init__.py imports paginators before the bot can run. "
+        "Install the reviewed package during deployment; runtime installation is disabled."
+    ) from exc
 
 from .paginator import Paginator as EmbedPaginator
 from discord.ext.commands import Context, Paginator as CmdPaginator

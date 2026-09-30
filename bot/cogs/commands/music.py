@@ -54,9 +54,8 @@ class SpotifyAPI:
         data = {"grant_type": "client_credentials"}
         async with aiohttp.ClientSession() as session:
             async with session.post(auth_url, headers=headers, data=data) as response:
-                text = await response.text()
                 if response.status != 200:
-                    raise Exception(f"Failed to fetch token: {response.status}, response: {text}")
+                    raise Exception(f"Failed to fetch Spotify token: HTTP {response.status}")
                 self.token = (await response.json()).get("access_token")
 
     async def get(self, endpoint, params=None):
@@ -83,7 +82,13 @@ class SpotifyAPI:
     async def get_playlist(self, playlist_id):
         return await self.get(f"playlists/{playlist_id}")
 
-spotify_api = SpotifyAPI(client_id="ac2b614ca5ce46a18dfd1d3475fd6fd9", client_secret="df7bec95ae88438e8286db597bac8621")
+_spotify_client_id = os.getenv("SPOTIFY_CLIENT_ID", "").strip()
+_spotify_client_secret = os.getenv("SPOTIFY_CLIENT_SECRET", "").strip()
+spotify_api = (
+    SpotifyAPI(client_id=_spotify_client_id, client_secret=_spotify_client_secret)
+    if _spotify_client_id and _spotify_client_secret
+    else None
+)
 
 class PlatformSelectView(LayoutView):
     def __init__(self, ctx, query):
@@ -337,11 +342,24 @@ class MusicControlView(LayoutView):
 class Music(commands.Cog):
     def __init__(self, client: zyrox):
         self.client = client
+        self.lavalink_available = False
         self.client.loop.create_task(self.connect_nodes())
         self.client.loop.create_task(self.monitor_inactivity())
         
         self.inactivity_timeout = 120 
         self.player_inactivity = {}  
+
+    async def cog_check(self, ctx: commands.Context) -> bool:
+        if self.lavalink_available:
+            return True
+        await ctx.send(
+            view=CV2(
+                "Music Unavailable",
+                "Lavalink is not configured or could not be reached. "
+                "Ask the bot operator to check the server configuration.",
+            )
+        )
+        return False
 
     async def monitor_inactivity(self):
         while True:
@@ -392,18 +410,29 @@ class Music(commands.Cog):
                     pass
 
     async def connect_nodes(self) -> None:
-        host = os.getenv("LAVALINK_HOST", "lava-v4.ajieblogs.eu.org")
-        password = os.getenv("LAVALINK_PASSWORD", "https://dsc.gg/ajidevserver")
+        host = os.getenv("LAVALINK_HOST", "").strip()
+        password = os.getenv("LAVALINK_PASSWORD", "").strip()
         secure = os.getenv("LAVALINK_SECURE", "true").strip().lower() == "true"
         port = os.getenv("LAVALINK_PORT", "").strip()
+
+        if not host or not password:
+            print(
+                "Music unavailable: LAVALINK_HOST and LAVALINK_PASSWORD "
+                "must be configured in the environment."
+            )
+            return
 
         if secure:
             uri = f"https://{host}"
         else:
             uri = f"http://{host}:{port}" if port else f"http://{host}"
 
-        nodes = [wavelink.Node(uri=uri, password=password)]
-        await wavelink.Pool.connect(nodes=nodes, client=self.client, cache_capacity=None)
+        try:
+            nodes = [wavelink.Node(uri=uri, password=password)]
+            await wavelink.Pool.connect(nodes=nodes, client=self.client, cache_capacity=None)
+            self.lavalink_available = True
+        except Exception as exc:
+            print(f"Music unavailable: Lavalink connection failed ({type(exc).__name__}).")
 
 
     async def display_player_embed(self, player, track, ctx, autoplay=False):
@@ -491,6 +520,14 @@ class Music(commands.Cog):
 
     
     async def handle_spotify_link(self, ctx, vc, link, type_):
+        if spotify_api is None:
+            await ctx.send(
+                view=CV2(
+                    "Spotify Unavailable",
+                    "Spotify integration is not configured on this bot.",
+                )
+            )
+            return
         try:
             if type_ == "track":
                 track_id = re.search(SPOTIFY_TRACK_REGEX, link).group(1)

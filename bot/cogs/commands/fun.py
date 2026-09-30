@@ -15,6 +15,7 @@
 import discord
 from discord.ext import commands
 from discord.ui import LayoutView, TextDisplay, Separator, MediaGallery
+import os
 import random
 import aiohttp
 from discord import app_commands
@@ -24,9 +25,11 @@ from utils.cv2 import CV2, build_container
 class Fun(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.giphy_api_key = "y3KcqQTdiS0RYcpNJrWn8hFGglKqX4is"
+        self.giphy_api_key = os.getenv("GIPHY_API_KEY", "").strip()
 
     async def fetch_giphy(self, query):
+        if not self.giphy_api_key:
+            return None
         async with aiohttp.ClientSession() as session:
             async with session.get(f"https://api.giphy.com/v1/gifs/search?api_key={self.giphy_api_key}&q={query}&limit=30&rating=pg") as resp:
                 if resp.status != 200:
@@ -41,6 +44,11 @@ class Fun(commands.Cog):
         return random.choice(["😂", "🤣", "😆", "😳", "🥴", "🙃", "😜"])
 
     async def action_command(self, ctx, user: discord.Member, action: str):
+        if not self.giphy_api_key:
+            await ctx.send(
+                view=CV2("😒 Feature Unavailable", "GIPHY integration is not configured.")
+            )
+            return
         gif_url = await self.fetch_giphy(action)
         if not gif_url:
             await ctx.send(view=CV2("😒 Error", "GIPHY API is sleeping. Try later!"))

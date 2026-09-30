@@ -979,8 +979,10 @@ class Extra(commands.Cog):
   @ignore_check()
   @commands.cooldown(1, 30, commands.BucketType.channel)
   async def report(self, ctx, *, bug):
-    channel = self.bot.get_channel(1396813063642153030)
-    report_text = f"{bug}\n\n**Reported By:** {ctx.author.name}\n**Server:** {ctx.guild.name}\n**Channel:** {ctx.channel.name}"
-    await channel.send(view=CV2("Bug Reported", report_text))
-    await ctx.reply(view=CV2(f"{TICK} Bug Reported", "Thank you for reporting the bug. We will look into it."))
+    await ctx.reply(
+      view=CV2(
+        "Bug Reporting Unavailable",
+        "No trusted bug-report destination is configured for this deployment.",
+      )
+    )
 

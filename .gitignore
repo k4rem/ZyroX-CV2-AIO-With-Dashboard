@@ -30,6 +30,7 @@ Thumbs.db
 # Ignore build outputs
 dist/
 build/
+*.tsbuildinfo
 
 # Ignore temporary files
 *.tmp
@@ -54,6 +55,20 @@ package-lock.json
 # Ignore Next.js build output
 .next/
 out/
+
+# Ignore runtime persistence
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+bot/db/*.json
+bot/jsondb/*.json
+bot/events.json
+bot/config.json
+bot/channels.json
+
+# Ignore locally provisioned tunnel binaries
+bot/bin/
 
 # Ignore Python cache
 __pycache__/

@@ -13,6 +13,8 @@
 # ╚══════════════════════════════════════════════════════════════════╝
 
 from __future__ import annotations
+import ast
+import json
 import discord
 from utils.emoji import CROSS, ICONS_WARNING, TICK
 import aiosqlite
@@ -33,6 +35,70 @@ logging.basicConfig(
 )
 
 DATABASE_PATH = 'db/autorole.db'
+
+
+def _positive_role_ids(parsed) -> List[int] | None:
+    """Accept only a list or tuple of positive integer role IDs."""
+    if isinstance(parsed, tuple):
+        parsed = list(parsed)
+    if not isinstance(parsed, list):
+        return None
+    roles: List[int] = []
+    for role_id in parsed:
+        if isinstance(role_id, bool) or not isinstance(role_id, int) or role_id <= 0:
+            return None
+        roles.append(role_id)
+    return roles
+
+
+def _comma_separated_role_ids(value: str) -> List[int] | None:
+    parts = [part.strip() for part in value.split(",") if part.strip()]
+    if not parts or any(not part.isdigit() for part in parts):
+        return None
+    roles = [int(part) for part in parts]
+    if any(role_id <= 0 for role_id in roles):
+        return None
+    return roles
+
+
+def _parse_role_ids(value: str | None) -> List[int]:
+    """Read JSON lists, legacy Python lists, and comma-separated role IDs.
+
+    ``ast.literal_eval`` is a typed fallback only. It does not execute code.
+    A comma-separated legacy value such as ``123,456`` is a Python tuple, so
+    tuples are normalized before validation. New values are written as JSON.
+    """
+    if not isinstance(value, str):
+        return []
+    text = value.strip()
+    if not text:
+        return []
+
+    try:
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        parsed = None
+    else:
+        roles = _positive_role_ids(parsed)
+        if roles is not None:
+            return roles
+        if isinstance(parsed, (list, tuple)):
+            return []
+
+    try:
+        parsed = ast.literal_eval(text)
+    except (ValueError, SyntaxError, MemoryError, RecursionError, TypeError):
+        parsed = None
+    else:
+        roles = _positive_role_ids(parsed)
+        if roles is not None:
+            return roles
+        if isinstance(parsed, (list, tuple)):
+            return []
+
+    roles = _comma_separated_role_ids(text)
+    return roles if roles is not None else []
+
 
 class BasicView(discord.ui.View):
     def __init__(self, ctx: commands.Context, timeout=60):
@@ -69,11 +135,10 @@ class AutoRole(commands.Cog):
                 row = await cursor.fetchone()
                 if row:
                     bots, humans = row
-                    
-                    bots = [int(role_id) for role_id in bots.replace('[', '').replace(']', '').replace(' ', '').split(',') if role_id]
-                    humans = [int(role_id) for role_id in humans.replace('[', '').replace(']', '').replace(' ', '').split(',') if role_id]
-                      
-                    return {"bots": bots, "humans": humans}
+                    return {
+                        "bots": _parse_role_ids(bots),
+                        "humans": _parse_role_ids(humans),
+                    }
                 else:
                     return {"bots": [], "humans": []}
 
@@ -81,8 +146,8 @@ class AutoRole(commands.Cog):
 
     async def update_autorole(self, guild_id: int, data: Dict[str, List[int]]):
         async with aiosqlite.connect(DATABASE_PATH) as db:
-            bots = ','.join(map(str, data['bots']))
-            humans = ','.join(map(str, data['humans']))
+            bots = json.dumps(data['bots'])
+            humans = json.dumps(data['humans'])
             
             await db.execute("INSERT OR REPLACE INTO autorole (guild_id, bots, humans) VALUES (?, ?, ?)",
                              (guild_id, bots, humans))
@@ -232,7 +297,7 @@ class AutoRole(commands.Cog):
                 data = await cursor.fetchone()
         
         if data:
-            humans = eval(data[0])
+            humans = _parse_role_ids(data[0])
             if role.id in humans:
                 view = CV2(f"{ICONS_WARNING} Access Denied", f"{role.mention} is already in human autoroles.")
             elif len(humans) >= 10:
@@ -240,13 +305,13 @@ class AutoRole(commands.Cog):
             else:
                 humans.append(role.id)
                 async with aiosqlite.connect(DATABASE_PATH) as db:
-                    await db.execute("UPDATE autorole SET humans = ? WHERE guild_id = ?", (str(humans), ctx.guild.id))
+                    await db.execute("UPDATE autorole SET humans = ? WHERE guild_id = ?", (json.dumps(humans), ctx.guild.id))
                     await db.commit()
                 view = CV2(f"{TICK} Success", f"{role.mention} has been added to human autoroles.")
         else:
             humans = [role.id]
             async with aiosqlite.connect(DATABASE_PATH) as db:
-                await db.execute("INSERT INTO autorole (guild_id, humans, bots) VALUES (?, ?, ?)", (ctx.guild.id, str(humans), '[]'))
+                await db.execute("INSERT INTO autorole (guild_id, humans, bots) VALUES (?, ?, ?)", (ctx.guild.id, json.dumps(humans), '[]'))
                 await db.commit()
             view = CV2(f"{TICK} Success", f"{role.mention} has been added to human autoroles.")
 
@@ -265,13 +330,13 @@ class AutoRole(commands.Cog):
                 data = await cursor.fetchone()
 
         if data:
-            humans = eval(data[0])
+            humans = _parse_role_ids(data[0])
             if role.id not in humans:
                 view = CV2(f"{CROSS} Error", f"{role.mention} is not in human autoroles.")
             else:
                 humans.remove(role.id)
                 async with aiosqlite.connect(DATABASE_PATH) as db:
-                    await db.execute("UPDATE autorole SET humans = ? WHERE guild_id = ?", (str(humans), ctx.guild.id))
+                    await db.execute("UPDATE autorole SET humans = ? WHERE guild_id = ?", (json.dumps(humans), ctx.guild.id))
                     await db.commit()
                 view = CV2(f"{TICK} Success", f"{role.mention} has been removed from human autoroles.")
         else:
@@ -303,7 +368,7 @@ class AutoRole(commands.Cog):
                 data = await cursor.fetchone()
         
         if data:
-            bots = eval(data[0])
+            bots = _parse_role_ids(data[0])
             if role.id in bots:
                 view = CV2(f"{ICONS_WARNING} Access Denied", f"{role.mention} is already in bot autoroles.")
             elif len(bots) >= 10:
@@ -311,13 +376,13 @@ class AutoRole(commands.Cog):
             else:
                 bots.append(role.id)
                 async with aiosqlite.connect(DATABASE_PATH) as db:
-                    await db.execute("UPDATE autorole SET bots = ? WHERE guild_id = ?", (str(bots), ctx.guild.id))
+                    await db.execute("UPDATE autorole SET bots = ? WHERE guild_id = ?", (json.dumps(bots), ctx.guild.id))
                     await db.commit()
                 view = CV2(f"{TICK} Success", f"{role.mention} has been added to bot autoroles.")
         else:
             bots = [role.id]
             async with aiosqlite.connect(DATABASE_PATH) as db:
-                await db.execute("INSERT INTO autorole (guild_id, humans, bots) VALUES (?, ?, ?)", (ctx.guild.id, '[]', str(bots)))
+                await db.execute("INSERT INTO autorole (guild_id, humans, bots) VALUES (?, ?, ?)", (ctx.guild.id, '[]', json.dumps(bots)))
                 await db.commit()
             view = CV2(f"{TICK} Success", f"{role.mention} has been added to bot autoroles.")
 
@@ -336,13 +401,13 @@ class AutoRole(commands.Cog):
                 data = await cursor.fetchone()
 
         if data:
-            bots = eval(data[0])
+            bots = _parse_role_ids(data[0])
             if role.id not in bots:
                 view = CV2(f"{CROSS} Error", f"{role.mention} is not in bot autoroles.")
             else:
                 bots.remove(role.id)
                 async with aiosqlite.connect(DATABASE_PATH) as db:
-                    await db.execute("UPDATE autorole SET bots = ? WHERE guild_id = ?", (str(bots), ctx.guild.id))
+                    await db.execute("UPDATE autorole SET bots = ? WHERE guild_id = ?", (json.dumps(bots), ctx.guild.id))
                     await db.commit()
                 view = CV2(f"{TICK} Success", f"{role.mention} has been removed from bot autoroles.")
         else:

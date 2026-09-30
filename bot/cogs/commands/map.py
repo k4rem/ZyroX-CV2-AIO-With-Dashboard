@@ -12,6 +12,7 @@
 # ║                                                                  ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
+import os
 import discord
 from utils.emoji import DELETE
 from discord.ext import commands
@@ -22,6 +23,10 @@ import asyncio
 from utils.Tools import *
 from utils.cv2 import CV2, build_container
 from utils.config import *
+
+MAPQUEST_API_KEY = os.getenv("MAPQUEST_API_KEY", "").strip()
+
+
 class MapView(LayoutView):
     def __init__(self, bot, location, ctx):
         super().__init__(timeout=None)
@@ -104,7 +109,7 @@ class MapView(LayoutView):
     def update_map(self):
         if self.latitude is None or self.longitude is None:
             return
-        self.map_url = f'https://www.mapquestapi.com/staticmap/v5/map?key=E2SaL3qiTpXQ43nxZFBp0wzEnBI6pqbG&center={self.latitude},{self.longitude}&zoom={self.zoom_level}&size={self.map_size}&type={self.map_style}'
+        self.map_url = f'https://www.mapquestapi.com/staticmap/v5/map?key={MAPQUEST_API_KEY}&center={self.latitude},{self.longitude}&zoom={self.zoom_level}&size={self.map_size}&type={self.map_style}'
         self.build_ui()
 
     async def update_embed(self, interaction: discord.Interaction):
@@ -264,6 +269,11 @@ class Map(commands.Cog):
     @ignore_check()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def map(self, ctx, *, location: str):
+        if not MAPQUEST_API_KEY:
+            await ctx.send(
+                view=CV2("❌ Map Unavailable", "MapQuest integration is not configured.")
+            )
+            return
         view = MapView(self.bot, location, ctx)
         if view.coordinates == (None, None):
             await ctx.send(view=CV2("❌ Error", "Failed to retrieve coordinates for the location. Please try again."))

@@ -20,15 +20,16 @@ import os
 import random
 from utils.cv2 import CV2, build_container
 
-PEXELS_API_KEY = "js24mfV1bCCvgV6KfnEFvo5UnCHnATFarFnAdDrpDbczl7f0yXpjDF8x"
-
 class ImageCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.pexels_api_key = os.getenv("PEXELS_API_KEY", "").strip()
 
     async def fetch_pexels_image(self, query):
+        if not self.pexels_api_key:
+            return None
         headers = {
-            "Authorization": PEXELS_API_KEY
+            "Authorization": self.pexels_api_key
         }
         async with aiohttp.ClientSession() as session:
             async with session.get(f"https://api.pexels.com/v1/search?query={query}&per_page=50", headers=headers) as resp:
@@ -56,6 +57,10 @@ class ImageCommands(commands.Cog):
 
     @commands.command(name="boy")
     async def boy_image(self, ctx):
+        if not self.pexels_api_key:
+            return await ctx.send(
+                view=CV2("❌ Image Unavailable", "Pexels integration is not configured.")
+            )
         url = await self.fetch_pexels_image("handsome boy")
         await self.send_image_view(ctx, "👦 Boy Pic", url)
 
@@ -66,6 +71,10 @@ class ImageCommands(commands.Cog):
 
     @commands.command(name="couple")
     async def couple_image(self, ctx):
+        if not self.pexels_api_key:
+            return await ctx.send(
+                view=CV2("❌ Image Unavailable", "Pexels integration is not configured.")
+            )
         url = await self.fetch_pexels_image("romantic couple")
         await self.send_image_view(ctx, "💑 Couple Pic", url)
 

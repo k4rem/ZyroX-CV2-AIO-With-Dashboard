@@ -120,28 +120,6 @@ class TimeSelect(Select):
             else f"<t:{int(expiry_time.timestamp())}:f>"
         )
 
-        guild = interaction.client.get_guild(1401125905677553716)
-        if guild:
-            member = guild.get_member(self.user.id)
-            if member:
-                role = guild.get_role(1401134167873290311)
-                if role:
-                    await member.add_roles(role, reason="No prefix added")
-
-        log_channel = interaction.client.get_channel(1396794297386532978)
-        if log_channel:
-            embed = CV2Embed(
-                title="User Added to No Prefix",
-                description=f"**User**: [{self.user}](https://discord.com/users/{self.user.id})\n**User Mention**: {self.user.mention}\n** ID**: {self.user.id}\n\n** Added By**: [{self.author.display_name}](https://discord.com/users/{self.author.id})\n{TIMER_ALT1}**Expiry Time**: {expiry_text}\n{ZDIL} **Timestamp**: {expiry_timestamp}\n\n{PREMIUM} **Tier**: **{self.values[0].upper()}**",
-                color=0xFF0000,
-            )
-            embed.set_thumbnail(
-                url=self.user.avatar.url
-                if self.user.avatar
-                else self.user.default_avatar.url
-            )
-            await log_channel.send("<#1396794297386532978>", view=embed)
-
         embed = CV2Embed(
             description=f"**Added Global No Prefix**:\n{ZHUMAN} User: **{self.user.mention}**\n{MENTION} User Mention: {self.user.mention}\n{ZYROXSYS} User ID: {self.user.id}\n\n__**Additional Info**__:\n{ZYROXHAMMER} Added By: **{self.author.display_name}**\n{TIME} Expiry Time: {expiry_text}\n{BOOST} Timestamp: {expiry_timestamp}",
             color=0xFF0000,
@@ -197,11 +175,6 @@ class NoPrefix(commands.Cog):
                 SET expiry_time = NULL
                 WHERE expiry_time IS NULL;
             """)
-            await db.execute("""
-    CREATE TABLE IF NOT EXISTS autonp (
-        guild_id INTEGER PRIMARY KEY
-    )
-    """)
 
             await db.commit()
 
@@ -233,36 +206,6 @@ class NoPrefix(commands.Cog):
                 for user_id in expired_users:
                     user = self.client.get_user(user_id)
                     if user:
-                        log_channel = self.client.get_channel(1396794297386532978)
-                        if log_channel:
-                            embed_log = CV2Embed(
-                                title="No Prefix Expired",
-                                description=(
-                    f"**User**: [{user}](https://discord.com/users/{user.id})\n"
-                    f"**User Mention**: {user.mention}\n"
-                    f"**ID**: {user.id}\n\n"
-                    f"**Removed By**: **{BotName}**\n"
-                ),
-                                color=0xFF0000,
-                            )
-                            embed_log.set_thumbnail(
-                                url=user.display_avatar.url
-                                if user.avatar
-                                else user.default_avatar.url
-                            )
-                            embed_log.set_footer(text="No Prefix Removal Log")
-                            await log_channel.send(
-                                "<#1396794297386532978>", view=embed_log
-                            )
-                        bot = self.client
-                        guild = bot.get_guild(1401125905677553716)
-                        if guild:
-                            member = guild.get_member(user.id)
-                            if member:
-                                role = guild.get_role(1401134167873290311)
-                                if role in member.roles:
-                                    await member.remove_roles(role)
-
                         embed = CV2Embed(
                             description=f"{ICONS_WARNING} Your No Prefix status has **Expired**. You will now require the prefix to use commands.",
                             color=0xFF0000,
@@ -382,14 +325,6 @@ class NoPrefix(commands.Cog):
             await db.execute("DELETE FROM np WHERE id = ?", (user.id,))
             await db.commit()
 
-        guild = ctx.bot.get_guild(1401125905677553716)
-        if guild:
-            member = guild.get_member(user.id)
-            if member:
-                role = guild.get_role(1401134167873290311)
-                if role in member.roles:
-                    await member.remove_roles(role)
-
         embed = CV2Embed(
             description=(
                 f"**User**: [{user}](https://discord.com/users/{user.id})\n"
@@ -401,24 +336,6 @@ class NoPrefix(commands.Cog):
         )
         embed.set_author(name="Removed No Prefix")
         await ctx.reply(view=embed)
-
-        log_channel = ctx.bot.get_channel(1396794297386532978)
-        if log_channel:
-            embed_log = CV2Embed(
-                title="No Prefix Removed",
-                description=(
-                    f"**User**: [{user}](https://discord.com/users/{user.id})\n"
-                    f"**User Mention**: {user.mention}\n"
-                    f"** ID**: {user.id}\n\n"
-                    f"**Removed By**: **{BotName}**\n"
-                ),
-                color=0xFF0000,
-            )
-            embed_log.set_thumbnail(
-                url=user.display_avatar.url if user.avatar else user.default_avatar.url
-            )
-            embed_log.set_footer(text="No Prefix Removal Log")
-            await log_channel.send(" ".join(f"<@{oid}>" for oid in OWNER_IDS), view=embed_log)
 
     @_np.command(
         name="status", help="Check if a user is in the No Prefix list and show details."
@@ -467,173 +384,6 @@ class NoPrefix(commands.Cog):
 
         await ctx.reply(view=embed)
 
-    @commands.group(name="autonp", help="Manage auto no-prefix for partner guilds.")
-    @commands.is_owner()
-    async def autonp(self, ctx):
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @autonp.group(name="guild", help="Manage partner guilds for auto no-prefix.")
-    async def autonp_guild(self, ctx):
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @autonp_guild.command(name="add", help="Add a guild to auto no-prefix.")
-    async def add_guild(self, ctx, guild_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(
-                "SELECT 1 FROM autonp WHERE guild_id = ?", (guild_id,)
-            ) as cursor:
-                if await cursor.fetchone():
-                    await ctx.reply("Guild is already added.")
-                    return
-            await db.execute("INSERT INTO autonp (guild_id) VALUES (?)", (guild_id,))
-            await db.commit()
-        await ctx.reply(f"Guild {guild_id} added to auto no-prefix.")
-
-    @autonp_guild.command(name="remove", help="Remove a guild from auto no-prefix.")
-    async def remove_guild(self, ctx, guild_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(
-                "SELECT 1 FROM autonp WHERE guild_id = ?", (guild_id,)
-            ) as cursor:
-                if not await cursor.fetchone():
-                    await ctx.reply("Guild is not in auto no-prefix.")
-                    return
-            await db.execute("DELETE FROM autonp WHERE guild_id = ?", (guild_id,))
-            await db.commit()
-        await ctx.reply(f"Guild {guild_id} removed from auto no-prefix.")
-
-    @autonp_guild.command(name="list", help="List all guilds with auto no-prefix.")
-    @commands.check(is_owner_or_staff)
-    async def list_guilds(self, ctx):
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT guild_id FROM autonp") as cursor:
-                guilds = [row[0] for row in await cursor.fetchall()]
-                if not guilds:
-                    await ctx.reply(
-                        "No guilds in auto no-prefix.", mention_author=False
-                    )
-                    return
-                await ctx.reply(
-                    f"Guilds in auto no-prefix:\n" + "\n".join(str(g) for g in guilds),
-                    mention_author=False,
-                )
-
-    async def is_user_in_np(self, user_id):
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(
-                "SELECT 1 FROM np WHERE id = ?", (user_id,)
-            ) as cursor:
-                return await cursor.fetchone() is not None
-
-    @commands.Cog.listener()
-    async def on_member_update(self, before, after):
-        if before.premium_since is None and after.premium_since is not None:
-            async with aiosqlite.connect(self.db_path) as db:
-                async with db.execute(
-                    "SELECT 1 FROM autonp WHERE guild_id = ?", (after.guild.id,)
-                ) as cursor:
-                    if not await cursor.fetchone():
-                        return
-            if not await self.is_user_in_np(after.id):
-                await self.add_np(after, timedelta(days=60))
-                log_channel = self.client.get_channel(1406566123234787378)
-                embed = CV2Embed(
-                    title="Added No prefix due to Boosting Partner Server",
-                    description=f"**User**: **[{after}](https://discord.com/users/{after.id})** (ID: {after.id})\n**Server**: {after.guild.name}",
-                    color=0xFF0000,
-                )
-                message = await log_channel.send(" ".join(f"<@{oid}>" for oid in OWNER_IDS), view=embed)
-                await message.publish()
-
-        elif before.premium_since is not None and after.premium_since is None:
-            await self.handle_boost_removal(after)
-
-    # @commands.Cog.listener()
-    # async def on_member_remove(self, member):
-    # await self.handle_boost_removal(member)
-
-    async def handle_boost_removal(self, user):
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(
-                "SELECT 1 FROM autonp WHERE guild_id = ?", (user.guild.id,)
-            ) as cursor:
-                if not await cursor.fetchone():
-                    return
-        if await self.is_user_in_np(user.id):
-            await self.remove_np(user)
-            log_channel = self.client.get_channel(1406566257070964756)
-            embed = CV2Embed(
-                title="Removed No prefix due to Unboosting Partner Server",
-                description=f"**User**: **[{user}](https://discord.com/users/{user.id})** (ID: {user.id})\n**Server**: {user.guild.name}",
-                color=0xFF0000,
-            )
-            message = await log_channel.send(" ".join(f"<@{oid}>" for oid in OWNER_IDS), view=embed)
-            await message.publish()
-
-    async def add_np(self, user, duration):
-        expiry_time = datetime.utcnow() + duration
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                "INSERT INTO np (id, expiry_time) VALUES (?, ?)",
-                (user.id, expiry_time.isoformat()),
-            )
-            await db.commit()
-
-        embed = CV2Embed(
-            title="Congratulations you got 2 months No Prefix!",
-            description=f"You've been credited 2 months of global No Prefix for boosting our Partnered Servers. You can now use my commands without prefix. If you wish to remove it, please reach out [Support Server](https://discord.gg/codexdev).",
-            color=0xFF0000,
-        )
-        try:
-            await user.send(view=embed)
-        except discord.Forbidden:
-            pass
-        except discord.HTTPException:
-            pass
-
-        guild = self.client.get_guild(1401125905677553716)
-        if guild:
-            member = guild.get_member(user.id)
-            if member is not None:
-                role = guild.get_role(1401134167873290311)
-                if role:
-                    await member.add_roles(role)
-
-    async def remove_np(self, user):
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(
-                "SELECT expiry_time FROM np WHERE id = ?", (user.id,)
-            ) as cursor:
-                row = await cursor.fetchone()
-                if row is None or row[0] is None:
-                    return
-
-            await db.execute("DELETE FROM np WHERE id = ?", (user.id,))
-            await db.commit()
-
-        embed = CV2Embed(
-            title=f"{ICONS_WARNING} Global No Prefix Expired",
-            description=f"Hey {user.mention}, your global no prefix has expired!\n\n__**Reason:**__ Unboosting our partnered Server.\nIf you think this is a mistake then please reach out [Support Server](https://discord.gg/codexdev).",
-            color=0xFF0000,
-        )
-
-        try:
-            await user.send(view=embed)
-        except discord.Forbidden:
-            pass
-        except discord.HTTPException:
-            pass
-
-        guild = self.client.get_guild(1401125905677553716)
-        if guild:
-            member = guild.get_member(user.id)
-            if member is not None:
-                role = guild.get_role(1401134167873290311)
-                if role and role in member.roles:
-                    await member.remove_roles(role)
-
     @_np.command(name="reset", help="Reset/clear all users from the no-prefix list")
     @commands.is_owner()
     async def np_reset(self, ctx):
@@ -669,22 +419,6 @@ class NoPrefix(commands.Cog):
                 await db.execute("DELETE FROM np")
                 await db.commit()
 
-            # Remove roles from all members in the main guild
-            guild = self.client.get_guild(1401125905677553716)
-            if guild:
-                role = guild.get_role(1401134167873290311)
-                if role:
-                    members_with_role = [
-                        member for member in guild.members if role in member.roles
-                    ]
-                    for member in members_with_role:
-                        try:
-                            await member.remove_roles(
-                                role, reason="Global no-prefix reset"
-                            )
-                        except discord.HTTPException:
-                            pass
-
             # Send success message
             success_embed = CV2Embed(
                 title=f"{TICK} No-Prefix Reset Complete",
@@ -692,17 +426,6 @@ class NoPrefix(commands.Cog):
                 color=0xFF0000,
             )
             await interaction.response.edit_message(view=success_embed)
-
-            # Log the action
-            log_channel = self.client.get_channel(1396794297386532978)
-            if log_channel:
-                log_embed = CV2Embed(
-                    title="No-Prefix List Reset",
-                    description=f"**Reset By**: [{ctx.author.display_name}](https://discord.com/users/{ctx.author.id})\n{INFO} Users Removed: {count}",
-                    color=0xFF0000,
-                )
-                log_embed.set_footer(text="No Prefix Reset Log")
-                await log_channel.send("<#1396794297386532978>", view=log_embed)
 
         async def no_callback(interaction):
             if interaction.user != ctx.author:
