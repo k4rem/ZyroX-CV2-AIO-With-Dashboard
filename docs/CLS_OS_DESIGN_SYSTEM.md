@@ -276,7 +276,7 @@ All numbers in tables, KPIs, counters and timestamps use `font-variant-numeric: 
 | `display-2` | Chakra Petch | 32 / 36 (mobile 26 / 30) | 600 |
 | `auth-title` | Chakra Petch | 28 / 32 | 600 |
 | `lead` | Plex Sans | 18 / 28 (mobile 16 / 24) | 400, `fg-2`, max 52ch |
-| `wordmark` | Chakra Petch | 15 / 16 | 600, 0.04em |
+| `wordmark` | Plex Sans (D7 changed) | 15 / 15 | 600, 0.04em |
 
 Fluid sizing is allowed only on `display-hero`.
 
@@ -1218,7 +1218,7 @@ Residual risks (tracked in §32 as REVISIT): Chakra Petch's personality on the r
 | D4 | Semantic colours independent of brand; purple budget (§4.3) | **LOCKED** |
 | D5 | Severity scale (critical/high/medium/low) separate from status | **LOCKED** |
 | D6 | IBM Plex Sans + Plex Sans Arabic + Plex Mono for all UI | **LOCKED** |
-| D7 | Chakra Petch as landing/auth display face | **REVISIT AFTER VISUAL PROTOTYPE** (fallback candidate: Plex Sans 600 condensed tracking) |
+| D7 | Chakra Petch as landing/auth display face | **CHANGED after Task A prototype:** Chakra Petch dropped; the `wordmark` style is Plex Sans 600 / 15 px / 0.04 em. Landing/auth use the fallback (Plex Sans 600) unless Task B's prototype proves a display face. |
 | D8 | No display font in dashboard UI (incl. page titles) | **LOCKED** |
 | D9 | Mono uppercase restricted to four roles | **LOCKED** |
 | D10 | Dashboard body 13 px; fixed rem scale | **LOCKED** |

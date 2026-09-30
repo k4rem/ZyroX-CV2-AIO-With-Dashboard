@@ -141,6 +141,31 @@ Global list (§0), plus: `app/page.tsx`, `app/docs`, `app/privacy`, `app/terms`,
 5. **A-5 states:** `loading.tsx`, `error.tsx`, health indicator degraded/offline (stop the preview bot).
 6. **A-6 reduced motion:** drawer open, sidebar collapse.
 
+### A.10 Task A completion record
+
+Status: implemented and committed on `phase-1.5-cls-os-design` (not pushed). Checkpoint run against the real local preview stack with a real Discord OAuth session.
+
+**Delivered:** token layer (`app/globals.css`, `tailwind.config.ts`), IBM Plex Sans / Sans Arabic / Mono via `next/font/google`, primitives under `components/ui` (Button, IconButton, Tooltip, DropdownMenu, Popover, Dialog, Drawer, Skeleton, Status, Panel, State/ErrorState/NoPermissionState, Avatar; Input/Textarea/Switch/Label/Card/Select/Sonner retokened), brand components (`ClsMark`, `Wordmark`, `HexLoader`), the shell (`components/shell/*`), server `app/dashboard/layout.tsx` (session gate, `isRoot`, authorized guild list), reduced `guild/[guildId]/layout.tsx` (auth gate only), `loading.tsx`, `error.tsx`, `lib/shellNav.ts` and `lib/shellHealth.ts` with tests.
+
+**Decisions recorded**
+- **Chakra Petch (D7): CHANGE.** Dropped entirely from Task A (not loaded). Wordmark is IBM Plex Sans 600, 15 px, 0.04 em. The landing/auth display face falls back to the DS fallback candidate (Plex Sans 600) unless Task B's own prototype proves a display face is worth its weight. `--cls-font-display` currently resolves to Plex Sans.
+- **Sidebar persistence:** cookie `cls_sidebar` (read on the server, so first paint matches). 1024-1279 px is a rail with a transient overlay that does not push content; below 1024 px a drawer.
+- **Dev RTL:** cookie `cls_dir` plus a user-menu toggle, honoured only when `NODE_ENV !== "production"`. No query-string switch.
+- **Active nav item:** brand tint + 2 px inline-start bar + brand icon (purple budget: active nav only).
+- **Select:** legacy custom Select retained and retokened, with listbox/option roles, `aria-expanded` and Esc added. Rebuilding on `@radix-ui/react-select` is deferred to Task C (needs a new dependency and touches every form page).
+- **Logo:** official owner asset used as-is (`public/brand/cls-logo-official.png`, plus resized 512/128 px marks). No vector trace. **Follow-up:** owner to supply a vector logo; `ClsMark` is the single swap point.
+- **Health:** real `/bot/status` + `/system/health`, 30 s polling, 8 s probe timeout, 401 reported as "Session ended" (not "Bot unreachable"), state transitions announced via a polite live region.
+- **Nav visibility:** Verification, Leveling, Docs are hidden from nav (routes untouched). Access and Platform appear only when the server computed `isRoot`; no client component imports `isRootOwner` and the client bundle contains none of the server env values.
+- **Dependencies:** five Radix packages added (dialog, direction, dropdown-menu, popover, tooltip; slot and switch were already present). Nothing else.
+
+**Backend finding (not changed, Phase 1 scope):** `/system/health` returns per-guild permission data for all guilds to any authenticated dashboard user. The shell only displays the current guild, but the endpoint should be scoped server-side.
+
+**Hand-offs**
+- Task B: root metadata title/description still says "Zyrox"; `Toaster` sits outside `UiProviders` (physical toast position in RTL).
+- Known shell polish (POLISH, unscheduled): at 1024-1279 px the server renders the expanded sidebar content for one frame before hydration switches to the rail.
+- Task C: `/dashboard` legacy home still shows hard-coded uptime; guild overview cards still show fake metrics; `components/ui/table.tsx` and `components/guild-tabs.tsx` are legacy/unused; `max-w-content` cap leaves the breadcrumb left-aligned on 2560 px while content is centred (decide per-page width classes); `isRootOwner` lives in `lib/utils.ts` next to client helpers (move to a server-only module); Select rebuild (above); legacy colour aliases in the LEGACY block of `globals.css` to be removed as pages migrate.
+- Not verified visually: a non-root session (covered by `buildNav` unit tests and server-side gating of Access/Platform).
+
 ---
 
 ## TASK B: Landing + Authentication Experience

@@ -2,55 +2,437 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   CLS OS design tokens  (docs/CLS_OS_DESIGN_SYSTEM.md §4–§10)
+   Every colour is an RGB channel triplet so Tailwind opacity modifiers work.
+   This block is the only place raw colour values are allowed.
+   ========================================================================== */
 :root {
-  --background: #020617;
-  --foreground: #f8fafc;
-  --primary: #ef4444;
-  --primary-glow: rgba(239, 68, 68, 0.15);
-  --glass-bg: rgba(15, 23, 42, 0.6);
-  --glass-border: rgba(255, 255, 255, 0.05);
-  --glass-red-border: rgba(239, 68, 68, 0.2);
+  color-scheme: dark;
+
+  /* Background + surface ladder (§4.1). Chrome is darker than canvas on purpose. */
+  --cls-bg-void: 4 3 6;
+  --cls-bg-chrome: 7 6 9;
+  --cls-bg-canvas: 9 8 13;
+  --cls-surface-1: 14 13 19;
+  --cls-surface-2: 20 18 27;
+  --cls-surface-3: 27 25 36;
+  --cls-surface-4: 35 32 48;
+  --cls-surface-well: 6 5 8;
+  --cls-surface-overlay: 20 18 27; /* used at 0.92 alpha + blur */
+  --cls-scrim: 2 1 4; /* used at 0.72 alpha */
+
+  /* Lines (§4.2) */
+  --cls-line-subtle: 26 24 34;
+  --cls-line: 36 33 47;
+  --cls-line-strong: 54 50 71;
+  --cls-line-input: 105 99 128;
+
+  /* Brand (§4.3): built on the logo hue (259°). 600 is the literal logo colour. */
+  --cls-brand-700: 74 28 181;
+  --cls-brand-600: 96 37 226;
+  --cls-brand-500: 118 70 242;
+  --cls-brand-400: 148 116 255;
+  --cls-brand-300: 183 162 255;
+
+  /* Text (§4.4) */
+  --cls-fg-1: 236 234 244;
+  --cls-fg-2: 166 162 182;
+  --cls-fg-3: 130 126 147;
+  --cls-fg-4: 86 82 101;
+
+  /* Semantic (§4.5): independent from brand */
+  --cls-ok: 61 214 140;
+  --cls-warn: 242 179 61;
+  --cls-danger: 242 90 95;
+  --cls-danger-fill: 201 52 58;
+  --cls-danger-fill-hover: 217 58 64;
+  --cls-danger-fill-active: 176 45 51;
+  --cls-info: 77 179 240;
+  --cls-neutral: 139 135 154;
+
+  /* Security severity + chart palette (§4.5, §4.6) — defined now, consumed in later phases */
+  --cls-sev-high: 244 124 60;
+  --cls-chart-2: 79 195 217;
+  --cls-chart-3: 217 138 211;
+  --cls-chart-4: 194 190 210;
+
+  /* Shape: radius (§8) */
+  --cls-radius-xs: 2px;
+  --cls-radius-sm: 4px;
+  --cls-radius-md: 6px;
+  --cls-radius-lg: 10px;
+
+  /* Shell dimensions (§6.1) */
+  --cls-topbar-h: 48px;
+  --cls-sidebar-w: 248px;
+  --cls-rail-w: 56px;
+  --cls-content-max: 1680px;
+
+  /* Depth (§9.1, §9.4) */
+  --cls-hl-1: inset 0 1px 0 rgb(255 255 255 / 0.03);
+  --cls-hl-2: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --cls-hl-3: inset 0 1px 0 rgb(255 255 255 / 0.06);
+  --cls-elev-1: 0 8px 24px -8px rgb(0 0 0 / 0.6);
+  --cls-elev-2: 0 24px 64px -16px rgb(0 0 0 / 0.75);
+  --cls-glow-g1: 0 0 0 1px rgb(var(--cls-brand-400) / 0.35), 0 4px 16px -6px rgb(var(--cls-brand-600) / 0.55);
+  --cls-glow-g2: 0 0 12px rgb(var(--cls-brand-500) / 0.35);
+  --cls-glow-d2: 0 0 12px rgb(var(--cls-danger) / 0.4);
+
+  /* Motion (§10.1) */
+  --cls-dur-instant: 80ms;
+  --cls-dur-micro: 120ms;
+  --cls-dur-standard: 200ms;
+  --cls-dur-emphasized: 280ms;
+  --cls-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --cls-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --cls-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --cls-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Overlay enter/exit offsets. Reduced motion zeroes these so only opacity remains. */
+  --cls-enter-shift: 4px;
+  --cls-enter-scale: 0.98;
+  --cls-drawer-shift: 100%;
+  --cls-overlay-dur: var(--cls-dur-standard);
+  --cls-overlay-dur-exit: 120ms;
+  --cls-drawer-dur: var(--cls-dur-emphasized);
+
+  /* Direction multiplier for logical motion: +1 in LTR, -1 in RTL (§26). */
+  --cls-dir: 1;
+
+  /* Typography (§5.1). The next/font variables are attached to <html> in app/layout.tsx. */
+  --cls-font-ui: var(--font-plex-sans), var(--font-plex-arabic), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cls-font-mono: var(--font-plex-mono), var(--font-plex-arabic), ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --cls-font-display: var(--font-plex-sans), var(--font-plex-arabic), var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
+:lang(ar) {
+  --cls-font-ui: var(--font-plex-arabic), var(--font-plex-sans), system-ui, sans-serif;
+}
+
+[dir="rtl"] {
+  --cls-dir: -1;
+}
+
+/* Reduced motion (§10.3): durations above `micro` collapse; transform-based enters
+   become 120 ms opacity fades; pulses and shimmer stop. */
+@media (prefers-reduced-motion: reduce) {
   :root {
-    --background: #020617;
-    --foreground: #f8fafc;
+    --cls-dur-standard: 0ms;
+    --cls-dur-emphasized: 0ms;
+    --cls-enter-shift: 0px;
+    --cls-enter-scale: 1;
+    --cls-drawer-shift: 0%;
+    --cls-overlay-dur: 120ms;
+    --cls-overlay-dur-exit: 80ms;
+    --cls-drawer-dur: 120ms;
+  }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+  .cls-pulse-ring,
+  .cls-shimmer::after,
+  .cls-hex-seg {
+    animation: none !important;
+  }
+  .cls-pulse-ring {
+    opacity: 0.3;
+    transform: scale(1.6);
+  }
+  .cls-shimmer::after {
+    display: none;
+  }
+  .cls-hex-seg {
+    opacity: 0.6;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
-  overflow-x: hidden;
+/* Overlay motion (§10.2). Reduced motion swaps these for a pure opacity fade
+   by zeroing --cls-enter-* / --cls-drawer-shift. */
+@keyframes cls-pop-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, calc(var(--cls-enter-shift) * var(--cls-side-sign, -1)), 0) scale(var(--cls-enter-scale));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes cls-pop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes cls-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes cls-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes cls-drawer-in {
+  from {
+    transform: translate3d(calc(var(--cls-dir) * var(--cls-drawer-sign, -1) * var(--cls-drawer-shift)), 0, 0);
+    opacity: 0.6;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes cls-drawer-out {
+  from {
+    transform: none;
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(calc(var(--cls-dir) * var(--cls-drawer-sign, -1) * var(--cls-drawer-shift)), 0, 0);
+    opacity: 0.6;
+  }
+}
+@keyframes cls-pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+@keyframes cls-shimmer {
+  100% {
+    transform: translateX(calc(var(--cls-dir) * 100%));
+  }
+}
+@keyframes cls-hex-step {
+  0%,
+  16.6% {
+    opacity: 1;
+  }
+  33%,
+  100% {
+    opacity: 0.25;
+  }
 }
 
-/* Custom Scrollbar Styles */
-::-webkit-scrollbar {
-  width: 10px;
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+@layer base {
+  html {
+    background: rgb(var(--cls-bg-canvas));
+  }
+
+  body {
+    @apply bg-canvas font-sans text-body text-fg-1 antialiased;
+    overflow-x: hidden;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgb(var(--cls-brand-600) / 0.45);
+    color: rgb(var(--cls-fg-1));
+  }
+
+  /* Focus (§9.3): keyboard only, never removed without a replacement. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--cls-brand-400));
+    outline-offset: 2px;
+  }
+
+  /* Arabic rules (§5.4): no uppercase or tracking, more leading, never italic. */
+  [dir="rtl"] body,
+  :lang(ar) body {
+    @apply leading-[1.375rem];
+  }
+  [dir="rtl"] .cls-overline,
+  [dir="rtl"] .cls-table-header,
+  :lang(ar) .cls-overline,
+  :lang(ar) .cls-table-header {
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: var(--cls-font-ui);
+    font-size: 0.75rem;
+  }
+
+  /* Token scrollbars (§4.3 purple budget: scrollbars are neutral). */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--cls-line-strong)) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--cls-line-strong));
+    border-radius: var(--cls-radius-lg);
+    border: 2px solid rgb(var(--cls-bg-canvas));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--cls-fg-4));
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: #020617;
+/* ==========================================================================
+   Component classes (used by the primitives; kept in CSS because Radix drives
+   them through data-state / data-side attributes)
+   ========================================================================== */
+@layer components {
+  /* Four sanctioned uses of mono uppercase (§5.2): sidebar group labels, panel
+     overlines, table headers, KPI labels. */
+  .cls-overline {
+    @apply font-mono text-[11px] font-medium uppercase leading-4 tracking-[0.08em] text-fg-3;
+  }
+  .cls-table-header {
+    @apply font-mono text-[11px] font-medium uppercase leading-4 tracking-[0.06em] text-fg-3;
+  }
+  .cls-mono-data {
+    @apply font-mono text-small tabular-nums;
+  }
+
+  /* Direction-aware icon mirroring (§26). Apply only to directional glyphs. */
+  .cls-mirror {
+    display: inline-block;
+  }
+  [dir="rtl"] .cls-mirror {
+    transform: scaleX(-1);
+  }
+
+  /* Surfaces (§9.1) */
+  .cls-panel {
+    @apply rounded-md border border-line bg-surface-1;
+    box-shadow: var(--cls-hl-1);
+  }
+  .cls-raised {
+    @apply rounded-md border border-line bg-surface-2;
+    box-shadow: var(--cls-hl-2);
+  }
+  .cls-floating {
+    @apply rounded-md border border-line-strong;
+    background: rgb(var(--cls-surface-overlay) / 0.92);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow: var(--cls-hl-3), var(--cls-elev-1);
+  }
+
+  .cls-pop[data-state="open"] {
+    animation: cls-pop-in var(--cls-overlay-dur) var(--cls-ease-out) both;
+  }
+  .cls-pop[data-state="closed"] {
+    animation: cls-pop-out var(--cls-overlay-dur-exit) var(--cls-ease-exit) both;
+  }
+  /* The offset direction follows the side the content opens on. */
+  .cls-pop[data-side="top"] {
+    --cls-side-sign: 1;
+  }
+  .cls-tip[data-state="delayed-open"],
+  .cls-tip[data-state="instant-open"] {
+    animation: cls-fade-in var(--cls-dur-micro) var(--cls-ease-out) both;
+  }
+  .cls-scrim[data-state="open"] {
+    animation: cls-fade-in var(--cls-overlay-dur) var(--cls-ease-out) both;
+  }
+  .cls-scrim[data-state="closed"] {
+    animation: cls-fade-out var(--cls-overlay-dur-exit) var(--cls-ease-exit) both;
+  }
+  .cls-modal[data-state="open"] {
+    animation: cls-pop-in var(--cls-drawer-dur) var(--cls-ease-emphasized) both;
+  }
+  .cls-modal[data-state="closed"] {
+    animation: cls-pop-out var(--cls-overlay-dur-exit) var(--cls-ease-exit) both;
+  }
+  .cls-drawer[data-state="open"] {
+    animation: cls-drawer-in var(--cls-drawer-dur) var(--cls-ease-emphasized) both;
+  }
+  .cls-drawer[data-state="closed"] {
+    animation: cls-drawer-out var(--cls-overlay-dur-exit) var(--cls-ease-exit) both;
+  }
+  .cls-drawer-end {
+    --cls-drawer-sign: 1;
+  }
+
+  /* Live status ring (§10.2): only for the global bot indicator and live feeds. */
+  .cls-pulse-ring {
+    animation: cls-pulse-ring 2.4s var(--cls-ease-out) infinite;
+  }
+
+  /* Skeleton (§25): surface-3 blocks with a single shimmer sweep. */
+  .cls-shimmer {
+    position: relative;
+    overflow: hidden;
+    background: rgb(var(--cls-surface-3));
+  }
+  .cls-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(calc(var(--cls-dir) * -100%));
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.04), transparent);
+    animation: cls-shimmer 1.6s linear infinite;
+  }
+
+  /* Hex loader segments (§12.4): six segments light in sequence. */
+  .cls-hex-seg {
+    opacity: 0.25;
+    animation: cls-hex-step 720ms steps(1, end) infinite;
+  }
+
+  /* Route content fade (§10.2): 120 ms opacity, no slide. */
+  .cls-route-fade {
+    animation: cls-fade-in var(--cls-dur-micro) var(--cls-ease-out) both;
+  }
+
+  /* Shell grid (§10.2): the sidebar width is the one layout property that animates. */
+  .cls-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @media (min-width: 1024px) {
+    .cls-shell {
+      grid-template-columns: var(--cls-shell-col, var(--cls-sidebar-w)) minmax(0, 1fr);
+      transition: grid-template-columns var(--cls-dur-emphasized) var(--cls-ease-in-out);
+    }
+    .cls-shell[data-booting="true"] {
+      transition: none;
+    }
+  }
+
+  /* Wordmark (DS §5.3): IBM Plex Sans 600 (D7 resolved: Chakra Petch dropped after the visual prototype). */
+  .cls-wordmark {
+    font-family: var(--cls-font-ui);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
 }
 
-::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 10px;
-  border: 2px solid #020617;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #ef4444; /* Primary Red */
-}
-
-/* Firefox */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #1e293b #020617;
-}
-
+/* ==========================================================================
+   LEGACY (removed by Task B / Task C)
+   Still consumed by the pre-CLS landing page and legacy module pages. Do not
+   use in new code.
+   ========================================================================== */
 @layer utilities {
   .text-balance {
     text-wrap: balance;

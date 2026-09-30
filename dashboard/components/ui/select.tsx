@@ -54,8 +54,15 @@ const Select = ({ children, value, onValueChange, options, placeholder, classNam
         setIsOpen(false)
       }
     }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false)
+    }
     document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
+    document.addEventListener("keydown", handleKey)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("keydown", handleKey)
+    }
   }, [])
 
   // If options are provided, use the legacy rendering
@@ -66,32 +73,36 @@ const Select = ({ children, value, onValueChange, options, placeholder, classNam
         <button
           type="button"
           disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
           onClick={() => setIsOpen(!isOpen)}
           className={cn(
-            "flex h-10 w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-2 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50",
-            isOpen && "ring-2 ring-primary/50 border-slate-700"
+            "flex h-8 w-full items-center justify-between gap-2 rounded-sm border border-line-input bg-surface-well px-2.5 text-body text-fg-1 shadow-well transition-colors duration-micro hover:border-fg-3 focus-visible:border-brand-400 focus-visible:outline-brand-400 focus-visible:outline-offset-0 disabled:cursor-not-allowed disabled:border-line-subtle disabled:text-fg-4",
+            isOpen && "border-brand-400"
           )}
         >
-          <span className={cn("truncate", !selectedOption && "text-slate-500")}>
+          <span className={cn("truncate", !selectedOption && "text-fg-3")}>
             {selectedOption ? selectedOption.label : placeholder}
           </span>
-          <ChevronDown className={cn("h-4 w-4 text-slate-500 transition-transform duration-200", isOpen && "rotate-180")} />
+          <ChevronDown className={cn("h-4 w-4 text-fg-3 transition-transform duration-standard", isOpen && "rotate-180")} />
         </button>
 
         {isOpen && (
-          <div className="absolute top-full z-50 mt-2 w-full overflow-hidden rounded-xl border border-slate-800 bg-[#141B2D] p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="max-h-60 overflow-y-auto overflow-x-hidden no-scrollbar">
+          <div className="cls-floating absolute top-full z-popover mt-1.5 w-full overflow-hidden p-1">
+            <div role="listbox" className="max-h-60 overflow-y-auto overflow-x-hidden no-scrollbar">
               {options.map((option) => (
                 <button
                   key={option.value}
                   type="button"
+                  role="option"
+                  aria-selected={value === option.value}
                   onClick={() => {
                     onValueChange(option.value)
                     setIsOpen(false)
                   }}
                   className={cn(
-                    "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-slate-800",
-                    value === option.value ? "bg-primary text-white" : "text-slate-300"
+                    "flex h-8 w-full items-center justify-between rounded-sm px-2 text-body transition-colors duration-micro hover:bg-surface-3",
+                    value === option.value ? "text-fg-1" : "text-fg-2"
                   )}
                 >
                   <span className="truncate">{option.label}</span>
@@ -126,16 +137,18 @@ const SelectTrigger = React.forwardRef<
     <button
       ref={ref}
       type="button"
+      aria-haspopup="listbox"
+      aria-expanded={context.isOpen}
       onClick={() => context.setIsOpen(!context.isOpen)}
       className={cn(
-        "flex h-10 w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-2 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50",
-        context.isOpen && "ring-2 ring-primary/50 border-slate-700",
+        "flex h-8 w-full items-center justify-between gap-2 rounded-sm border border-line-input bg-surface-well px-2.5 text-body text-fg-1 shadow-well transition-colors duration-micro hover:border-fg-3 focus-visible:border-brand-400 focus-visible:outline-brand-400 focus-visible:outline-offset-0 disabled:cursor-not-allowed disabled:border-line-subtle disabled:text-fg-4",
+        context.isOpen && "border-brand-400",
         className
       )}
       {...props}
     >
       {children}
-      <ChevronDown className={cn("h-4 w-4 text-slate-500 transition-transform duration-200", context.isOpen && "rotate-180")} />
+      <ChevronDown className={cn("h-4 w-4 text-fg-3 transition-transform duration-standard", context.isOpen && "rotate-180")} />
     </button>
   )
 })
@@ -144,7 +157,7 @@ SelectTrigger.displayName = "SelectTrigger"
 const SelectValue = ({ placeholder, className }: { placeholder?: string, className?: string }) => {
   const context = React.useContext(SelectContext)
   if (!context) return null
-  return <span className={cn("truncate", !context.value && "text-slate-500", className)}>{context.value || placeholder}</span>
+  return <span className={cn("truncate", !context.value && "text-fg-3", className)}>{context.value || placeholder}</span>
 }
 
 const SelectContent = ({ children, className }: { children: React.ReactNode, className?: string }) => {
@@ -152,8 +165,8 @@ const SelectContent = ({ children, className }: { children: React.ReactNode, cla
   if (!context || !context.isOpen) return null
 
   return (
-    <div className={cn("absolute top-full z-50 mt-2 w-full overflow-hidden rounded-xl border border-slate-800 bg-[#141B2D] p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-200", className)}>
-      <div className="max-h-60 overflow-y-auto overflow-x-hidden no-scrollbar">
+    <div className={cn("cls-floating absolute top-full z-popover mt-1.5 w-full overflow-hidden p-1", className)}>
+      <div role="listbox" className="max-h-60 overflow-y-auto overflow-x-hidden no-scrollbar">
         {children}
       </div>
     </div>
@@ -173,13 +186,15 @@ const SelectItem = React.forwardRef<
     <button
       ref={ref}
       type="button"
+      role="option"
+      aria-selected={isSelected}
       onClick={() => {
         context.onValueChange(value)
         context.setIsOpen(false)
       }}
       className={cn(
-        "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-slate-800",
-        isSelected ? "bg-primary text-white" : "text-slate-300",
+        "flex h-8 w-full items-center justify-between rounded-sm px-2 text-body transition-colors duration-micro hover:bg-surface-3",
+        isSelected ? "text-fg-1" : "text-fg-2",
         className
       )}
       {...props}

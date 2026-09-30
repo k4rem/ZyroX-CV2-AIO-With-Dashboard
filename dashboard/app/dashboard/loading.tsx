@@ -15,19 +15,23 @@
  */
 
 import React from "react";
-import { RefreshCcw } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
+/** Route-level loading (DS §25): skeleton that matches the page grammar; no spinner screen. */
 export default function DashboardLoading() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 animate-in fade-in duration-500">
-      <div className="relative">
-        <div className="h-16 w-16 border-4 border-slate-800 rounded-full" />
-        <RefreshCcw className="h-16 w-16 text-primary animate-spin absolute top-0 left-0" />
+    <div role="status" className="space-y-6">
+      <span className="sr-only">Loading page</span>
+      <div className="space-y-2">
+        <Skeleton className="h-6 w-56" />
+        <Skeleton className="h-4 w-80 max-w-full" />
       </div>
-      <div className="space-y-2 text-center">
-        <h3 className="text-white font-bold text-lg">Initializing System</h3>
-        <p className="text-slate-500 text-sm animate-pulse">Fetching parameters from edge cortex...</p>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-20 rounded-md" />
+        ))}
       </div>
+      <Skeleton className="h-64 rounded-md" />
     </div>
   );
 }

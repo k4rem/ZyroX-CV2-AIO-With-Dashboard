@@ -14,22 +14,21 @@
  * ╚══════════════════════════════════════════════════════════════════╝
  */
 
-import * as React from "react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
-const Label = React.forwardRef<
-  HTMLLabelElement,
-  React.LabelHTMLAttributes<HTMLLabelElement>
->(({ className, ...props }, ref) => (
-  <label
-    ref={ref}
-    className={cn(
-      "text-sm font-bold leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-slate-300",
-      className
-    )}
-    {...props}
-  />
-))
-Label.displayName = "Label"
+const Label = React.forwardRef<HTMLLabelElement, React.LabelHTMLAttributes<HTMLLabelElement>>(
+  ({ className, ...props }, ref) => (
+    <label
+      ref={ref}
+      className={cn(
+        "text-body font-medium text-fg-1 peer-disabled:cursor-not-allowed peer-disabled:text-fg-4",
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
+Label.displayName = "Label";
 
-export { Label }
+export { Label };

@@ -14,27 +14,33 @@
  * ╚══════════════════════════════════════════════════════════════════╝
  */
 
-import * as React from "react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
-export interface InputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {}
+export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
 
-const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, ...props }, ref) => {
-    return (
-      <input
-        type={type}
-        className={cn(
-          "flex h-12 w-full rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all",
-          className
-        )}
-        ref={ref}
-        {...props}
-      />
-    )
-  }
-)
-Input.displayName = "Input"
+/**
+ * Text input (DS §20.2): 32 px, surface-well, 1 px line-input, radius-sm.
+ * Focus switches the border to brand-400 and adds the ring with zero offset.
+ */
+const Input = React.forwardRef<HTMLInputElement, InputProps>(({ className, type, ...props }, ref) => {
+  return (
+    <input
+      type={type}
+      className={cn(
+        "flex h-8 w-full rounded-sm border border-line-input bg-surface-well px-2.5 text-body text-fg-1 shadow-well",
+        "placeholder:text-fg-3 file:border-0 file:bg-transparent file:text-body file:font-medium",
+        "transition-colors duration-micro hover:border-fg-3",
+        "focus-visible:border-brand-400 focus-visible:outline-brand-400 focus-visible:outline-offset-0",
+        "disabled:cursor-not-allowed disabled:border-line-subtle disabled:text-fg-4 disabled:hover:border-line-subtle",
+        "aria-[invalid=true]:border-danger/60",
+        className,
+      )}
+      ref={ref}
+      {...props}
+    />
+  );
+});
+Input.displayName = "Input";
 
-export { Input }
+export { Input };
