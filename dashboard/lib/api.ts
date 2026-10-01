@@ -153,6 +153,12 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  getSnapshots: (guildId: string) => request<any[]>(`/guilds/${guildId}/snapshots`),
+  planRestore: (guildId: string, snapshotId: string, presentMemberIds: string[]) =>
+    request<any>(`/guilds/${guildId}/snapshots/${snapshotId}/plan`, {
+      method: "POST",
+      body: JSON.stringify({ present_member_ids: presentMemberIds }),
+    }),
   getSecurity: (guildId: string) => request<any>(`/guilds/${guildId}/security`),
   setSecurityMode: (
     guildId: string,

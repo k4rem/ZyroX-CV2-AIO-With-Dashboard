@@ -31,7 +31,10 @@ DONE on phase-5-logging-v2. Commit 79d1571. Postgres events, 30-day message cont
 DONE on phase-7-security-center. Commit 7b0ebba. Real incident analytics, timeline, bot trap, phishing record, dashboard lock. ENFORCE stays locked. Tests: tests/test_security_center.py. Deferral: authenticated visual QA (session ended).
 
 ## Phase 8 command manager
-DONE on phase-8-command-manager. Runtime gate blocks disabled commands and role-restricted commands. Tests: tests/test_command_policy.py.
+DONE on phase-8-command-manager. Commit f7684e8. Runtime gate blocks disabled commands and role-restricted commands. Tests: tests/test_command_policy.py.
+
+## Phase 6 disaster recovery
+DONE on phase-6-disaster-recovery. Dry run, confirmation, disposable-only execution. Absent members are REQUIRES MEMBER REAUTHORIZATION. Tests: tests/test_restore_v1.py. Production execution stays disabled.
 
 
 

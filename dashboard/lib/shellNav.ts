@@ -229,6 +229,15 @@ export const NAV_ITEMS: NavItemDef[] = [
     routes: [{ path: "/antinuke", label: "Protection" }],
   },
   {
+    id: "recovery",
+    label: "Recovery",
+    icon: "settings",
+    group: "system",
+    scope: "guild",
+    rootOnly: true,
+    routes: [{ path: "/recovery", label: "Recovery" }],
+  },
+  {
     id: "settings",
     label: "Bot settings",
     icon: "settings",
