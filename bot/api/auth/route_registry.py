@@ -39,6 +39,7 @@ _GUILD_SUBROUTES = frozenset(
         "/joindm",
         "/customroles",
         "/logging",
+        "/logging/v2",
         "/channels",
         "/roles",
         "/autoreact",
@@ -53,6 +54,7 @@ _GUILD_SUBROUTE_PREFIXES = (
     "/security/",
     "/snapshots/",
     "/tickets/v2/",
+    "/logging/v2/",
 )
 
 _GUILDS_LIST = re.compile(r"^/api/v1/guilds/?$")

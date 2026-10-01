@@ -1,27 +1,18 @@
 import React from "react";
-import dynamic from "next/dynamic";
+import { LoggingV2Workspace } from "@/components/dashboard/logging-v2-workspace";
 import { api } from "@/lib/api";
-import { PageHeader } from "@/components/dashboard/page-header";
 
-const LoggingForm = dynamic(() => import("@/components/dashboard/logging-form").then((mod) => mod.LoggingForm), {
-  loading: () => <div className="h-24 w-full animate-pulse rounded-md bg-surface-2" />,
-});
+const EMPTY = {
+  overview: { total: 0, by_category: {}, top_types: [], series: [], heatmap: null },
+  routes: [],
+  events: [],
+  next_cursor: null,
+};
 
 export default async function LoggingPage({ params }: { params: { guildId: string } }) {
-  const [loggingData, channelsData] = await Promise.all([
-    api.getLogging(params.guildId),
-    api.getChannels(params.guildId),
+  const [home, channels] = await Promise.all([
+    api.getLoggingV2(params.guildId).catch(() => null),
+    api.getChannels(params.guildId).catch(() => []),
   ]);
-
-  if (!loggingData) return null;
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Logging"
-        description="Choose which events are logged and which channels receive them."
-      />
-      <LoggingForm initialConfig={loggingData} channels={channelsData} guildId={params.guildId} />
-    </div>
-  );
+  return <LoggingV2Workspace guildId={params.guildId} initial={home ?? EMPTY} channels={channels ?? []} />;
 }

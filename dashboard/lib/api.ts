@@ -123,6 +123,10 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  getLoggingV2: (guildId: string, query = "") => request<any>(`/guilds/${guildId}/logging/v2${query}`),
+  getLoggingEvent: (guildId: string, eventId: string) => request<any>(`/guilds/${guildId}/logging/v2/events/${eventId}`),
+  updateLoggingRoute: (guildId: string, data: { category: string; enabled: boolean; channel_id: string | null }) =>
+    request<any>(`/guilds/${guildId}/logging/v2/routes`, { method: "PUT", body: JSON.stringify(data) }),
   getLogging: (guildId: string) => request<LoggingConfig>(`/guilds/${guildId}/logging`),
   updateLogging: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/logging`, {

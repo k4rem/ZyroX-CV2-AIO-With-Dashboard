@@ -22,7 +22,10 @@ DONE on phase-3-verification-v2. Tests: tests/test_verification_v2.py. Gate stay
 PARTIAL. No deploy. Health stays `/health`. Rollback of verification is alembic downgrade to 20261001_0004. VPS, firewall, proxy, and lifeOS were not touched.
 
 ## Phase 4 tickets
-DONE WITH SAFE DEFERRALS on phase-4-tickets-v2. Cooldown and blacklist enforced. Tests: tests/test_tickets_v2.py. Deferral: legacy ticket.db import; browser QA not run. V2 starts fresh without writing legacy storage.
+DONE WITH SAFE DEFERRALS on phase-4-tickets-v2. Commit f8f73cf. Cooldown and blacklist enforced. Tests: tests/test_tickets_v2.py. Deferral: legacy ticket.db import; browser QA not run. V2 starts fresh without writing legacy storage.
+
+## Phase 5 logging
+DONE on phase-5-logging-v2. Postgres events, 30-day message content, 90-day event retention, routing, dashboard stream. Tests: tests/test_logging_v2.py, tests/test_postgres_migrations.py, tests/test_route_coverage.py. Deferral: authenticated visual QA (session ended).
 
 
 
