@@ -494,61 +494,77 @@ async def patch_guild_antinuke(guild_id: int, data: AntiNukeUpdate):
     raise HTTPException(status_code=410, detail=_RETIRED)
 
 
-@router.get("/{guild_id}/verification", response_model=VerificationConfig, summary="Get Verification config")
+@router.get("/{guild_id}/verification", summary="Get Verification V2 config")
 async def get_guild_verification(guild_id: int):
-    import aiosqlite
-    
-    async with aiosqlite.connect("db/verification.db") as db:
-        async with db.execute("SELECT verification_channel_id, verified_role_id, log_channel_id, verification_method, enabled FROM verification_config WHERE guild_id = ?", (guild_id,)) as cursor:
-            row = await cursor.fetchone()
-            
-    if row:
-        return VerificationConfig(
-            guild_id=guild_id,
-            verification_channel_id=row[0],
-            verified_role_id=row[1],
-            log_channel_id=row[2],
-            verification_method=row[3],
-            enabled=bool(row[4])
-        )
-    return VerificationConfig(
-        guild_id=guild_id,
-        verification_channel_id=None,
-        verified_role_id=None,
-        log_channel_id=None,
-        verification_method="both",
-        enabled=True
+    from cls_platform.verification.store import get_config
+
+    return await get_config(guild_id)
+
+
+@router.patch("/{guild_id}/verification", summary="Update Verification V2 config")
+async def patch_guild_verification(guild_id: int, data: VerificationUpdate, request: Request):
+    from cls_platform.verification.gate import apply_category_denies, restore_category_denies
+    from cls_platform.verification.store import (
+        check_enable,
+        clear_overwrites,
+        get_config,
+        remember_overwrites,
+        save_config,
+        stored_overwrites,
     )
 
-@router.patch("/{guild_id}/verification", summary="Update Verification config")
-async def patch_guild_verification(guild_id: int, data: VerificationUpdate):
-    from fastapi import HTTPException
-    from utils.legacy_verification import legacy_verification_block_reason
-
-    block = legacy_verification_block_reason()
-    if block:
-        raise HTTPException(status_code=403, detail=block)
-
-    import aiosqlite
-    
-    async with aiosqlite.connect("db/verification.db") as db:
-        async with db.execute("SELECT * FROM verification_config WHERE guild_id = ?", (guild_id,)) as cursor:
-            row = await cursor.fetchone()
-            
-        if not row:
-            await db.execute(
-                "INSERT INTO verification_config (guild_id, verification_channel_id, verified_role_id, log_channel_id, verification_method, enabled) VALUES (?, ?, ?, ?, ?, ?)",
-                (guild_id, data.verification_channel_id or 0, data.verified_role_id or 0, data.log_channel_id or 0, data.verification_method or "both", data.enabled if data.enabled is not None else True)
-            )
-        else:
-            await db.execute(
-                "UPDATE verification_config SET verification_channel_id = COALESCE(?, verification_channel_id), verified_role_id = COALESCE(?, verified_role_id), log_channel_id = COALESCE(?, log_channel_id), verification_method = COALESCE(?, verification_method), enabled = COALESCE(?, enabled) WHERE guild_id = ?",
-                (data.verification_channel_id, data.verified_role_id, data.log_channel_id, data.verification_method, data.enabled, guild_id)
-            )
-            
-        await db.commit()
-        
-    return {"status": "success", "guild_id": guild_id}
+    auth = getattr(request.state, "dashboard_auth", None)
+    actor = int(auth.user_id) if auth is not None else None
+    current = await get_config(guild_id)
+    enabling = data.enabled is True
+    disabling = data.enabled is False and current["enabled"]
+    role_id = int(data.unverified_role_id) if getattr(data, "unverified_role_id", None) else (
+        int(current["unverified_role_id"]) if current["unverified_role_id"] else None
+    )
+    categories = [int(item) for item in (data.protected_category_ids or current["protected_category_ids"] or [])]
+    gate = "ok"
+    if enabling:
+        bot = getattr(request.app.state, "bot", None)
+        guild = bot.get_guild(guild_id) if bot is not None else None
+        role = guild.get_role(role_id) if guild is not None and role_id else None
+        top = guild.me.top_role.position if guild is not None and guild.me else 0
+        position = role.position if role is not None else None
+        gate = check_enable(role_id, categories, top, position)
+        if gate != "ok":
+            raise HTTPException(status_code=409, detail=gate)
+        found = []
+        for category_id in categories:
+            channel = guild.get_channel(category_id) if guild is not None else None
+            if channel is None:
+                raise HTTPException(status_code=409, detail="category_missing")
+            found.append(channel)
+        backups = await apply_category_denies(found, role, reason="CLS verification gate")
+        await remember_overwrites(guild_id, backups)
+    if disabling:
+        bot = getattr(request.app.state, "bot", None)
+        guild = bot.get_guild(guild_id) if bot is not None else None
+        backups = await stored_overwrites(guild_id)
+        if guild is not None and backups:
+            role = guild.get_role(int(backups[0]["role_id"]))
+            by_id = {int(item["category_id"]): guild.get_channel(int(item["category_id"])) for item in backups}
+            if role is not None:
+                await restore_category_denies(by_id, backups, role, reason="CLS verification disabled")
+        await clear_overwrites(guild_id)
+    fields = {
+        "enabled": data.enabled,
+        "unverified_role_id": int(data.unverified_role_id) if data.unverified_role_id else None,
+        "verified_role_id": int(data.verified_role_id) if data.verified_role_id else None,
+        "channel_id": int(data.verification_channel_id) if data.verification_channel_id else None,
+        "method": "button",
+        "grace_seconds": data.grace_seconds,
+        "message": data.message,
+        "protected_category_ids": [int(item) for item in data.protected_category_ids] if data.protected_category_ids is not None else None,
+    }
+    try:
+        saved = await save_config(guild_id=guild_id, actor_id=actor, fields=fields, gate_check=gate if enabling else "ok")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return saved
 
 
 @router.get("/{guild_id}/vanityroles", response_model=List[VanityRoleSetup], summary="Get Vanity Roles setups")

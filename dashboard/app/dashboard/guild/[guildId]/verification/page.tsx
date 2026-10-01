@@ -1,264 +1,198 @@
-/**
- * ╔══════════════════════════════════════════════════════════════════╗
- * ║                                                                  ║
- * ║   ░█▀▀░█▀█░█▀▄░█▀▀░█░█   ░█▀▄░█▀▀░█░█░█▀▀                     ║
- * ║   ░█░░░█░█░█░█░█▀▀░▄▀▄   ░█░█░█▀▀░▀▄▀░▀▀█                     ║
- * ║   ░▀▀▀░▀▀▀░▀▀░░▀▀▀░▀░▀   ░▀▀░░▀▀▀░░▀░░▀▀▀                     ║
- * ║                                                                  ║
- * ║           © 2026 CodeX Devs — All Rights Reserved               ║
- * ║                                                                  ║
- * ║   discord  ──  https://discord.gg/codexdev                      ║
- * ║   youtube  ──  https://youtube.com/@CodeXDevs                   ║
- * ║   github   ──  https://github.com/RayExo                        ║
- * ║                                                                  ║
- * ╚══════════════════════════════════════════════════════════════════╝
- */
-
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Shield, Save, RefreshCcw, Power, Fingerprint, Bell, Hash, UserCheck, Info } from "lucide-react";
+import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { SaveBar } from "@/components/settings/save-bar";
+import { SettingGroup } from "@/components/settings/setting-group";
+import { SettingRow } from "@/components/settings/setting-row";
+import { SettingsInstrument } from "@/components/settings/settings-instrument";
+import { Combobox } from "@/components/ui/combobox";
+import { Readout } from "@/components/ui/readout";
+import { StatusLabel } from "@/components/ui/status";
 import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/utils";
+import { Textarea } from "@/components/ui/textarea";
+import { api } from "@/lib/api";
+
+type VerificationState = {
+  enabled: boolean;
+  unverified_role_id: string | null;
+  verified_role_id: string | null;
+  channel_id: string | null;
+  grace_seconds: number;
+  message: string;
+  protected_category_ids: string[];
+  counts: { grace: number; unverified: number; verified: number; exempt: number };
+};
 
 export default function VerificationPage({ params }: { params: { guildId: string } }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [channels, setChannels] = useState<any[]>([]);
-  const [roles, setRoles] = useState<any[]>([]);
-  const [config, setConfig] = useState<any>({
-    verification_channel_id: null,
-    verified_role_id: null,
-    log_channel_id: null,
-    verification_method: "both",
-    enabled: true,
-  });
+  const [error, setError] = useState<string | null>(null);
+  const [channels, setChannels] = useState<Array<{ id: string; name: string; type: string }>>([]);
+  const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
+  const [saved, setSaved] = useState<VerificationState | null>(null);
+  const [draft, setDraft] = useState<VerificationState | null>(null);
 
-  const fetchData = async () => {
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const [config, channelList, roleList] = await Promise.all([
+          api.getVerification(params.guildId),
+          api.getChannels(params.guildId),
+          api.getRoles(params.guildId),
+        ]);
+        if (cancel) return;
+        const next: VerificationState = {
+          enabled: Boolean(config?.enabled),
+          unverified_role_id: config?.unverified_role_id ?? null,
+          verified_role_id: config?.verified_role_id ?? null,
+          channel_id: config?.channel_id ?? null,
+          grace_seconds: Number(config?.grace_seconds ?? 604800),
+          message: config?.message ?? "",
+          protected_category_ids: config?.protected_category_ids ?? [],
+          counts: config?.counts ?? { grace: 0, unverified: 0, verified: 0, exempt: 0 },
+        };
+        setSaved(next);
+        setDraft(next);
+        setChannels(Array.isArray(channelList) ? channelList : []);
+        setRoles(Array.isArray(roleList) ? roleList.filter((role) => role.name !== "@everyone") : []);
+      } catch {
+        if (!cancel) setError("Verification state could not be loaded.");
+      } finally {
+        if (!cancel) setLoading(false);
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [params.guildId]);
+
+  if (loading) return <div className="h-24 w-full animate-pulse rounded-md bg-surface-2" />;
+  if (!draft || !saved) return <p className="text-small text-fg-3">{error || "Verification is unavailable."}</p>;
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  const categories = channels.filter((channel) => channel.type === "4");
+  const texts = channels.filter((channel) => channel.type === "0");
+  const roleOptions = roles.map((role) => ({ value: role.id, label: role.name }));
+  const channelOptions = texts.map((channel) => ({ value: channel.id, label: channel.name, glyph: "text" as const }));
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
     try {
-      setLoading(true);
-      const [configData, channelsData, rolesData] = await Promise.all([
-        api.getVerification(params.guildId),
-        api.getChannels(params.guildId),
-        api.getRoles(params.guildId),
-      ]);
-      setConfig(configData);
-      setChannels(channelsData);
-      setRoles(rolesData);
-    } catch (error) {
-      console.error("Failed to fetch verification data:", error);
-      toast.error("Failed to load verification configuration");
+      const result = await api.updateVerification(params.guildId, {
+        enabled: draft.enabled,
+        unverified_role_id: draft.unverified_role_id,
+        verified_role_id: draft.verified_role_id,
+        verification_channel_id: draft.channel_id,
+        grace_seconds: draft.grace_seconds,
+        message: draft.message,
+        protected_category_ids: draft.protected_category_ids,
+        verification_method: "button",
+      });
+      const next = { ...draft, ...(result || {}), counts: result?.counts ?? draft.counts };
+      setSaved(next);
+      setDraft(next);
+      toast.success("Verification saved");
+    } catch {
+      setError("Could not save. Enable needs the unverified role, at least one category, and the bot above that role.");
+      toast.error("Could not save verification");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  useEffect(() => { fetchData(); }, [params.guildId]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    const promise = api.updateVerification(params.guildId, {
-      verification_channel_id: config.verification_channel_id,
-      verified_role_id: config.verified_role_id,
-      log_channel_id: config.log_channel_id,
-      verification_method: config.verification_method,
-      enabled: config.enabled,
+  const toggleCategory = (id: string) => {
+    setDraft({
+      ...draft,
+      protected_category_ids: draft.protected_category_ids.includes(id)
+        ? draft.protected_category_ids.filter((item) => item !== id)
+        : [...draft.protected_category_ids, id],
     });
-    toast.promise(promise, {
-      loading: 'Saving verification configuration...',
-      success: 'Verification settings saved!',
-      error: 'Failed to save verification config',
-    });
-    try { await promise; } catch {} finally { setSaving(false); }
   };
 
-  const textChannels = channels.filter(c => c.type === "0" || c.type === 0);
-  const filteredRoles = roles.filter(r => r.name !== "@everyone");
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <RefreshCcw className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Shield className="h-6 w-6 text-primary" />
-            Verification
-          </h2>
-          <p className="text-slate-400 mt-1">Set up a gatekeeper system to verify new members.</p>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Verification"
+        description="Unverified members are denied the categories you choose. The verified role is only a status, not a permission key."
+      />
+      <SettingsInstrument wide summary={draft.enabled ? "Gate on. New joins are unverified. Existing members stay in grace." : "Gate off. No overwrites are applied."}>
+        <dl className="grid grid-cols-2 border border-line-subtle sm:grid-cols-4">
+          <Readout label="Status">
+            <StatusLabel status={draft.enabled ? "online" : "disabled"}>{draft.enabled ? "On" : "Off"}</StatusLabel>
+          </Readout>
+          <Readout label="Grace">{draft.counts.grace}</Readout>
+          <Readout label="Unverified">{draft.counts.unverified}</Readout>
+          <Readout label="Verified">{draft.counts.verified}</Readout>
+        </dl>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        <div className="lg:col-span-3 space-y-6">
-          <div className="bg-[#141B2D] border border-slate-800 rounded-3xl overflow-hidden shadow-xl p-8 space-y-8">
-            
-            {/* Enable/Disable Toggle */}
-            <div className="flex items-center justify-between p-6 bg-slate-900/40 rounded-2xl border border-slate-800">
-              <div className="flex items-center gap-4">
-                <div className={cn("p-3 rounded-xl transition-colors", config.enabled ? "bg-emerald-500/20 text-emerald-500" : "bg-red-500/20 text-red-500")}>
-                  <Power className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-white">System Status</h3>
-                  <p className="text-sm text-slate-400 mt-1">Enable or disable the verification module.</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="px-4 py-2 rounded-full bg-slate-900 border border-slate-800 flex items-center gap-2">
-                  <div className={cn("w-2 h-2 rounded-full", config.enabled ? 'bg-emerald-500 animate-pulse' : 'bg-red-500')} />
-                  <span className="text-xs font-bold uppercase text-slate-300">
-                    {config.enabled ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                <Switch 
-                  checked={config.enabled} 
-                  onCheckedChange={(val) => setConfig({ ...config, enabled: val })}
-                  className="scale-125 data-[state=checked]:bg-emerald-500"
-                />
-              </div>
-            </div>
+        <SettingGroup id="verification-gate" label="Gate">
+          <SettingRow label="Enabled" description="Off leaves every overwrite untouched. On denies view for the unverified role on the selected categories.">
+            <Switch checked={draft.enabled} onCheckedChange={(enabled) => setDraft({ ...draft, enabled })} aria-label="Verification enabled" />
+          </SettingRow>
+          <SettingRow label="Unverified role" description="This role is denied the protected categories. It is removed after the member passes.">
+            <Combobox id="unverified-role" value={draft.unverified_role_id} options={roleOptions} onValueChange={(unverified_role_id) => setDraft({ ...draft, unverified_role_id })} placeholder="Choose a role" />
+          </SettingRow>
+          <SettingRow label="Status role" description="Optional. It does not grant channel access.">
+            <Combobox id="verified-role" value={draft.verified_role_id} options={roleOptions} onValueChange={(verified_role_id) => setDraft({ ...draft, verified_role_id })} placeholder="None" />
+          </SettingRow>
+          <SettingRow label="Channel" description="Where the verify button is posted.">
+            <Combobox id="verify-channel" value={draft.channel_id} options={channelOptions} onValueChange={(channel_id) => setDraft({ ...draft, channel_id })} placeholder="Choose a channel" />
+          </SettingRow>
+        </SettingGroup>
 
-            {/* Selectors Grid */}
-            <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-6 transition-all duration-300", !config.enabled && "opacity-50 pointer-events-none")}>
-              {/* Verification Channel */}
-              <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-primary/20 text-primary rounded-xl"><Hash className="w-5 h-5" /></div>
-                  <div>
-                    <h4 className="font-bold text-white">Verification Channel</h4>
-                    <p className="text-xs text-slate-400 mt-1">Channel where verification happens</p>
-                  </div>
-                </div>
-                <Select
-                  value={config.verification_channel_id || "none"}
-                  onValueChange={(val) => setConfig({ ...config, verification_channel_id: val === "none" ? null : val })}
-                >
-                  <SelectTrigger className="w-full h-12 bg-slate-900 border-slate-800 font-medium">
-                    <SelectValue placeholder="Select a channel..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 max-h-[300px]">
-                    <SelectItem value="none" className="text-slate-400 focus:bg-slate-800">Not Set</SelectItem>
-                    {textChannels.map((c) => (
-                      <SelectItem key={c.id} value={c.id} className="focus:bg-slate-800">#{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Verified Role */}
-              <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-emerald-500/20 text-emerald-500 rounded-xl"><UserCheck className="w-5 h-5" /></div>
-                  <div>
-                    <h4 className="font-bold text-white">Verified Role</h4>
-                    <p className="text-xs text-slate-400 mt-1">Role given after verification</p>
-                  </div>
-                </div>
-                <Select
-                  value={config.verified_role_id || "none"}
-                  onValueChange={(val) => setConfig({ ...config, verified_role_id: val === "none" ? null : val })}
-                >
-                  <SelectTrigger className="w-full h-12 bg-slate-900 border-slate-800 font-medium">
-                    <SelectValue placeholder="Select a role..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 max-h-[300px]">
-                    <SelectItem value="none" className="text-slate-400 focus:bg-slate-800">Not Set</SelectItem>
-                    {filteredRoles.map((r) => (
-                      <SelectItem key={r.id} value={r.id} className="focus:bg-slate-800">{r.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Verification Method */}
-              <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-purple-500/20 text-purple-500 rounded-xl"><Fingerprint className="w-5 h-5" /></div>
-                  <div>
-                    <h4 className="font-bold text-white">Verification Method</h4>
-                    <p className="text-xs text-slate-400 mt-1">How users verify themselves</p>
-                  </div>
-                </div>
-                <Select
-                  value={config.verification_method || "both"}
-                  onValueChange={(val) => setConfig({ ...config, verification_method: val })}
-                >
-                  <SelectTrigger className="w-full h-12 bg-slate-900 border-slate-800 font-medium">
-                    <SelectValue placeholder="Select method..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800">
-                    <SelectItem value="button" className="focus:bg-slate-800">Button Click</SelectItem>
-                    <SelectItem value="captcha" className="focus:bg-slate-800">CAPTCHA Image</SelectItem>
-                    <SelectItem value="both" className="focus:bg-slate-800">Both (Combined)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Log Channel */}
-              <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-blue-500/20 text-blue-500 rounded-xl"><Bell className="w-5 h-5" /></div>
-                  <div>
-                    <h4 className="font-bold text-white">Log Channel</h4>
-                    <p className="text-xs text-slate-400 mt-1">Where verification logs are sent</p>
-                  </div>
-                </div>
-                <Select
-                  value={config.log_channel_id || "none"}
-                  onValueChange={(val) => setConfig({ ...config, log_channel_id: val === "none" ? null : val })}
-                >
-                  <SelectTrigger className="w-full h-12 bg-slate-900 border-slate-800 font-medium">
-                    <SelectValue placeholder="Select a channel..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 max-h-[300px]">
-                    <SelectItem value="none" className="text-slate-400 focus:bg-slate-800">Disabled</SelectItem>
-                    {textChannels.map((c) => (
-                      <SelectItem key={c.id} value={c.id} className="focus:bg-slate-800">#{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <Button onClick={handleSave} disabled={saving} className="w-full h-14 text-base font-bold gap-2">
-              {saving ? <RefreshCcw className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-              Save Configuration
-            </Button>
-          </div>
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          <div className="bg-gradient-to-br from-primary/10 to-transparent border border-primary/20 rounded-3xl p-6 relative overflow-hidden group">
-            <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:scale-110 transition-transform">
-              <Shield className="h-32 w-32 text-primary" />
-            </div>
-            <div className="flex items-center gap-2 mb-4">
-              <Info className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-bold text-white">Important</h3>
-            </div>
-            <p className="text-xs text-slate-400 leading-relaxed mb-4">
-              Ensure @everyone does NOT have &quot;Send Messages&quot; in non-verification channels.
-            </p>
-            <ul className="text-xs text-slate-500 space-y-2">
-              <li>• Assign the Verified Role only to members who pass.</li>
-              <li>• The bot role must be above the Verified Role.</li>
-              <li>• CAPTCHA provides stronger anti-bot protection.</li>
+        <SettingGroup id="verification-categories" label="Protected categories" meta={String(draft.protected_category_ids.length)}>
+          {categories.length === 0 ? (
+            <p className="text-small text-fg-3">No categories are available from Discord right now.</p>
+          ) : (
+            <ul className="space-y-1">
+              {categories.map((category) => (
+                <li key={category.id}>
+                  <label className="flex items-center gap-2 text-small text-fg-1">
+                    <input
+                      type="checkbox"
+                      checked={draft.protected_category_ids.includes(category.id)}
+                      onChange={() => toggleCategory(category.id)}
+                    />
+                    {category.name}
+                  </label>
+                </li>
+              ))}
             </ul>
-          </div>
-        </div>
-      </div>
+          )}
+        </SettingGroup>
+
+        <SettingGroup id="verification-grace" label="Existing members">
+          <SettingRow label="Grace" description="Members who joined before the gate stay as they are until this many hours pass.">
+            <input
+              className="w-24 border border-line-subtle bg-surface-1 px-2 py-1 font-mono text-small"
+              inputMode="numeric"
+              value={Math.round(draft.grace_seconds / 3600)}
+              onChange={(event) => setDraft({ ...draft, grace_seconds: Math.max(0, Number(event.target.value) || 0) * 3600 })}
+              aria-label="Grace hours"
+            />
+          </SettingRow>
+          <Textarea
+            value={draft.message}
+            onChange={(event) => setDraft({ ...draft, message: event.target.value })}
+            placeholder="Why verification exists, and that no Discord password is requested."
+          />
+        </SettingGroup>
+
+        <SaveBar
+          dirty={dirty}
+          saving={saving}
+          error={error}
+          onSave={() => void save()}
+          onDiscard={() => {
+            setDraft(saved);
+            setError(null);
+          }}
+        />
+      </SettingsInstrument>
     </div>
   );
 }

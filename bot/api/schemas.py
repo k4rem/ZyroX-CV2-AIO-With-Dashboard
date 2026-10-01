@@ -265,9 +265,13 @@ class InvitesLeaderboard(BaseModel):
 class VerificationUpdate(BaseModel):
     verification_channel_id: Optional[str] = None
     verified_role_id: Optional[str] = None
+    unverified_role_id: Optional[str] = None
     log_channel_id: Optional[str] = None
     verification_method: Optional[str] = None
     enabled: Optional[bool] = None
+    grace_seconds: Optional[int] = None
+    message: Optional[str] = None
+    protected_category_ids: Optional[List[str]] = None
 
 class VanityRoleSetup(BaseModel):
     vanity: str

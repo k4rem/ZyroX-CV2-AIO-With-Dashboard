@@ -150,7 +150,7 @@ export const api = {
 
   getVerification: (guildId: string) => request<any>(`/guilds/${guildId}/verification`),
   updateVerification: (guildId: string, data: any) =>
-    request<{ status: string }>(`/guilds/${guildId}/verification`, {
+    request<any>(`/guilds/${guildId}/verification`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),

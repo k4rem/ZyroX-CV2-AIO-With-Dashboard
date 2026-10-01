@@ -12,7 +12,11 @@ Commit follows this note.
 ## 2B snapshot foundation
 DONE on branch phase-2b-snapshot-foundation. Tests: tests/test_snapshots.py (checksum, large snowflake, guild isolation, SUSPECT). No restore.
 
-## 2S recovery feasibility
-DONE as a short matrix in docs/PHASE_2S_RECOVERY_FEASIBILITY.md. Member recovery is NO-GO. No production restore.
+## Phase 3 verification
+DONE on phase-3-verification-v2. Tests: tests/test_verification_v2.py. Gate stays off until enabled. Verified role is not an allow key. Visual QA of the page was not opened in a browser this session.
+
+## Phase 3.25 readiness
+PARTIAL. No deploy. Head migration is 20261001_0005. `/health` remains the process check. Backup stays the existing Postgres dump path. Rollback is `alembic downgrade 20261001_0004` for the verification tables only. ENFORCE and live restore stay off. VPS, firewall, proxy, and lifeOS were not touched.
+
 
 
