@@ -109,10 +109,6 @@ class LoggingV2(commands.Cog):
 
     async def cog_load(self):
         self._task = asyncio.create_task(self._retain())
-        try:
-            await migrate_legacy_file()
-        except Exception:
-            logger.exception("legacy logging migration failed")
 
     async def cog_unload(self):
         if self._task is not None:
@@ -120,6 +116,13 @@ class LoggingV2(commands.Cog):
 
     async def _retain(self):
         await self.bot.wait_until_ready()
+        for _ in range(30):
+            try:
+                await migrate_legacy_file()
+                break
+            except Exception:
+                logger.exception("legacy logging migration failed")
+                await asyncio.sleep(2)
         while True:
             try:
                 await purge_expired()
@@ -320,7 +323,7 @@ class LoggingV2(commands.Cog):
         actor, confidence, reason = await self._audit(after.guild, discord.AuditLogAction.member_role_update, after.id)
         await self._save(
             after.guild,
-            category="member_moderation",
+            category="role_events",
             event_type="member_roles",
             actor_id=getattr(actor, "id", None),
             actor_confidence=confidence,

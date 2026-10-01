@@ -137,7 +137,10 @@ export const api = {
   updateLoggingIgnores: (guildId: string, data: { channels: string[]; roles: string[]; users: string[] }) =>
     request<any>(`/guilds/${guildId}/logging/v2/ignores`, { method: "PUT", body: JSON.stringify(data) }),
   sendLoggingTest: (guildId: string, category: string) =>
-    request<{ status: string; channel_id: string }>(`/guilds/${guildId}/logging/v2/routes/${category}/test`, { method: "POST" }),
+    request<{ status: string; channel_id: string; route?: { category: string; enabled: boolean; channel_id: string | null; channel_name?: string | null; delivery?: string } }>(
+      `/guilds/${guildId}/logging/v2/routes/${category}/test`,
+      { method: "POST" },
+    ),
   getLogging: (guildId: string) => request<LoggingConfig>(`/guilds/${guildId}/logging`),
   updateLogging: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/logging`, {

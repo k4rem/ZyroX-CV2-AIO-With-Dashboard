@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
   Hash,
   MessageSquare,
@@ -31,11 +31,38 @@ const LABELS: Record<string, string> = {
 
 const DELIVERY: Record<string, { status: Status; label: string }> = {
   delivering: { status: "healthy", label: "Delivering" },
-  stored_only: { status: "warning", label: "Stored only" },
-  missing_permission: { status: "critical", label: "Missing permission" },
+  stored_only: { status: "disabled", label: "Stored only" },
+  missing_channel: { status: "warning", label: "Missing channel" },
+  bot_cannot_view: { status: "critical", label: "Bot cannot view" },
+  bot_cannot_send: { status: "critical", label: "Bot cannot send" },
+  bot_cannot_embed: { status: "critical", label: "Bot cannot embed links" },
   channel_unavailable: { status: "critical", label: "Channel unavailable" },
-  disabled: { status: "disabled", label: "Disabled" },
   unchecked: { status: "unknown", label: "Not checked" },
+};
+
+const EVENT_TITLES: Record<string, string> = {
+  message_edit: "Message edited",
+  message_delete: "Message deleted",
+  message_bulk_delete: "Messages deleted",
+  member_join: "Member joined",
+  member_leave: "Member left",
+  member_kick: "Member kicked",
+  member_ban: "Member banned",
+  member_unban: "Member unbanned",
+  member_timeout: "Timeout added",
+  member_timeout_removed: "Timeout removed",
+  member_nickname: "Nickname changed",
+  member_roles: "Member roles updated",
+  role_create: "Role created",
+  role_update: "Role updated",
+  role_delete: "Role deleted",
+  channel_create: "Channel created",
+  channel_update: "Channel updated",
+  channel_delete: "Channel deleted",
+  voice_join: "Member joined voice",
+  voice_leave: "Left voice",
+  voice_move: "Moved voice channel",
+  guild_update: "Server settings updated",
 };
 
 type Entity = {
@@ -70,6 +97,18 @@ type EventRow = {
   occurred_at: string;
   presentation?: Presentation;
 };
+
+function eventTitle(row: EventRow) {
+  return row.presentation?.title || EVENT_TITLES[row.event_type] || "Logged event";
+}
+
+function subjectOf(row: EventRow) {
+  const view = row.presentation;
+  const named = personName(view?.target) || personName(view?.actor) || view?.channel?.name;
+  if (named) return view?.channel?.name && !personName(view?.target) && !personName(view?.actor) ? `#${named}` : named;
+  if (row.event_type.startsWith("channel") || row.event_type.startsWith("guild")) return "This server";
+  return "Unknown member";
+}
 
 type RouteRow = {
   category: string;
@@ -123,7 +162,7 @@ function EventIcon({ category }: { category: string }) {
 }
 
 function Avatar({ entity }: { entity?: Entity | null }) {
-  const name = personName(entity) || "?";
+  const name = personName(entity) || "Unknown member";
   if (entity?.avatar_url) {
     // Discord avatar hosts are not in the image allowlist.
     // eslint-disable-next-line @next/next/no-img-element
@@ -201,8 +240,11 @@ export function LoggingV2Workspace({
 
   const sendTest = async (item: RouteRow) => {
     try {
-      await api.sendLoggingTest(guildId, item.category);
-      toast.success(`Test log sent to #${item.channel_name || "the log channel"}`);
+      const saved = await api.sendLoggingTest(guildId, item.category);
+      if (saved.route) {
+        setRoutes((current) => current.map((row) => (row.category === item.category ? { ...row, ...saved.route } : row)));
+      }
+      toast.success(`Test log sent to #${saved.route?.channel_name || item.channel_name || "the log channel"}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not send the test log");
     }
@@ -237,8 +279,6 @@ export function LoggingV2Workspace({
     }
   };
 
-  const series = useMemo(() => data.overview.series.slice(-14), [data.overview.series]);
-  const max = Math.max(1, ...series.map((point) => point.count));
   const retention = data.retention ?? initial.retention ?? { events_days: 90, message_content_days: 30 };
   const view = detail?.presentation;
 
@@ -249,27 +289,11 @@ export function LoggingV2Workspace({
         description="Human-readable server activity, routed to the channels you choose."
       />
 
-      {data.overview.total === 0 ? (
-        <p className="text-small text-fg-3">No stored events yet. Activity appears here after the bot records it.</p>
-      ) : series.length > 0 ? (
+      <section className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div>
-          <p className="mb-2 text-caption text-fg-3">Events over time</p>
-          <ul className="space-y-1">
-            {series.map((point) => (
-              <li key={point.day} className="grid grid-cols-[6.5rem_1fr_2rem] items-center gap-2 text-small">
-                <span className="text-fg-3">{point.day.slice(5)}</span>
-                <span className="h-1.5 bg-accent/80" style={{ width: `${Math.max(6, (point.count / max) * 100)}%` }} />
-                <span className="text-fg-2">{point.count}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      <section className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div>
-          <div className="mb-3 flex flex-wrap items-end gap-2">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <Select
+              className="w-40"
               value={category}
               onValueChange={(value) => {
                 setCategory(value);
@@ -279,12 +303,13 @@ export function LoggingV2Workspace({
               placeholder="Category"
             />
             <Select
+              className="w-44"
               value={eventType}
               onValueChange={setEventType}
               options={[{ value: "", label: "All events" }, ...typeOptions.map((item) => ({ value: item.id, label: item.label }))]}
               placeholder="Event"
             />
-            <div className="relative min-w-[14rem] flex-1">
+            <div className="relative w-52">
               <Input
                 value={search}
                 onChange={(event) => {
@@ -317,8 +342,8 @@ export function LoggingV2Workspace({
                 </ul>
               ) : null}
             </div>
-            <Input type="datetime-local" value={since} onChange={(event) => setSince(event.target.value)} aria-label="From" />
-            <Input type="datetime-local" value={until} onChange={(event) => setUntil(event.target.value)} aria-label="Until" />
+            <Input className="w-44" type="datetime-local" value={since} onChange={(event) => setSince(event.target.value)} aria-label="From" />
+            <Input className="w-44" type="datetime-local" value={until} onChange={(event) => setUntil(event.target.value)} aria-label="Until" />
             <Button type="button" variant="secondary" onClick={() => void load()}>
               Filter
             </Button>
@@ -330,25 +355,30 @@ export function LoggingV2Workspace({
             <ul className="divide-y divide-line-subtle border-y border-line-subtle">
               {data.events.map((row) => {
                 const shown = row.presentation;
-                const who = shown?.actor || shown?.target;
+                const who = shown?.target || shown?.actor;
+                const actor = personName(shown?.actor);
+                const same = shown?.actor?.id && shown.actor.id === shown?.target?.id;
+                const meta = [
+                  actor && !same ? `by ${actor}` : null,
+                  shown?.channel?.name ? `#${shown.channel.name}` : shown?.category_label || LABELS[row.category] || null,
+                  relativeTime(row.occurred_at),
+                ].filter(Boolean);
                 return (
                   <li key={row.id}>
                     <button
                       type="button"
-                      className={`grid w-full grid-cols-[1.25rem_1.75rem_minmax(0,1fr)] items-center gap-2 px-1 py-2 text-start ${detail?.id === row.id ? "bg-bg-2" : ""}`}
+                      className={`grid w-full grid-cols-[1.75rem_minmax(0,1fr)] items-start gap-2 px-1 py-2 text-start ${detail?.id === row.id ? "bg-bg-2" : ""}`}
                       onClick={() => setDetail(row)}
                     >
-                      <EventIcon category={row.category} />
                       <Avatar entity={who} />
                       <span className="min-w-0">
-                        <span className="block truncate text-small text-fg-1">{shown?.summary || shown?.title || "Server event"}</span>
-                        <span className="block truncate text-caption text-fg-3">
-                          {shown?.change_line ? `${shown.change_line} · ` : ""}
-                          <span suppressHydrationWarning>{relativeTime(row.occurred_at)}</span>
-                          {" · "}
-                          {shown?.category_label || LABELS[row.category] || "Server"}
-                          {shown?.channel?.name ? ` · #${shown.channel.name}` : ""}
+                        <span className="flex items-center gap-1.5">
+                          <EventIcon category={row.category} />
+                          <span className="truncate text-small text-fg-1">{subjectOf(row)}</span>
                         </span>
+                        <span className="block truncate text-small text-fg-2">{eventTitle(row)}</span>
+                        {shown?.change_line ? <span className="block truncate text-caption text-fg-1">{shown.change_line}</span> : null}
+                        <span className="block truncate text-caption text-fg-3" suppressHydrationWarning>{meta.join(" · ")}</span>
                       </span>
                     </button>
                   </li>
@@ -364,36 +394,40 @@ export function LoggingV2Workspace({
         </div>
 
         <aside className="border border-line-subtle p-3">
-          {view ? (
+          {detail ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Avatar entity={view.actor || view.target} />
+                <Avatar entity={view?.target || view?.actor} />
                 <div>
-                  <h2 className="text-small font-medium text-fg-1">{view.title}</h2>
-                  <p className="text-caption text-fg-3">{view.category_label}</p>
+                  <h2 className="text-small font-medium text-fg-1">{subjectOf(detail)}</h2>
+                  <p className="text-small text-fg-2">{eventTitle(detail)}</p>
+                  <p className="text-caption text-fg-3" suppressHydrationWarning>
+                    {relativeTime(detail.occurred_at)}
+                    {view?.channel?.name ? ` · #${view.channel.name}` : ""}
+                  </p>
                 </div>
               </div>
-              <p className="text-small text-fg-1">{view.summary}</p>
+              {view?.summary ? <p className="text-small text-fg-1">{view.summary}</p> : null}
               <dl className="space-y-2">
-                {(view.changes ?? []).map((change) => (
+                {(view?.changes ?? []).map((change) => (
                   <div key={`${change.label}-${change.value}`}>
                     <dt className="text-caption text-fg-3">{change.label}</dt>
                     <dd className="whitespace-pre-wrap text-small text-fg-1">{change.value}</dd>
                   </div>
                 ))}
               </dl>
-              {view.jump_url ? (
-                <a className="text-small text-accent" href={view.jump_url} target="_blank" rel="noreferrer">
+              {view?.jump_url ? (
+                <a className="text-small text-accent" href={view?.jump_url} target="_blank" rel="noreferrer">
                   Jump to message
                 </a>
               ) : null}
-              {view.incident_id ? (
+              {view?.incident_id ? (
                 <a className="block text-small text-accent" href={`/dashboard/guild/${guildId}/antinuke`}>
                   Related security incident
                 </a>
               ) : null}
               <div className="flex flex-wrap gap-2">
-                {[view.actor, view.target, view.channel].filter(Boolean).map((entity) => (
+                {[view?.actor, view?.target, view?.channel].filter(Boolean).map((entity) => (
                   <button
                     key={`${entity?.id}-${personName(entity) || entity?.name}`}
                     type="button"

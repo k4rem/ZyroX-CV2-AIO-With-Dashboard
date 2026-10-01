@@ -105,7 +105,7 @@ async def test_snapshots_search_ignores_and_legacy_migration(db_reset):
     assert MESSAGE_RETENTION_DAYS == 30
     saved = await record_event(
         guild_id=GUILD,
-        category="member_moderation",
+        category="role_events",
         event_type="member_roles",
         actor_id=SNOW,
         actor_confidence="certain",
@@ -115,7 +115,7 @@ async def test_snapshots_search_ignores_and_legacy_migration(db_reset):
         metadata={"entities": {"actor": {"id": str(SNOW), "display_name": "Alice", "username": "alice"}, "target": {"id": str(TARGET), "display_name": "Ahmed"}}},
     )
     assert saved["actor_id"] == str(SNOW)
-    assert saved["presentation"]["title"] == "Member role updated"
+    assert saved["presentation"]["title"] == "Member roles updated"
     assert "Alice" in saved["presentation"]["summary"]
     assert str(SNOW) not in saved["presentation"]["summary"]
     found = await list_events(GUILD, query="alice")

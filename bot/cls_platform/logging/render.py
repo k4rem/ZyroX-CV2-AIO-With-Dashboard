@@ -5,9 +5,21 @@ from __future__ import annotations
 from cls_platform.logging.present import present
 
 
+def _embed_author(event: dict, view: dict) -> dict | None:
+    actor = view.get("actor") if isinstance(view.get("actor"), dict) else None
+    target = view.get("target") if isinstance(view.get("target"), dict) else None
+    kind = str(event.get("event_type") or "")
+    # Member and voice logs are about the member. The moderator stays a field.
+    if kind.startswith("member") or kind.startswith("voice"):
+        author = target or actor
+    else:
+        author = actor or target
+    return author if isinstance(author, dict) else None
+
+
 def render_discord(event: dict) -> dict:
     view = event.get("presentation") or present(event)
-    author = view.get("actor") or view.get("target")
+    author = _embed_author(event, view)
     fields = []
     for field in view.get("fields") or []:
         value = field.get("discord") or field.get("dashboard") or "—"

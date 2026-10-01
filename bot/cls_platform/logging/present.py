@@ -28,14 +28,14 @@ TITLES = {
     "member_timeout": "Timeout added",
     "member_timeout_removed": "Timeout removed",
     "member_nickname": "Nickname changed",
-    "member_roles": "Member role updated",
+    "member_roles": "Member roles updated",
     "role_create": "Role created",
     "role_update": "Role updated",
     "role_delete": "Role deleted",
     "channel_create": "Channel created",
     "channel_update": "Channel updated",
     "channel_delete": "Channel deleted",
-    "voice_join": "Joined voice",
+    "voice_join": "Member joined voice",
     "voice_leave": "Left voice",
     "voice_move": "Moved voice channel",
     "guild_update": "Server settings updated",
@@ -58,6 +58,8 @@ def _category_for(event_type: str) -> str:
         return "message_events"
     if event_type in {"member_join", "member_leave"}:
         return "join_leave_events"
+    if event_type == "member_roles":
+        return "role_events"
     if event_type.startswith("member"):
         return "member_moderation"
     if event_type.startswith("voice"):

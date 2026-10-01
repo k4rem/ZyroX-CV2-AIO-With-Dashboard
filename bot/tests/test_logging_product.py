@@ -65,7 +65,7 @@ def test_permission_diff_is_readable():
 def test_member_roles_and_message_edit_read_without_raw_ids():
     roles = present(
         {
-            "category": "member_moderation",
+            "category": "role_events",
             "event_type": "member_roles",
             "actor_id": SNOW,
             "target_id": "222",
@@ -80,7 +80,7 @@ def test_member_roles_and_message_edit_read_without_raw_ids():
             },
         }
     )
-    assert roles["title"] == "Member role updated"
+    assert roles["title"] == "Member roles updated"
     assert roles["summary"] == "Karim updated Ahmed's roles"
     assert "+ VIP" in roles["change_line"]
     assert SNOW not in roles["summary"]
@@ -90,8 +90,9 @@ def test_member_roles_and_message_edit_read_without_raw_ids():
     assert "User ID: 222" in roles["footer"]
     assert SNOW not in roles["footer"]
     embed = render_discord({"event_type": "member_roles", "presentation": roles, "metadata": {}})
-    assert embed["title"] == "Member role updated"
-    assert embed["author_name"] == "Karim"
+    assert embed["title"] == "Member roles updated"
+    assert embed["author_name"] == "Ahmed"
+    assert embed["author_icon"] == "https://cdn.example/a.png"
     assert any("<@&9>" in field["value"] for field in embed["fields"])
 
     edited = present(
@@ -147,10 +148,13 @@ def test_routing_ignores_and_legacy_pipeline_is_off():
     assert message_ignored(channel_id=1, author_id=9, author_role_ids=[], ignores={"channels": [], "roles": [], "users": [9]})
     assert message_ignored(channel_id=1, author_id=3, author_role_ids=[8], ignores={"channels": [], "roles": [8], "users": []})
     assert not message_ignored(channel_id=1, author_id=3, author_role_ids=[4], ignores={"channels": [], "roles": [], "users": []})
-    assert delivery_state(enabled=True, channel_id=SNOW, channel_found=True, can_send=True, checked=True) == "delivering"
-    assert delivery_state(enabled=True, channel_id=None, channel_found=False, can_send=False, checked=True) == "stored_only"
-    assert delivery_state(enabled=True, channel_id=SNOW, channel_found=False, can_send=False, checked=True) == "channel_unavailable"
-    assert delivery_state(enabled=True, channel_id=SNOW, channel_found=True, can_send=False, checked=True) == "missing_permission"
+    assert delivery_state(enabled=True, channel_id=SNOW, resolution="found", can_view=True, can_send=True, can_embed=True) == "delivering"
+    assert delivery_state(enabled=False, channel_id=SNOW, resolution="found", can_view=True, can_send=True, can_embed=True) == "stored_only"
+    assert delivery_state(enabled=True, channel_id=None, resolution="missing") == "missing_channel"
+    assert delivery_state(enabled=True, channel_id=SNOW, resolution="unavailable") == "channel_unavailable"
+    assert delivery_state(enabled=True, channel_id=SNOW, resolution="forbidden") == "bot_cannot_view"
+    assert delivery_state(enabled=True, channel_id=SNOW, resolution="found", can_view=True, can_send=False, can_embed=False) == "bot_cannot_send"
+    assert delivery_state(enabled=True, channel_id=SNOW, resolution="found", can_view=True, can_send=True, can_embed=False) == "bot_cannot_embed"
     specs = {spec.class_name: spec for spec in _cog_specs()}
     assert specs["Logging"].skip is True
     assert specs["LoggingV2"].skip is False

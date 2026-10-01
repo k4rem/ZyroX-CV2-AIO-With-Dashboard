@@ -32,18 +32,24 @@ def delivery_state(
     *,
     enabled: bool,
     channel_id: str | int | None,
-    channel_found: bool,
-    can_send: bool,
-    checked: bool,
+    resolution: str,
+    can_view: bool = False,
+    can_send: bool = False,
+    can_embed: bool = False,
 ) -> str:
+    """resolution is unchecked, missing, unavailable, forbidden, or found."""
     if not enabled:
-        return "disabled"
-    if channel_id is None or channel_id == "":
         return "stored_only"
-    if not checked:
+    if channel_id is None or channel_id == "":
+        return "missing_channel"
+    if resolution == "unchecked":
         return "unchecked"
-    if not channel_found:
+    if resolution == "unavailable":
         return "channel_unavailable"
+    if resolution == "forbidden" or not can_view:
+        return "bot_cannot_view"
     if not can_send:
-        return "missing_permission"
+        return "bot_cannot_send"
+    if not can_embed:
+        return "bot_cannot_embed"
     return "delivering"

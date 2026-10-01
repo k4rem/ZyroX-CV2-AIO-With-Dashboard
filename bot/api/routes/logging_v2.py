@@ -64,29 +64,47 @@ def _bot_or_none():
         return None
 
 
-def _annotate(guild_id: int, rows: list[dict], bot) -> list[dict]:
+async def _annotate(guild_id: int, rows: list[dict], bot) -> list[dict]:
+    import discord
+
     guild = bot.get_guild(guild_id) if bot is not None else None
     me = getattr(guild, "me", None) if guild is not None else None
     checked = guild is not None and me is not None
     annotated = []
     for row in rows:
         channel = None
-        if guild is not None and row.get("channel_id"):
-            channel = guild.get_channel(int(row["channel_id"]))
-        can_send = False
+        resolution = "unchecked" if not checked else "missing"
+        channel_id = row.get("channel_id")
+        if checked and channel_id:
+            channel = guild.get_channel(int(channel_id))
+            if channel is None:
+                try:
+                    channel = await guild.fetch_channel(int(channel_id))
+                except discord.Forbidden:
+                    resolution = "forbidden"
+                except discord.NotFound:
+                    resolution = "unavailable"
+                except discord.HTTPException:
+                    resolution = "unavailable"
+            if channel is not None:
+                resolution = "found"
+        can_view = can_send = can_embed = False
         if channel is not None and me is not None and hasattr(channel, "permissions_for"):
             perms = channel.permissions_for(me)
-            can_send = bool(perms.send_messages and perms.embed_links)
+            can_view = bool(perms.view_channel)
+            can_send = bool(perms.send_messages)
+            can_embed = bool(perms.embed_links)
         annotated.append(
             {
                 **row,
                 "channel_name": getattr(channel, "name", None),
                 "delivery": delivery_state(
                     enabled=bool(row.get("enabled")),
-                    channel_id=row.get("channel_id"),
-                    channel_found=channel is not None,
+                    channel_id=channel_id,
+                    resolution=resolution,
+                    can_view=can_view,
                     can_send=can_send,
-                    checked=checked,
+                    can_embed=can_embed,
                 ),
             }
         )
@@ -125,7 +143,7 @@ async def logging_home(
         "event_types": catalog(),
         "retention": {"events_days": EVENT_RETENTION_DAYS, "message_content_days": MESSAGE_RETENTION_DAYS},
         "overview": await overview(guild_id),
-        "routes": _annotate(guild_id, await routes(guild_id), _bot_or_none()),
+        "routes": await _annotate(guild_id, await routes(guild_id), _bot_or_none()),
         "ignores": _named_ignores(guild_id, await ignores_public(guild_id), _bot_or_none()),
         **page,
     }
@@ -167,7 +185,7 @@ async def logging_route(guild_id: int, body: RouteBody):
         )
     except LoggingError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return _annotate(guild_id, [saved], _bot_or_none())[0]
+    return (await _annotate(guild_id, [saved], _bot_or_none()))[0]
 
 
 @router.put("/{guild_id}/logging/v2/ignores")
@@ -213,7 +231,16 @@ async def logging_test(guild_id: int, category: str, bot=Depends(get_bot)):
         )
     except Exception as exc:
         raise HTTPException(status_code=422, detail="Could not deliver the test log.") from exc
-    return {"status": "sent", "channel_id": str(channel.id)}
+    saved = await route_for(guild_id, category)
+    route_row = {
+        "category": category,
+        "enabled": True,
+        "channel_id": str(channel.id),
+    }
+    if saved is not None:
+        route_row["channel_id"] = str(saved["channel_id"])
+    annotated = await _annotate(guild_id, [route_row], bot)
+    return {"status": "sent", "channel_id": str(channel.id), "route": annotated[0]}
 
 
 def _named_ignores(guild_id: int, raw: dict, bot) -> dict:
