@@ -30,6 +30,7 @@ export interface BotStatus {
   guild_count: number;
   user_count: number;
   shards: number | null;
+  avatar_url?: string | null;
 }
 
 export interface GuildSummary {
@@ -155,6 +156,7 @@ export interface DiscordChannel {
   id: string;
   name: string;
   type: string;
+  parent_id?: string | null;
 }
 
 export interface DiscordRole {
@@ -162,6 +164,7 @@ export interface DiscordRole {
   name: string;
   color: number;
   position: number;
+  managed?: boolean;
 }
 
 export interface TicketUpdate {

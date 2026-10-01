@@ -349,7 +349,9 @@ export async function loadOverview(opts: {
       bucket: on ? "on" : "off",
       detail: on
         ? `Join ${join ?? "the set voice channel"}${steps[1].done ? "" : " · control channel not set"}`
-        : "No join channel set",
+        : j?.enabled === false && typeof j?.join_channel_id === "string" && j.join_channel_id.trim()
+          ? "Off — saved channels kept"
+          : "No join channel set",
       meter: stepsMeter(steps),
       href: `${base}/j2c`,
     });

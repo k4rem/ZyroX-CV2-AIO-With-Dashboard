@@ -33,18 +33,20 @@ function hasText(v: unknown): boolean {
 }
 
 // --- Join to Create --------------------------------------------------------
-// GET /guilds/{id}/j2c returns only guild_id, join_channel_id, control_channel_id,
-// category_id. There is no `enabled` field: the dashboard form and the bot both treat
-// the module as on when a join channel is stored (disabling saves all three as null).
+// `enabled: false` keeps the stored channel ids and means the bot will not
+// create temporary channels. Older payloads omit `enabled`; those are on only
+// when a join channel is stored.
 
 export interface J2CLike {
   join_channel_id?: string | null;
   control_channel_id?: string | null;
   category_id?: string | null;
+  enabled?: boolean | null;
 }
 
 export function j2cEnabled(cfg: J2CLike | null | undefined): boolean {
-  return hasText(cfg?.join_channel_id);
+  if (!cfg || cfg.enabled === false) return false;
+  return hasText(cfg.join_channel_id);
 }
 
 export function j2cSteps(cfg: J2CLike | null | undefined): ChecklistStep[] {

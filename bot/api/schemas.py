@@ -40,6 +40,7 @@ class BotStatus(BaseModel):
     guild_count: int
     user_count: int
     shards: Optional[int]
+    avatar_url: Optional[str] = None
 
 # --- Guild Schemas ---
 
@@ -63,12 +64,14 @@ class DiscordChannel(BaseModel):
     id: str
     name: str
     type: str
+    parent_id: Optional[str] = None
 
 class DiscordRole(BaseModel):
     id: str
     name: str
     color: int
     position: int # text, voice, category, etc.
+    managed: bool = False
 
 # --- Module Configurations ---
 
@@ -177,11 +180,14 @@ class J2CConfig(BaseModel):
     join_channel_id: Optional[str] = None
     control_channel_id: Optional[str] = None
     category_id: Optional[str] = None
+    # False stops new temporary channels without deleting the saved ids.
+    enabled: bool = False
 
 class J2CUpdate(BaseModel):
     join_channel_id: Optional[str] = None
     control_channel_id: Optional[str] = None
     category_id: Optional[str] = None
+    enabled: Optional[bool] = None
 
 class JoinDMConfig(BaseModel):
     guild_id: str

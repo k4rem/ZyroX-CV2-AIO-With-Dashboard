@@ -46,6 +46,10 @@ class JoinToCreate(commands.Cog):
                 await db.execute("ALTER TABLE guild_setup ADD COLUMN category_id INTEGER")
             except aiosqlite.OperationalError:
                 pass
+            try:
+                await db.execute("ALTER TABLE guild_setup ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+            except aiosqlite.OperationalError:
+                pass
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS private_channels (
                     vc_id INTEGER PRIMARY KEY,
@@ -70,14 +74,24 @@ class JoinToCreate(commands.Cog):
     async def load_data(self):
         async with aiosqlite.connect(self.db_path) as db:
             # Load guild setups
-            async with db.execute("SELECT guild_id, join_channel_id, control_channel_id, control_message_id, category_id FROM guild_setup") as cursor:
+            try:
+                await db.execute("ALTER TABLE guild_setup ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+                await db.commit()
+            except aiosqlite.OperationalError:
+                pass
+            async with db.execute(
+                "SELECT guild_id, join_channel_id, control_channel_id, control_message_id, category_id, COALESCE(enabled, 1) FROM guild_setup"
+            ) as cursor:
                 async for row in cursor:
-                    guild_id, join_channel_id, control_channel_id, control_message_id, category_id = row
+                    guild_id, join_channel_id, control_channel_id, control_message_id, category_id, enabled = row
+                    if enabled in (0, False):
+                        continue
                     self.setup_data[guild_id] = {
                         "join_channel_id": join_channel_id,
                         "control_channel_id": control_channel_id,
                         "control_message_id": control_message_id,
-                        "category_id": category_id
+                        "category_id": category_id,
+                        "enabled": 1,
                     }
 
             # Load private channels
@@ -104,10 +118,11 @@ class JoinToCreate(commands.Cog):
 
     async def save_guild_setup(self, guild_id: int, data: Dict):
         async with aiosqlite.connect(self.db_path) as db:
+            enabled = 0 if data.get("enabled", 1) in (0, False) else 1
             await db.execute("""
-                INSERT OR REPLACE INTO guild_setup (guild_id, join_channel_id, control_channel_id, control_message_id, category_id)
-                VALUES (?, ?, ?, ?, ?)
-            """, (guild_id, data["join_channel_id"], data["control_channel_id"], data["control_message_id"], data.get("category_id")))
+                INSERT OR REPLACE INTO guild_setup (guild_id, join_channel_id, control_channel_id, control_message_id, category_id, enabled)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (guild_id, data["join_channel_id"], data["control_channel_id"], data["control_message_id"], data.get("category_id"), enabled))
             await db.commit()
 
     async def save_private_channel(self, vc_id: int, guild_id: int, data: Dict):

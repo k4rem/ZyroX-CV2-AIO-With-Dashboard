@@ -17,11 +17,15 @@ import {
 } from "./overviewModel.ts";
 import { ACTIVITY_WIDGETS, availableActivityWidgets } from "./overviewWidgets.ts";
 
-test("j2c: state comes from join_channel_id (the API has no enabled field)", () => {
+test("j2c: off when disabled even if channels are saved; on when a join channel is stored", () => {
   const unset = { guild_id: "1", join_channel_id: null, control_channel_id: null, category_id: null };
   assert.equal(j2cEnabled(unset), false);
   assert.equal(j2cEnabled({ ...unset, enabled: true }), false);
   assert.equal(j2cEnabled({ ...unset, join_channel_id: "1543105121804615999" }), true);
+  assert.equal(
+    j2cEnabled({ ...unset, join_channel_id: "1543105121804615999", enabled: false }),
+    false,
+  );
   assert.equal(j2cEnabled(null), false);
   assert.equal(stepsDone(j2cSteps({ join_channel_id: "1", control_channel_id: null })), 1);
 });

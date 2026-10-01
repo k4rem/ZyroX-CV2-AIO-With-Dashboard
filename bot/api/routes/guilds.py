@@ -809,80 +809,98 @@ async def patch_guild_tracking(guild_id: int, data: TrackingUpdate):
         await db.commit()
     return {"status": "success"}
 
+async def _ensure_j2c_table(db):
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS guild_setup (
+            guild_id INTEGER PRIMARY KEY,
+            join_channel_id INTEGER,
+            control_channel_id INTEGER,
+            control_message_id INTEGER,
+            category_id INTEGER,
+            enabled INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    for statement in (
+        "ALTER TABLE guild_setup ADD COLUMN category_id INTEGER",
+        "ALTER TABLE guild_setup ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1",
+    ):
+        try:
+            await db.execute(statement)
+        except Exception:
+            pass
+    await db.commit()
+
+
 @router.get("/{guild_id}/j2c", response_model=J2CConfig, summary="Get J2C config")
 async def get_guild_j2c(guild_id: int):
     import aiosqlite
     async with aiosqlite.connect("j2c_data.db") as db:
-        # Ensure table exists
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS guild_setup (
-                guild_id INTEGER PRIMARY KEY,
-                join_channel_id INTEGER,
-                control_channel_id INTEGER,
-                control_message_id INTEGER,
-                category_id INTEGER
-            )
-        """)
-        try:
-            await db.execute("ALTER TABLE guild_setup ADD COLUMN category_id INTEGER")
-        except aiosqlite.OperationalError:
-            pass
-        await db.commit()
-        
-        async with db.execute("SELECT join_channel_id, control_channel_id, category_id FROM guild_setup WHERE guild_id = ?", (guild_id,)) as cursor:
+        await _ensure_j2c_table(db)
+        async with db.execute(
+            "SELECT join_channel_id, control_channel_id, category_id, COALESCE(enabled, 1) FROM guild_setup WHERE guild_id = ?",
+            (guild_id,),
+        ) as cursor:
             row = await cursor.fetchone()
     if row:
         return J2CConfig(
-            guild_id=str(guild_id), 
-            join_channel_id=str(row[0]) if row[0] else None, 
+            guild_id=str(guild_id),
+            join_channel_id=str(row[0]) if row[0] else None,
             control_channel_id=str(row[1]) if row[1] else None,
-            category_id=str(row[2]) if row[2] else None
+            category_id=str(row[2]) if row[2] else None,
+            enabled=bool(row[3]),
         )
-    return J2CConfig(guild_id=str(guild_id))
+    return J2CConfig(guild_id=str(guild_id), enabled=False)
 
 @router.patch("/{guild_id}/j2c", summary="Update J2C config")
 async def patch_guild_j2c(guild_id: int, data: J2CUpdate, bot: "zyrox" = Depends(get_bot)):
     import aiosqlite
-    
-    def to_id(val):
-        if not val or val == "none": return None
-        try: return int(val)
-        except: return None
+    from utils.j2c_state import j2c_should_arm
 
-    join_ch = to_id(data.join_channel_id)
-    ctrl_ch = to_id(data.control_channel_id)
-    cat_ch = to_id(data.category_id)
-    
-    async with aiosqlite.connect("j2c_data.db") as db:
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS guild_setup (
-                guild_id INTEGER PRIMARY KEY,
-                join_channel_id INTEGER,
-                control_channel_id INTEGER,
-                control_message_id INTEGER,
-                category_id INTEGER
-            )
-        """)
+    def to_id(val):
+        if not val or val == "none":
+            return None
         try:
-            await db.execute("ALTER TABLE guild_setup ADD COLUMN category_id INTEGER")
-        except aiosqlite.OperationalError:
-            pass
-        
-        async with db.execute("SELECT control_message_id FROM guild_setup WHERE guild_id = ?", (guild_id,)) as cursor:
+            return int(val)
+        except Exception:
+            return None
+
+    provided = data.dict(exclude_unset=True)
+
+    async with aiosqlite.connect("j2c_data.db") as db:
+        await _ensure_j2c_table(db)
+        async with db.execute(
+            "SELECT join_channel_id, control_channel_id, control_message_id, category_id, COALESCE(enabled, 1) FROM guild_setup WHERE guild_id = ?",
+            (guild_id,),
+        ) as cursor:
             existing = await cursor.fetchone()
-        
-        ctrl_msg_id = existing[0] if existing else None
-        
+
+        existing_join = existing[0] if existing else None
+        existing_ctrl = existing[1] if existing else None
+        ctrl_msg_id = existing[2] if existing else None
+        existing_cat = existing[3] if existing else None
+        existing_enabled = existing[4] if existing else 0
+
+        join_ch = to_id(provided["join_channel_id"]) if "join_channel_id" in provided else existing_join
+        ctrl_ch = to_id(provided["control_channel_id"]) if "control_channel_id" in provided else existing_ctrl
+        cat_ch = to_id(provided["category_id"]) if "category_id" in provided else existing_cat
+        if "enabled" in provided:
+            enabled_flag = 1 if provided["enabled"] else 0
+        elif join_ch is None:
+            enabled_flag = 0
+        else:
+            enabled_flag = 1 if existing_enabled else 0
+
         await db.execute(
-            "INSERT OR REPLACE INTO guild_setup (guild_id, join_channel_id, control_channel_id, control_message_id, category_id) VALUES (?, ?, ?, ?, ?)", 
-            (guild_id, join_ch, ctrl_ch, ctrl_msg_id, cat_ch)
+            "INSERT OR REPLACE INTO guild_setup (guild_id, join_channel_id, control_channel_id, control_message_id, category_id, enabled) VALUES (?, ?, ?, ?, ?, ?)",
+            (guild_id, join_ch, ctrl_ch, ctrl_msg_id, cat_ch, enabled_flag),
         )
         await db.commit()
 
-    # Update cog memory cache and send/update the control panel in real-time
+    # Keep saved channels when disabled. Only an enabled, complete setup stays in the live cache.
     cog = bot.get_cog("JoinToCreate")
+    armed = j2c_should_arm(enabled_flag, join_ch, ctrl_ch)
     if cog:
-        if not join_ch or not ctrl_ch:
+        if not armed:
             if guild_id in cog.setup_data:
                 del cog.setup_data[guild_id]
         else:
@@ -890,7 +908,8 @@ async def patch_guild_j2c(guild_id: int, data: J2CUpdate, bot: "zyrox" = Depends
                 "join_channel_id": join_ch,
                 "control_channel_id": ctrl_ch,
                 "control_message_id": ctrl_msg_id,
-                "category_id": cat_ch
+                "category_id": cat_ch,
+                "enabled": 1,
             }
             guild = bot.get_guild(guild_id)
             if guild:
@@ -1150,10 +1169,12 @@ async def get_guild_channels(guild_id: int, bot: "zyrox" = Depends(get_bot)):
         try:
             # Handle both discord.ChannelType enum and literal ints
             c_type = canal.type.value if hasattr(canal.type, 'value') else int(canal.type)
+            parent = getattr(canal, "category_id", None)
             channels.append(DiscordChannel(
                 id=str(canal.id),
                 name=canal.name,
-                type=str(c_type)
+                type=str(c_type),
+                parent_id=str(parent) if parent else None,
             ))
         except:
             continue
@@ -1172,7 +1193,8 @@ async def get_guild_roles(guild_id: int, bot: "zyrox" = Depends(get_bot)):
             id=str(role.id),
             name=role.name,
             color=role.color.value,
-            position=role.position
+            position=role.position,
+            managed=bool(role.managed),
         ))
     # Sort roles by position descending
     roles.sort(key=lambda x: x.position, reverse=True)

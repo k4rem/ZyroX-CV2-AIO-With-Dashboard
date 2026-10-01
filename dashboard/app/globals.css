@@ -480,6 +480,35 @@
     clip-path: polygon(0 0, 100% 0, 100% 100%, 2px 100%);
   }
 
+  /* J2C signal path. Draws once after a save that completes the flow. */
+  .cls-signal {
+    transform-origin: left;
+    animation: cls-signal-draw var(--cls-dur-data) var(--cls-ease-out) both;
+  }
+  [dir="rtl"] .cls-signal {
+    transform-origin: right;
+  }
+  @keyframes cls-signal-draw {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cls-signal { animation: none; }
+  }
+
+  /* Fenced Discord client palette. Only inside a labelled Discord preview. */
+  .discord-preview {
+    --dp-bg: #313338;
+    --dp-text: #dbdee1;
+    --dp-muted: #949ba4;
+    --dp-embed: #2b2d31;
+    --dp-blurple: #5865f2;
+    --dp-link: #00a8fc;
+    --dp-header: #f2f3f5;
+    color: var(--dp-text);
+    background: var(--dp-bg);
+  }
+
   /* Segment meter cell. Tone comes from --cls-seg-on; only the changed cells
      transition, each delayed by its index for a left-to-right fill. */
   .cls-seg {

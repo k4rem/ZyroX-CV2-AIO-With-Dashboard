@@ -29,13 +29,17 @@ async def get_status(bot: "zyrox" = Depends(get_bot)):
     """
     Returns the live status of the bot.
     """
+    avatar = None
+    if bot.user is not None:
+        avatar = str(bot.user.display_avatar.url)
     return BotStatus(
         user=str(bot.user),
         id=str(bot.user.id) if bot.user else None,
         latency=bot.latency * 1000,
         guild_count=len(bot.guilds),
         user_count=sum(g.member_count or 0 for g in bot.guilds),
-        shards=bot.shard_count
+        shards=bot.shard_count,
+        avatar_url=avatar,
     )
 
 @router.get("/info", response_model=BotInfo, summary="Get bot info", description="Returns general information about the bot including command count and user reach.")
