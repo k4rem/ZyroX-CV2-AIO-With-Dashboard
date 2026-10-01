@@ -164,6 +164,8 @@ def _cog_specs() -> list[CogSpec]:
         CogSpec("cogs.antinuke.antiwebhook", "AntiWebhookUpdate", O),
         CogSpec("cogs.antinuke.antiwebhookcr", "AntiWebhookCreate", O),
         CogSpec("cogs.antinuke.antiwebhookdl", "AntiWebhookDelete", O),
+        # V2 observation only. Legacy antinuke stays loaded until step 2A.5.
+        CogSpec("cogs.security.protection", "SecurityProtection", O),
         CogSpec("cogs.automod.antispam", "AntiSpam", O),
         CogSpec("cogs.automod.anticaps", "AntiCaps", O),
         CogSpec("cogs.automod.anti_invites", "AntiInvite", O),
