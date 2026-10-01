@@ -325,6 +325,8 @@ class ObservationFeed:
         if obs_id is not None and audit_id is not None:
             await self._link_signals(guild_id, candidate, obs_id, late)
             await self._advance_watermark(guild_id, audit_id)
+        if obs_id is not None:
+            await self._attach_incident(obs_id, moment)
         return obs_id
 
     async def _classify(self, guild_id: int, candidate: AuditCandidate, source: str):
@@ -584,7 +586,16 @@ class ObservationFeed:
                 .on_conflict_do_nothing(index_elements=["dedupe_key"])
             )
 
+    async def _attach_incident(self, observation_id: uuid.UUID, moment: datetime) -> None:
+        try:
+            from cls_platform.security.incidents import attach_observation
+
+            await attach_observation(observation_id, now=moment)
+        except Exception:
+            logger.exception("security incident attach failed observation=%s", observation_id)
+
     async def expire_pending(self, guild_id: int, discord_action: str, reason: str = "no audit entry by T_attr") -> None:
+        created_ids: list[uuid.UUID] = []
         async with guild_lock(guild_id):
             async with session_scope() as session:
                 rows = (
@@ -620,6 +631,9 @@ class ObservationFeed:
                     session.add(obs)
                     await session.flush()
                     row.linked_observation_id = obs.id
+                    created_ids.append(obs.id)
+        for obs_id in created_ids:
+            await self._attach_incident(obs_id, self.clock())
 
     async def attribute_targetless(
         self,

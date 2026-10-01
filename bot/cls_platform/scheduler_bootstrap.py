@@ -34,3 +34,22 @@ def register_scheduler_handlers(bot) -> None:
             raise
 
     register_job_handler("role_temp_remove", role_temp_remove)
+
+    async def security_alert_deliver(job):
+        from cls_platform.security.alerts import deliver_due
+
+        await deliver_due()
+
+    async def security_incident_sweep(job):
+        from cls_platform.security.incidents import sweep_expired
+
+        await sweep_expired()
+
+    async def security_retention_purge(job):
+        from cls_platform.security.retention import purge_expired
+
+        await purge_expired()
+
+    register_job_handler("security_alert_deliver", security_alert_deliver)
+    register_job_handler("security_incident_sweep", security_incident_sweep)
+    register_job_handler("security_retention_purge", security_retention_purge)
