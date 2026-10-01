@@ -135,6 +135,7 @@ class ObservationFeed:
         self._buckets: dict[int, TokenBucket] = {}
         self._tasks: dict[tuple[int, str], asyncio.Task] = {}
         self.fetch_calls = 0
+        self.guild_owners: dict[int, int] = {}
 
     def _bucket(self, guild_id: int) -> TokenBucket:
         bucket = self._buckets.get(guild_id)
@@ -327,6 +328,7 @@ class ObservationFeed:
             await self._advance_watermark(guild_id, audit_id)
         if obs_id is not None:
             await self._attach_incident(obs_id, moment)
+            await self._apply_policy(obs_id, moment)
         return obs_id
 
     async def _classify(self, guild_id: int, candidate: AuditCandidate, source: str):
@@ -585,6 +587,14 @@ class ObservationFeed:
                 )
                 .on_conflict_do_nothing(index_elements=["dedupe_key"])
             )
+
+    async def _apply_policy(self, observation_id: uuid.UUID, moment: datetime) -> None:
+        try:
+            from cls_platform.security.decide import apply_policy
+
+            await apply_policy(observation_id, now=moment, guild_owners=self.guild_owners)
+        except Exception:
+            logger.exception("security policy evaluation failed observation=%s", observation_id)
 
     async def _attach_incident(self, observation_id: uuid.UUID, moment: datetime) -> None:
         try:

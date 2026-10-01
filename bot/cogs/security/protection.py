@@ -90,6 +90,14 @@ class SecurityProtection(commands.Cog):
         self.bot = bot
         _feed.source = _DiscordAuditSource(bot)
 
+    def _remember_owner(self, guild) -> None:
+        owner_id = getattr(guild, "owner_id", None)
+        owner = getattr(guild, "owner", None)
+        if owner_id is None and owner is not None:
+            owner_id = getattr(owner, "id", None)
+        if owner_id is not None:
+            _feed.guild_owners[int(guild.id)] = int(owner_id)
+
     @commands.Cog.listener()
     async def on_audit_log_entry_create(self, entry: discord.AuditLogEntry) -> None:
         guild = getattr(entry, "guild", None)
@@ -113,6 +121,7 @@ class SecurityProtection(commands.Cog):
             change_digest=action_class,
         )
         try:
+            self._remember_owner(guild)
             _feed.cls_user_id = getattr(getattr(self.bot, "user", None), "id", None)
             await _feed.ingest_audit(candidate, guild_id=int(guild.id), source="audit_push")
         except Exception:
@@ -151,6 +160,7 @@ class SecurityProtection(commands.Cog):
     async def _signal(self, guild, action_class: str, target_id, digest: str) -> None:
         if guild is None or not security_guild_eligible(guild.id):
             return
+        self._remember_owner(guild)
         try:
             await _feed.record_gateway_signal(
                 guild_id=int(guild.id),

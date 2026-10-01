@@ -95,7 +95,7 @@ DEFAULT_POLICIES: tuple[dict, ...] = (
         "distinct_targets": False,
     },
     {
-        "action_class": "sequence.cls_impairment",
+        "action_class": "sequence.platform_impairment",
         "threshold": 1,
         "window_s": 300,
         "containment_eligible": True,
