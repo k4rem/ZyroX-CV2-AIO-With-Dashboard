@@ -141,6 +141,12 @@ export const api = {
       `/guilds/${guildId}/logging/v2/routes/${category}/test`,
       { method: "POST" },
     ),
+  updateLoggingEventRoute: (guildId: string, eventType: string, data: { mode: string; channel_id: string | null }) =>
+    request<any>(`/guilds/${guildId}/logging/v2/event-routes/${eventType}`, { method: "PUT", body: JSON.stringify(data) }),
+  sendLoggingEventTest: (guildId: string, eventType: string) =>
+    request<{ status: string; channel_id: string }>(`/guilds/${guildId}/logging/v2/event-routes/${eventType}/test`, { method: "POST" }),
+  updateLoggingAppearance: (guildId: string, data: Record<string, unknown>) =>
+    request<any>(`/guilds/${guildId}/logging/v2/appearance`, { method: "PUT", body: JSON.stringify(data) }),
   getLogging: (guildId: string) => request<LoggingConfig>(`/guilds/${guildId}/logging`),
   updateLogging: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/logging`, {

@@ -10,19 +10,24 @@ from pydantic import BaseModel, Field
 from api.dependencies import get_bot
 from cls_platform.logging.entities import snapshot_user
 from cls_platform.logging.pipeline import delivery_state
-from cls_platform.logging.present import catalog
+from cls_platform.logging.present import catalog, groups
 from cls_platform.logging.render import render_discord, sample_event
 from cls_platform.logging.store import (
     CATEGORIES,
     EVENT_RETENTION_DAYS,
     MESSAGE_RETENTION_DAYS,
     LoggingError,
+    appearance_for,
+    delivery_target,
+    event_routes,
     get_event,
     ignores_public,
     list_events,
     overview,
     route_for,
     routes,
+    set_appearance,
+    set_event_route,
     set_ignores,
     set_route,
 )
@@ -41,6 +46,23 @@ class IgnoreBody(BaseModel):
     channels: list[str] = Field(default_factory=list)
     roles: list[str] = Field(default_factory=list)
     users: list[str] = Field(default_factory=list)
+
+
+class EventRouteBody(BaseModel):
+    mode: str
+    channel_id: str | None = None
+
+
+class AppearanceBody(BaseModel):
+    style: str | None = None
+    show_avatars: bool | None = None
+    show_moderator: bool | None = None
+    show_jump: bool | None = None
+    show_timestamp: bool | None = None
+    show_ids: bool | None = None
+    footer_mode: str | None = None
+    footer_text: str | None = None
+    colors: dict[str, str] | None = None
 
 
 def _parse_time(value: str | None) -> datetime | None:
@@ -144,6 +166,9 @@ async def logging_home(
         "retention": {"events_days": EVENT_RETENTION_DAYS, "message_content_days": MESSAGE_RETENTION_DAYS},
         "overview": await overview(guild_id),
         "routes": await _annotate(guild_id, await routes(guild_id), _bot_or_none()),
+        "event_routes": await event_routes(guild_id),
+        "groups": groups(),
+        "appearance": await appearance_for(guild_id),
         "ignores": _named_ignores(guild_id, await ignores_public(guild_id), _bot_or_none()),
         **page,
     }
@@ -204,6 +229,48 @@ async def logging_ignores(guild_id: int, body: IgnoreBody):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.put("/{guild_id}/logging/v2/event-routes/{event_type}")
+async def logging_event_route(guild_id: int, event_type: str, body: EventRouteBody):
+    try:
+        return await set_event_route(
+            guild_id=guild_id,
+            event_type=event_type,
+            mode=body.mode,
+            channel_id=_snowflake(body.channel_id),
+        )
+    except LoggingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.put("/{guild_id}/logging/v2/appearance")
+async def logging_appearance(guild_id: int, body: AppearanceBody):
+    try:
+        return await set_appearance(guild_id, body.model_dump(exclude_unset=True))
+    except LoggingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+async def _send_sample(guild, channel, category: str, event_type: str | None = None):
+    import discord
+
+    me = guild.me
+    if channel is None:
+        raise HTTPException(status_code=422, detail="Channel unavailable.")
+    if me is None or not channel.permissions_for(me).send_messages or not channel.permissions_for(me).embed_links:
+        raise HTTPException(status_code=422, detail="Missing permission to send embeds in that channel.")
+    actor = snapshot_user(me) or {"id": str(me.id), "display_name": me.display_name, "username": me.name, "avatar_url": None}
+    event = sample_event(category, actor=actor, channel=snapshot_channel_safe(channel), event_type=event_type)
+    rendered = render_discord(event, await appearance_for(guild.id))
+    view = None
+    if rendered.get("jump_url"):
+        view = discord.ui.View()
+        view.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label="View message", url=rendered["jump_url"]))
+    try:
+        await channel.send(embed=embed_from_payload(rendered), view=view, allowed_mentions=discord.AllowedMentions.none())
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="Could not deliver the test log.") from exc
+
+
 @router.post("/{guild_id}/logging/v2/routes/{category}/test")
 async def logging_test(guild_id: int, category: str, bot=Depends(get_bot)):
     if category not in CATEGORIES:
@@ -215,32 +282,31 @@ async def logging_test(guild_id: int, category: str, bot=Depends(get_bot)):
     if route is None:
         raise HTTPException(status_code=422, detail="Enable this category and choose a channel first.")
     channel = guild.get_channel(route["channel_id"])
-    me = guild.me
-    if channel is None:
-        raise HTTPException(status_code=422, detail="Channel unavailable.")
-    if me is None or not channel.permissions_for(me).send_messages or not channel.permissions_for(me).embed_links:
-        raise HTTPException(status_code=422, detail="Missing permission to send embeds in that channel.")
-    actor = snapshot_user(me) or {"id": str(me.id), "display_name": me.display_name, "username": me.name, "avatar_url": None}
-    event = sample_event(category, actor=actor, channel=snapshot_channel_safe(channel))
-    try:
-        import discord
-
-        await channel.send(
-            embed=embed_from_payload(render_discord(event)),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail="Could not deliver the test log.") from exc
+    await _send_sample(guild, channel, category)
     saved = await route_for(guild_id, category)
-    route_row = {
-        "category": category,
-        "enabled": True,
-        "channel_id": str(channel.id),
-    }
+    route_row = {"category": category, "enabled": True, "channel_id": str(channel.id)}
     if saved is not None:
         route_row["channel_id"] = str(saved["channel_id"])
     annotated = await _annotate(guild_id, [route_row], bot)
     return {"status": "sent", "channel_id": str(channel.id), "route": annotated[0]}
+
+
+@router.post("/{guild_id}/logging/v2/event-routes/{event_type}/test")
+async def logging_event_test(guild_id: int, event_type: str, bot=Depends(get_bot)):
+    from cls_platform.logging.present import TITLES, category_for_event
+
+    if event_type not in TITLES:
+        raise HTTPException(status_code=422, detail="unknown_event")
+    guild = bot.get_guild(guild_id)
+    if guild is None:
+        raise HTTPException(status_code=404, detail="Guild is not available to the bot.")
+    category = category_for_event(event_type)
+    decision = await delivery_target(guild_id, category, event_type)
+    if not decision["deliver"] or not decision["channel_id"]:
+        raise HTTPException(status_code=422, detail="This event is not delivered to Discord.")
+    channel = guild.get_channel(decision["channel_id"])
+    await _send_sample(guild, channel, category, event_type)
+    return {"status": "sent", "channel_id": str(decision["channel_id"])}
 
 
 def _named_ignores(guild_id: int, raw: dict, bot) -> dict:

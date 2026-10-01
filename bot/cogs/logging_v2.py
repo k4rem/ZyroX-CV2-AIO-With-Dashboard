@@ -14,11 +14,12 @@ from cls_platform.logging.legacy import migrate_legacy_file
 from cls_platform.logging.pipeline import message_ignored
 from cls_platform.logging.render import render_discord
 from cls_platform.logging.store import (
+    appearance_for,
+    delivery_target,
     ignores,
     purge_expired,
     record_event,
     remember_message,
-    route_for,
     stored_message_record,
 )
 
@@ -29,9 +30,11 @@ _MENTIONS = discord.AllowedMentions(everyone=False, users=True, roles=True, repl
 def embed_from_payload(payload: dict, when: datetime | None = None) -> discord.Embed:
     embed = discord.Embed(
         title=payload["title"],
+        description=(payload.get("description") or None),
         color=payload.get("color") or 0x6B7280,
-        timestamp=when or datetime.now(timezone.utc),
     )
+    if payload.get("timestamp", True):
+        embed.timestamp = when or datetime.now(timezone.utc)
     if payload.get("author_name"):
         author = {"name": str(payload["author_name"])[:256]}
         if payload.get("author_icon"):
@@ -199,23 +202,32 @@ class LoggingV2(commands.Cog):
             logger.debug("incident lookup skipped", exc_info=True)
             return None
 
-    async def _save(self, guild: discord.Guild, **payload):
-        saved = await record_event(guild_id=guild.id, **payload)
-        route = await route_for(guild.id, payload["category"])
-        if route is None:
-            return saved
-        channel = guild.get_channel(route["channel_id"])
+    async def _deliver(self, guild: discord.Guild, channel_id: int, event: dict):
+        channel = guild.get_channel(channel_id)
         me = guild.me
         if channel is None or me is None or not hasattr(channel, "permissions_for"):
-            return saved
+            return
         perms = channel.permissions_for(me)
         if not perms.send_messages or not perms.embed_links:
             logger.warning("log route missing send or embed permission for guild %s", guild.id)
-            return saved
+            return
+        rendered = render_discord(event, await appearance_for(guild.id))
+        view = None
+        if rendered.get("jump_url"):
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label="View message", url=rendered["jump_url"]))
         try:
-            await channel.send(embed=embed_from_payload(render_discord(saved)), allowed_mentions=_MENTIONS)
+            await channel.send(embed=embed_from_payload(rendered), view=view, allowed_mentions=_MENTIONS)
         except (discord.Forbidden, discord.HTTPException):
             logger.warning("log route delivery failed for guild %s", guild.id)
+
+    async def _save(self, guild: discord.Guild, **payload):
+        decision = await delivery_target(guild.id, payload["category"], payload["event_type"])
+        if not decision["capture"]:
+            return None
+        saved = await record_event(guild_id=guild.id, **payload)
+        if decision["deliver"] and decision["channel_id"]:
+            await self._deliver(guild, decision["channel_id"], saved)
         return saved
 
     async def _ignored_message(self, guild: discord.Guild, channel_id: int, author) -> bool:

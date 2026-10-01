@@ -1,21 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
-import {
-  Hash,
-  MessageSquare,
-  Mic,
-  Settings,
-  Shield,
-  UserRound,
-} from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { Hash, MessageSquare, Mic, Settings, Shield, UserRound } from "lucide-react";
 import { toast } from "sonner";
+import { LoggingAppearancePanel, type Appearance } from "@/components/dashboard/logging-appearance-panel";
+import { LoggingRoutingPanel } from "@/components/dashboard/logging-routing-panel";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select } from "@/components/ui/select";
-import { StatusLabel, type Status } from "@/components/ui/status";
-import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 
 const LABELS: Record<string, string> = {
@@ -27,17 +23,6 @@ const LABELS: Record<string, string> = {
   channel_events: "Channels",
   guild_events: "Server",
   bot_actions: "Bot actions",
-};
-
-const DELIVERY: Record<string, { status: Status; label: string }> = {
-  delivering: { status: "healthy", label: "Delivering" },
-  stored_only: { status: "disabled", label: "Stored only" },
-  missing_channel: { status: "warning", label: "Missing channel" },
-  bot_cannot_view: { status: "critical", label: "Bot cannot view" },
-  bot_cannot_send: { status: "critical", label: "Bot cannot send" },
-  bot_cannot_embed: { status: "critical", label: "Bot cannot embed links" },
-  channel_unavailable: { status: "critical", label: "Channel unavailable" },
-  unchecked: { status: "unknown", label: "Not checked" },
 };
 
 const EVENT_TITLES: Record<string, string> = {
@@ -63,92 +48,99 @@ const EVENT_TITLES: Record<string, string> = {
   voice_leave: "Left voice",
   voice_move: "Moved voice channel",
   guild_update: "Server settings updated",
+  logging_test: "Logging test",
 };
 
-type Entity = {
-  id?: string;
-  display_name?: string | null;
-  username?: string | null;
-  name?: string | null;
-  avatar_url?: string | null;
-  color?: string | null;
-};
-
-type Field = { name: string; dashboard: string; discord?: string };
-
+type Entity = { id?: string; display_name?: string | null; username?: string | null; name?: string | null; avatar_url?: string | null; color?: string | null };
 type Presentation = {
-  title: string;
-  summary: string;
+  title?: string;
+  summary?: string;
   change_line?: string;
-  category_label: string;
+  category_label?: string;
   actor?: Entity | null;
   target?: Entity | null;
   channel?: Entity | null;
-  fields?: Field[];
   changes?: Array<{ label: string; value: string }>;
   jump_url?: string | null;
-  incident_id?: string | null;
+  identifiers?: string[];
 };
-
 type EventRow = {
   id: string;
   category: string;
   event_type: string;
   occurred_at: string;
+  before?: { content?: string; roles?: Entity[] } | null;
+  after?: { content?: string; roles?: Entity[] } | null;
   presentation?: Presentation;
+};
+type RouteRow = { category: string; enabled: boolean; channel_id: string | null; channel_name?: string | null; delivery?: string };
+type IgnoreUser = { id: string; display_name?: string | null; username?: string | null; avatar_url?: string | null };
+type Home = {
+  routes: RouteRow[];
+  events: EventRow[];
+  next_cursor: string | null;
+  event_types?: Array<{ id: string; label: string; category: string }>;
+  groups?: Array<{ category: string; label: string; events: Array<{ id: string; label: string }> }>;
+  event_routes?: Array<{ event_type: string; mode: string; channel_id: string | null }>;
+  appearance?: Appearance;
+  ignores?: { channels: Array<{ id: string }>; roles: Array<{ id: string }>; users: IgnoreUser[] };
+};
+
+const DEFAULT_APPEARANCE: Appearance = {
+  style: "balanced",
+  show_avatars: true,
+  show_moderator: true,
+  show_jump: true,
+  show_timestamp: true,
+  show_ids: false,
+  footer_mode: "cls",
+  footer_text: null,
+  colors: {},
 };
 
 function eventTitle(row: EventRow) {
   return row.presentation?.title || EVENT_TITLES[row.event_type] || "Logged event";
 }
 
+function personName(entity?: Entity | null) {
+  return entity?.display_name || entity?.username || entity?.name || null;
+}
+
 function subjectOf(row: EventRow) {
   const view = row.presentation;
-  const named = personName(view?.target) || personName(view?.actor) || view?.channel?.name;
-  if (named) return view?.channel?.name && !personName(view?.target) && !personName(view?.actor) ? `#${named}` : named;
-  if (row.event_type.startsWith("channel") || row.event_type.startsWith("guild")) return "This server";
+  const named = personName(view?.target) || personName(view?.actor);
+  if (named) return named;
+  if (row.event_type.startsWith("channel") || row.event_type.startsWith("guild") || row.event_type.startsWith("role_")) {
+    return view?.channel?.name ? `#${view.channel.name}` : view?.target?.name || "This server";
+  }
   return "Unknown member";
 }
 
-type RouteRow = {
-  category: string;
-  enabled: boolean;
-  channel_id: string | null;
-  channel_name?: string | null;
-  delivery?: string;
-};
-
-type IgnoreUser = { id: string; display_name?: string | null; username?: string | null; avatar_url?: string | null };
-type IgnoreRef = { id: string; name?: string | null };
-
-type Home = {
-  overview: {
-    total: number;
-    by_category: Record<string, number>;
-    series: Array<{ day: string; count: number }>;
-  };
-  routes: RouteRow[];
-  events: EventRow[];
-  next_cursor: string | null;
-  event_types?: Array<{ id: string; label: string; category: string }>;
-  retention?: { events_days: number; message_content_days: number };
-  ignores?: { channels: IgnoreRef[]; roles: IgnoreRef[]; users: IgnoreUser[] };
-};
-
-function relativeTime(iso: string) {
-  const delta = Date.now() - new Date(iso).getTime();
-  const minutes = Math.round(delta / 60000);
-  if (Number.isNaN(minutes)) return "";
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  const days = Math.round(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
+function headline(row: EventRow) {
+  const name = subjectOf(row);
+  const type = row.event_type;
+  if (type === "message_edit") return `${name} edited a message`;
+  if (type === "message_delete") return `${name}'s message was deleted`;
+  if (type === "message_bulk_delete") return "Messages were deleted";
+  if (type === "member_roles") return `${name}'s roles changed`;
+  if (type === "member_join") return `${name} joined`;
+  if (type === "member_leave") return `${name} left`;
+  if (type === "member_kick") return `${name} was kicked`;
+  if (type === "member_ban") return `${name} was banned`;
+  if (type === "voice_join") return `${name} joined voice`;
+  if (type === "voice_leave") return `${name} left voice`;
+  if (type === "voice_move") return `${name} moved voice channels`;
+  return eventTitle(row);
 }
 
-function personName(entity?: Entity | null) {
-  return entity?.display_name || entity?.username || entity?.name || null;
+function relativeTime(iso: string) {
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (Number.isNaN(minutes)) return "";
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
 }
 
 function EventIcon({ category }: { category: string }) {
@@ -166,13 +158,9 @@ function Avatar({ entity }: { entity?: Entity | null }) {
   if (entity?.avatar_url) {
     // Discord avatar hosts are not in the image allowlist.
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={entity.avatar_url} alt="" className="size-7 rounded-full object-cover" />;
+    return <img src={entity.avatar_url} alt="" className="size-8 rounded-full object-cover" />;
   }
-  return (
-    <span className="grid size-7 place-items-center rounded-full bg-bg-2 text-caption text-fg-2">
-      {name.slice(0, 1).toUpperCase()}
-    </span>
-  );
+  return <span className="grid size-8 place-items-center rounded-full bg-bg-2 text-caption text-fg-2">{name.slice(0, 1).toUpperCase()}</span>;
 }
 
 export function LoggingV2Workspace({
@@ -180,12 +168,18 @@ export function LoggingV2Workspace({
   initial,
   channels,
   roles,
+  initialTab = "activity",
 }: {
   guildId: string;
   initial: Home;
   channels: Array<{ id: string; name: string; type?: string | number }>;
   roles: Array<{ id: string; name: string; color?: number }>;
+  initialTab?: string;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const starting = initialTab === "routing" || initialTab === "appearance" ? initialTab : "activity";
+  const [tab, setTab] = useState(starting);
   const [data, setData] = useState(initial);
   const [category, setCategory] = useState("");
   const [eventType, setEventType] = useState("");
@@ -196,18 +190,19 @@ export function LoggingV2Workspace({
   const [until, setUntil] = useState("");
   const [detail, setDetail] = useState<EventRow | null>(null);
   const [routes, setRoutes] = useState(initial.routes);
+  const [eventRoutes, setEventRoutes] = useState(initial.event_routes ?? []);
+  const [appearance, setAppearance] = useState<Appearance>(initial.appearance ?? DEFAULT_APPEARANCE);
   const [ignoredChannels, setIgnoredChannels] = useState((initial.ignores?.channels ?? []).map((item) => item.id));
   const [ignoredRoles, setIgnoredRoles] = useState((initial.ignores?.roles ?? []).map((item) => item.id));
   const [ignoredUsers, setIgnoredUsers] = useState<IgnoreUser[]>(initial.ignores?.users ?? []);
-  const [userQuery, setUserQuery] = useState("");
-  const [userHits, setUserHits] = useState<IgnoreUser[]>([]);
 
-  const textChannels = channels.filter((channel) => {
-    const type = String(channel.type ?? "0");
-    return type === "0" || type === "5" || type === "text" || type === "news";
-  });
-  const channelOptions = textChannels.map((channel) => ({ value: channel.id, label: `#${channel.name}` }));
   const typeOptions = (data.event_types ?? []).filter((item) => !category || item.category === category);
+  const dateLabel = since || until ? "Date set" : "Date";
+
+  const openTab = (next: string) => {
+    setTab(next);
+    router.replace(next === "activity" ? pathname : `${pathname}?tab=${next}`);
+  };
 
   const load = async (cursor?: string | null) => {
     const params = new URLSearchParams();
@@ -221,415 +216,390 @@ export function LoggingV2Workspace({
     const next = await api.getLoggingV2(guildId, params.size ? `?${params.toString()}` : "");
     setData(next);
     setRoutes(next.routes);
+    setEventRoutes(next.event_routes ?? []);
+    if (next.appearance) setAppearance(next.appearance);
     setDetail(null);
   };
 
-  const saveRoute = async (item: RouteRow) => {
-    try {
-      const saved = await api.updateLoggingRoute(guildId, {
-        category: item.category,
-        enabled: item.enabled,
-        channel_id: item.channel_id,
-      });
-      setRoutes((current) => current.map((row) => (row.category === item.category ? { ...row, ...saved } : row)));
-      toast.success("Route saved");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not save the route");
-    }
-  };
-
-  const sendTest = async (item: RouteRow) => {
-    try {
-      const saved = await api.sendLoggingTest(guildId, item.category);
-      if (saved.route) {
-        setRoutes((current) => current.map((row) => (row.category === item.category ? { ...row, ...saved.route } : row)));
-      }
-      toast.success(`Test log sent to #${saved.route?.channel_name || item.channel_name || "the log channel"}`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not send the test log");
-    }
-  };
-
-  const saveIgnores = async (next: { channels: string[]; roles: string[]; users: IgnoreUser[] }) => {
-    try {
-      const saved = await api.updateLoggingIgnores(guildId, {
-        channels: next.channels,
-        roles: next.roles,
-        users: next.users.map((user) => user.id),
-      });
-      setIgnoredChannels((saved.channels ?? []).map((item: IgnoreRef) => item.id));
-      setIgnoredRoles((saved.roles ?? []).map((item: IgnoreRef) => item.id));
-      setIgnoredUsers(saved.users ?? []);
-      toast.success("Ignore list saved");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not save ignores");
-    }
-  };
-
-  const lookup = async (value: string, assign: (members: IgnoreUser[]) => void) => {
+  const lookup = async (value: string) => {
     if (value.trim().length < 2) {
-      assign([]);
+      setSuggestions([]);
       return;
     }
     try {
       const result = await api.searchLoggingMembers(guildId, value.trim());
-      assign(result.members ?? []);
+      setSuggestions(result.members ?? []);
     } catch {
-      assign([]);
+      setSuggestions([]);
     }
   };
 
-  const retention = data.retention ?? initial.retention ?? { events_days: 90, message_content_days: 30 };
-  const view = detail?.presentation;
-
   return (
-    <div className="space-y-8">
-      <PageHeader
-        title="Logging"
-        description="Human-readable server activity, routed to the channels you choose."
-      />
+    <div className="space-y-4">
+      <PageHeader title="Logging" description="Server activity, where it is delivered, and how the Discord log looks." />
+      <div className="flex gap-4 border-b border-line">
+        {(
+          [
+            ["activity", "Activity"],
+            ["routing", "Routing"],
+            ["appearance", "Appearance"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            className={`-mb-px border-b-2 pb-2 text-small ${tab === id ? "border-brand-400 text-fg-1" : "border-transparent text-fg-3"}`}
+            onClick={() => openTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      <section className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Select
-              className="w-40"
-              value={category}
-              onValueChange={(value) => {
-                setCategory(value);
-                setEventType("");
-              }}
-              options={[{ value: "", label: "All categories" }, ...Object.entries(LABELS).map(([value, label]) => ({ value, label }))]}
-              placeholder="Category"
-            />
-            <Select
-              className="w-44"
-              value={eventType}
-              onValueChange={setEventType}
-              options={[{ value: "", label: "All events" }, ...typeOptions.map((item) => ({ value: item.id, label: item.label }))]}
-              placeholder="Event"
-            />
-            <div className="relative w-52">
-              <Input
-                value={search}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setSearch(value);
-                  setMemberId("");
-                  void lookup(value, setSuggestions);
-                }}
-                placeholder="Search a member or text"
-                aria-label="Search events"
-              />
-              {suggestions.length > 0 && !memberId ? (
-                <ul className="absolute z-10 mt-1 w-full border border-line bg-bg-1">
-                  {suggestions.map((member) => (
-                    <li key={member.id}>
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2 px-2 py-1.5 text-start text-small hover:bg-bg-2"
-                        onClick={() => {
-                          setMemberId(member.id);
-                          setSearch(member.display_name || member.username || "Member");
-                          setSuggestions([]);
-                        }}
-                      >
-                        <Avatar entity={member} />
-                        <span>{member.display_name || member.username || "Member"}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-            <Input className="w-44" type="datetime-local" value={since} onChange={(event) => setSince(event.target.value)} aria-label="From" />
-            <Input className="w-44" type="datetime-local" value={until} onChange={(event) => setUntil(event.target.value)} aria-label="Until" />
-            <Button type="button" variant="secondary" onClick={() => void load()}>
-              Filter
-            </Button>
-          </div>
-
-          {data.events.length === 0 ? (
-            <p className="text-small text-fg-3">No events match these filters.</p>
-          ) : (
-            <ul className="divide-y divide-line-subtle border-y border-line-subtle">
-              {data.events.map((row) => {
-                const shown = row.presentation;
-                const who = shown?.target || shown?.actor;
-                const actor = personName(shown?.actor);
-                const same = shown?.actor?.id && shown.actor.id === shown?.target?.id;
-                const meta = [
-                  actor && !same ? `by ${actor}` : null,
-                  shown?.channel?.name ? `#${shown.channel.name}` : shown?.category_label || LABELS[row.category] || null,
-                  relativeTime(row.occurred_at),
-                ].filter(Boolean);
-                return (
-                  <li key={row.id}>
-                    <button
-                      type="button"
-                      className={`grid w-full grid-cols-[1.75rem_minmax(0,1fr)] items-start gap-2 px-1 py-2 text-start ${detail?.id === row.id ? "bg-bg-2" : ""}`}
-                      onClick={() => setDetail(row)}
-                    >
-                      <Avatar entity={who} />
-                      <span className="min-w-0">
-                        <span className="flex items-center gap-1.5">
-                          <EventIcon category={row.category} />
-                          <span className="truncate text-small text-fg-1">{subjectOf(row)}</span>
-                        </span>
-                        <span className="block truncate text-small text-fg-2">{eventTitle(row)}</span>
-                        {shown?.change_line ? <span className="block truncate text-caption text-fg-1">{shown.change_line}</span> : null}
-                        <span className="block truncate text-caption text-fg-3" suppressHydrationWarning>{meta.join(" · ")}</span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {data.next_cursor ? (
-            <Button type="button" variant="secondary" className="mt-3" onClick={() => void load(data.next_cursor)}>
-              Older
-            </Button>
-          ) : null}
-        </div>
-
-        <aside className="border border-line-subtle p-3">
-          {detail ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Avatar entity={view?.target || view?.actor} />
-                <div>
-                  <h2 className="text-small font-medium text-fg-1">{subjectOf(detail)}</h2>
-                  <p className="text-small text-fg-2">{eventTitle(detail)}</p>
-                  <p className="text-caption text-fg-3" suppressHydrationWarning>
-                    {relativeTime(detail.occurred_at)}
-                    {view?.channel?.name ? ` · #${view.channel.name}` : ""}
-                  </p>
-                </div>
-              </div>
-              {view?.summary ? <p className="text-small text-fg-1">{view.summary}</p> : null}
-              <dl className="space-y-2">
-                {(view?.changes ?? []).map((change) => (
-                  <div key={`${change.label}-${change.value}`}>
-                    <dt className="text-caption text-fg-3">{change.label}</dt>
-                    <dd className="whitespace-pre-wrap text-small text-fg-1">{change.value}</dd>
-                  </div>
-                ))}
-              </dl>
-              {view?.jump_url ? (
-                <a className="text-small text-accent" href={view?.jump_url} target="_blank" rel="noreferrer">
-                  Jump to message
-                </a>
-              ) : null}
-              {view?.incident_id ? (
-                <a className="block text-small text-accent" href={`/dashboard/guild/${guildId}/antinuke`}>
-                  Related security incident
-                </a>
-              ) : null}
-              <div className="flex flex-wrap gap-2">
-                {[view?.actor, view?.target, view?.channel].filter(Boolean).map((entity) => (
-                  <button
-                    key={`${entity?.id}-${personName(entity) || entity?.name}`}
-                    type="button"
-                    className="text-caption text-fg-3 underline-offset-2 hover:underline"
-                    onClick={() => {
-                      if (entity?.id) void navigator.clipboard.writeText(entity.id);
-                      toast.success("ID copied");
-                    }}
-                  >
-                    Copy ID · {personName(entity) || (entity?.name ? `#${entity.name}` : "entity")}
-                  </button>
-                ))}
-              </div>
-              <details className="text-small">
-                <summary className="cursor-pointer text-fg-3">Developer details</summary>
-                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-caption text-fg-3">{JSON.stringify(detail, null, 2)}</pre>
-              </details>
-            </div>
-          ) : (
-            <p className="text-small text-fg-3">Select an event to read who did it and what changed.</p>
-          )}
-        </aside>
-      </section>
-
-      <section>
-        <div className="mb-2 flex items-baseline justify-between gap-3">
-          <h2 className="text-small font-medium text-fg-1">Routing</h2>
-          <p className="text-caption text-fg-3">
-            Events kept {retention.events_days} days. Message content kept {retention.message_content_days} days.
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[44rem] border-collapse text-start">
-            <thead>
-              <tr className="border-b border-line text-caption text-fg-3">
-                <th className="py-2 pe-3 text-start font-medium">Category</th>
-                <th className="py-2 pe-3 text-start font-medium">Enabled</th>
-                <th className="py-2 pe-3 text-start font-medium">Destination</th>
-                <th className="py-2 pe-3 text-start font-medium">Delivery</th>
-                <th className="py-2 text-start font-medium">Test</th>
-              </tr>
-            </thead>
-            <tbody>
-              {routes.map((row) => {
-                const health = DELIVERY[row.delivery || "unchecked"] ?? DELIVERY.unchecked;
-                return (
-                  <tr key={row.category} className="border-b border-line-subtle">
-                    <td className="py-2 pe-3 text-small">
-                      {LABELS[row.category] ?? row.category}
-                      {row.category === "bot_actions" ? <span className="mt-0.5 block text-caption text-fg-3">Reserved. No events are written yet.</span> : null}
-                    </td>
-                    <td className="py-2 pe-3">
-                      <Switch
-                        checked={row.enabled}
-                        aria-label={`${LABELS[row.category] ?? row.category} enabled`}
-                        onCheckedChange={(enabled) => void saveRoute({ ...row, enabled })}
-                      />
-                    </td>
-                    <td className="py-2 pe-3">
-                      <Select
-                        value={row.channel_id ?? ""}
-                        options={[{ value: "", label: "No channel" }, ...channelOptions]}
-                        placeholder="Select channel"
-                        onValueChange={(channelId) => void saveRoute({ ...row, channel_id: channelId || null })}
-                      />
-                    </td>
-                    <td className="py-2 pe-3">
-                      <StatusLabel status={health.status}>{health.label}</StatusLabel>
-                    </td>
-                    <td className="py-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={!row.enabled || !row.channel_id}
-                        onClick={() => void sendTest(row)}
-                      >
-                        Send test log
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-3">
-        <IgnoreList
-          label="Ignored channels"
-          hint="Message events skip these channels."
-          options={textChannels.map((channel) => ({ id: channel.id, label: `#${channel.name}` }))}
-          selected={ignoredChannels}
-          onChange={(channels) => {
-            setIgnoredChannels(channels);
-            void saveIgnores({ channels, roles: ignoredRoles, users: ignoredUsers });
+      {tab === "activity" ? (
+        <Activity
+          data={data}
+          detail={detail}
+          setDetail={setDetail}
+          category={category}
+          setCategory={setCategory}
+          eventType={eventType}
+          setEventType={setEventType}
+          typeOptions={typeOptions}
+          search={search}
+          setSearch={setSearch}
+          memberId={memberId}
+          setMemberId={setMemberId}
+          suggestions={suggestions}
+          lookup={lookup}
+          since={since}
+          until={until}
+          setSince={setSince}
+          setUntil={setUntil}
+          dateLabel={dateLabel}
+          load={load}
+          clearFilters={() => {
+            setCategory("");
+            setEventType("");
+            setSearch("");
+            setMemberId("");
+            setSince("");
+            setUntil("");
           }}
         />
-        <IgnoreList
-          label="Ignored roles"
-          hint="Message events skip members with these roles."
-          options={roles.filter((role) => role.name !== "@everyone").map((role) => ({ id: role.id, label: `@${role.name}` }))}
-          selected={ignoredRoles}
-          onChange={(next) => {
-            setIgnoredRoles(next);
-            void saveIgnores({ channels: ignoredChannels, roles: next, users: ignoredUsers });
+      ) : null}
+
+      {tab === "routing" ? (
+        <LoggingRoutingPanel
+          routes={routes}
+          groups={data.groups ?? []}
+          eventRoutes={eventRoutes}
+          channels={channels}
+          roles={roles}
+          ignoredChannels={ignoredChannels}
+          ignoredRoles={ignoredRoles}
+          ignoredUsers={ignoredUsers}
+          onRoute={async (row) => {
+            try {
+              const saved = await api.updateLoggingRoute(guildId, { category: row.category, enabled: row.enabled, channel_id: row.channel_id });
+              setRoutes((current) => current.map((item) => (item.category === row.category ? { ...item, ...saved } : item)));
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Could not save the route");
+            }
+          }}
+          onEventRoute={async (eventType, mode, channelId) => {
+            try {
+              const saved = await api.updateLoggingEventRoute(guildId, eventType, { mode, channel_id: channelId });
+              setEventRoutes((current) => {
+                const rest = current.filter((item) => item.event_type !== eventType);
+                return saved.mode === "inherit" ? rest : [...rest, saved];
+              });
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Could not save the event route");
+            }
+          }}
+          onTest={async (category) => {
+            try {
+              const saved = await api.sendLoggingTest(guildId, category);
+              if (saved.route) setRoutes((current) => current.map((item) => (item.category === category ? { ...item, ...saved.route } : item)));
+              toast.success("Test log sent");
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Could not send the test log");
+            }
+          }}
+          onEventTest={async (eventType) => {
+            try {
+              await api.sendLoggingEventTest(guildId, eventType);
+              toast.success("Test log sent");
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Could not send the test log");
+            }
+          }}
+          onIgnores={async (next) => {
+            try {
+              const saved = await api.updateLoggingIgnores(guildId, {
+                channels: next.channels,
+                roles: next.roles,
+                users: next.users.map((user) => user.id),
+              });
+              setIgnoredChannels((saved.channels ?? []).map((item: { id: string }) => item.id));
+              setIgnoredRoles((saved.roles ?? []).map((item: { id: string }) => item.id));
+              setIgnoredUsers(saved.users ?? []);
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Could not save exclusions");
+            }
+          }}
+          onSearchMembers={async (query) => (await api.searchLoggingMembers(guildId, query)).members ?? []}
+        />
+      ) : null}
+
+      {tab === "appearance" ? (
+        <LoggingAppearancePanel
+          appearance={appearance}
+          onChange={async (patch) => {
+            setAppearance((current) => ({ ...current, ...patch, colors: patch.colors ? { ...current.colors, ...patch.colors } : current.colors }));
+            try {
+              const saved = await api.updateLoggingAppearance(guildId, patch);
+              setAppearance(saved);
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Could not save appearance");
+            }
           }}
         />
-        <div>
-          <h3 className="text-small font-medium text-fg-1">Ignored members</h3>
-          <p className="mb-2 text-caption text-fg-3">Message events skip these members.</p>
-          <Input
-            value={userQuery}
-            placeholder="Search members"
-            aria-label="Search members to ignore"
-            onChange={(event) => {
-              const value = event.target.value;
-              setUserQuery(value);
-              void lookup(value, setUserHits);
-            }}
-          />
-          {userHits.length > 0 ? (
-            <ul className="mt-1 border border-line-subtle">
-              {userHits.map((member) => (
-                <li key={member.id}>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 px-2 py-1.5 text-start text-small hover:bg-bg-2"
-                    onClick={() => {
-                      const next = ignoredUsers.some((user) => user.id === member.id) ? ignoredUsers : [...ignoredUsers, member];
-                      setIgnoredUsers(next);
-                      setUserHits([]);
-                      setUserQuery("");
-                      void saveIgnores({ channels: ignoredChannels, roles: ignoredRoles, users: next });
-                    }}
-                  >
-                    <Avatar entity={member} />
-                    <span>{member.display_name || member.username || "Member"}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <ul className="mt-2 space-y-1">
-            {ignoredUsers.map((user) => (
-              <li key={user.id} className="flex items-center justify-between gap-2 text-small">
-                <span>{user.display_name || user.username || "Unresolved member"}</span>
-                <button
-                  type="button"
-                  className="text-caption text-fg-3"
-                  onClick={() => {
-                    const next = ignoredUsers.filter((item) => item.id !== user.id);
-                    setIgnoredUsers(next);
-                    void saveIgnores({ channels: ignoredChannels, roles: ignoredRoles, users: next });
-                  }}
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
+      ) : null}
     </div>
   );
 }
 
-function IgnoreList({
-  label,
-  hint,
-  options,
-  selected,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  options: Array<{ id: string; label: string }>;
-  selected: string[];
-  onChange: (ids: string[]) => void;
+function Activity(props: {
+  data: Home;
+  detail: EventRow | null;
+  setDetail: (row: EventRow | null) => void;
+  category: string;
+  setCategory: (value: string) => void;
+  eventType: string;
+  setEventType: (value: string) => void;
+  typeOptions: Array<{ id: string; label: string }>;
+  search: string;
+  setSearch: (value: string) => void;
+  memberId: string;
+  setMemberId: (value: string) => void;
+  suggestions: IgnoreUser[];
+  lookup: (value: string) => void;
+  since: string;
+  until: string;
+  setSince: (value: string) => void;
+  setUntil: (value: string) => void;
+  dateLabel: string;
+  load: (cursor?: string | null) => Promise<void>;
+  clearFilters: () => void;
 }) {
+  const { data, detail, setDetail } = props;
+  return (
+    <section className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Select className="w-40" value={props.category} onValueChange={(value) => { props.setCategory(value); props.setEventType(""); }} options={[{ value: "", label: "All categories" }, ...Object.entries(LABELS).map(([value, label]) => ({ value, label }))]} placeholder="Category" />
+          <Select className="w-44" value={props.eventType} onValueChange={props.setEventType} options={[{ value: "", label: "All events" }, ...props.typeOptions.map((item) => ({ value: item.id, label: item.label }))]} placeholder="Event" />
+          <div className="relative w-52">
+            <Input
+              value={props.search}
+              placeholder="Search member or text"
+              aria-label="Search events"
+              onChange={(event) => {
+                props.setSearch(event.target.value);
+                props.setMemberId("");
+                props.lookup(event.target.value);
+              }}
+            />
+            {props.suggestions.length > 0 && !props.memberId ? (
+              <ul className="absolute z-10 mt-1 w-full border border-line bg-bg-1">
+                {props.suggestions.map((member) => (
+                  <li key={member.id}>
+                    <button type="button" className="block w-full px-2 py-1.5 text-start text-small hover:bg-bg-2" onClick={() => { props.setMemberId(member.id); props.setSearch(member.display_name || member.username || "Member"); }}>
+                      {member.display_name || member.username || "Member"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="secondary">{props.dateLabel}</Button>
+            </PopoverTrigger>
+            <PopoverContent className="space-y-2 p-3">
+              <Input type="datetime-local" value={props.since} onChange={(event) => props.setSince(event.target.value)} aria-label="From" />
+              <Input type="datetime-local" value={props.until} onChange={(event) => props.setUntil(event.target.value)} aria-label="Until" />
+              <Button type="button" variant="secondary" onClick={() => void props.load()}>Apply</Button>
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="secondary">More filters</Button>
+            </PopoverTrigger>
+            <PopoverContent className="p-3">
+              <p className="mb-2 text-caption text-fg-3">Search matches a member or text in the event.</p>
+              <Button type="button" variant="secondary" onClick={props.clearFilters}>Clear filters</Button>
+            </PopoverContent>
+          </Popover>
+          <Button type="button" variant="secondary" onClick={() => void props.load()}>Filter</Button>
+        </div>
+        {data.events.length === 0 ? (
+          <p className="text-small text-fg-3">No events match these filters.</p>
+        ) : (
+          <ul className="divide-y divide-line-subtle border-y border-line-subtle">
+            {data.events.map((row) => {
+              const shown = row.presentation;
+              const who = shown?.target || shown?.actor;
+              const actor = personName(shown?.actor);
+              const same = shown?.actor?.id && shown.actor.id === shown?.target?.id;
+              const channel = shown?.channel?.name ? `#${shown.channel.name}` : null;
+              const meta = row.event_type.startsWith("message")
+                ? [channel, relativeTime(row.occurred_at)]
+                : [actor && !same ? `by ${actor}` : null, channel, relativeTime(row.occurred_at)];
+              const selected = detail?.id === row.id;
+              return (
+                <li key={row.id}>
+                  <button
+                    type="button"
+                    className={`grid w-full grid-cols-[2rem_minmax(0,1fr)] items-start gap-2 px-1 py-2 text-start ${selected ? "border-s-2 border-brand-400 bg-bg-2" : ""}`}
+                    onClick={() => setDetail(row)}
+                  >
+                    <Avatar entity={who} />
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5">
+                        <EventIcon category={row.category} />
+                        <span className="truncate text-small text-fg-1">{headline(row)}</span>
+                      </span>
+                      <span className="block truncate text-caption text-fg-3" suppressHydrationWarning>{meta.filter(Boolean).join(" · ")}</span>
+                      {shown?.change_line ? <span className="mt-0.5 block truncate text-caption text-fg-1">{shown.change_line}</span> : null}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {data.next_cursor ? (
+          <Button type="button" variant="secondary" className="mt-3" onClick={() => void props.load(data.next_cursor)}>Older</Button>
+        ) : null}
+      </div>
+      <Detail detail={detail} onClose={() => setDetail(null)} />
+    </section>
+  );
+}
+
+function useNarrow() {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 1023px)");
+    const apply = () => setNarrow(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
+  return narrow;
+}
+
+function Detail({ detail, onClose }: { detail: EventRow | null; onClose: () => void }) {
+  const narrow = useNarrow();
+  const panel = detail ? <DetailBody detail={detail} /> : <p className="text-small text-fg-3">Select an event.</p>;
+  if (narrow) {
+    return (
+      <Dialog open={Boolean(detail)} onOpenChange={(open) => { if (!open) onClose(); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Event</DialogTitle>
+          </DialogHeader>
+          <DialogBody>{detail ? <DetailBody detail={detail} /> : null}</DialogBody>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+  return <aside className="border border-line-subtle p-3">{panel}</aside>;
+}
+
+function DetailBody({ detail }: { detail: EventRow }) {
+  const view = detail.presentation;
+  const who = view?.target || view?.actor;
+  const added = (view?.changes ?? []).find((change) => change.label === "Roles added");
+  const removed = (view?.changes ?? []).find((change) => change.label === "Roles removed");
+  const before = detail.before?.content;
+  const after = detail.after?.content;
+  const message = detail.event_type === "message_edit" || detail.event_type === "message_delete";
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Avatar entity={who} />
+        <div className="min-w-0">
+          <h2 className="truncate text-small font-medium text-fg-1">{subjectOf(detail)}</h2>
+          <p className="text-small text-fg-2">{eventTitle(detail)}</p>
+          <p className="text-caption text-fg-3" suppressHydrationWarning>
+            {view?.channel?.name ? `#${view.channel.name} · ` : ""}
+            {relativeTime(detail.occurred_at)}
+          </p>
+        </div>
+      </div>
+      {message ? (
+        <div className="space-y-2">
+          {before !== undefined ? (
+            <div>
+              <p className="text-caption text-fg-3">Before</p>
+              <p className="whitespace-pre-wrap text-small text-fg-1">{before || "—"}</p>
+            </div>
+          ) : null}
+          {after !== undefined ? (
+            <div>
+              <p className="text-caption text-fg-3">After</p>
+              <p className="whitespace-pre-wrap text-small text-fg-1">{after || "—"}</p>
+            </div>
+          ) : null}
+          {view?.jump_url ? (
+            <a className="inline-block border border-line px-2 py-1 text-caption text-fg-1" href={view.jump_url} target="_blank" rel="noreferrer">
+              View message
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+      {added || removed ? (
+        <div className="space-y-2">
+          {added ? <Chips label="Roles added" value={added.value} /> : null}
+          {removed ? <Chips label="Roles removed" value={removed.value} /> : null}
+        </div>
+      ) : null}
+      {(view?.changes ?? [])
+        .filter((change) => !["Roles added", "Roles removed", "Before", "After", "Jump to message"].includes(change.label))
+        .map((change) => (
+          <div key={`${change.label}-${change.value}`}>
+            <p className="text-caption text-fg-3">{change.label}</p>
+            <p className="whitespace-pre-wrap text-small text-fg-1">{change.value}</p>
+          </div>
+        ))}
+      <details className="text-small">
+        <summary className="cursor-pointer text-fg-3">Developer details</summary>
+        <div className="mt-2 space-y-1">
+          {(view?.identifiers ?? []).map((item) => (
+            <p key={item} className="text-caption text-fg-3">{item}</p>
+          ))}
+          <p className="text-caption text-fg-3">{detail.event_type}</p>
+          <pre className="overflow-x-auto whitespace-pre-wrap text-caption text-fg-3">{JSON.stringify(detail, null, 2)}</pre>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function Chips({ label, value }: { label: string; value: string }) {
+  const names = value.split(",").map((item) => item.trim()).filter((item) => item && item !== "—");
   return (
     <div>
-      <h3 className="text-small font-medium text-fg-1">{label}</h3>
-      <p className="mb-2 text-caption text-fg-3">{hint}</p>
-      <ul className="max-h-40 space-y-1 overflow-y-auto">
-        {options.length === 0 ? <li className="text-caption text-fg-3">None available.</li> : null}
-        {options.map((option) => {
-          const checked = selected.includes(option.id);
-          return (
-            <li key={option.id}>
-              <label className="flex items-center gap-2 text-small">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => onChange(checked ? selected.filter((id) => id !== option.id) : [...selected, option.id])}
-                />
-                <span>{option.label}</span>
-              </label>
-            </li>
-          );
-        })}
-      </ul>
+      <p className="text-caption text-fg-3">{label}</p>
+      <div className="mt-1 flex flex-wrap gap-1">
+        {names.map((name) => (
+          <span key={name} className="border border-line px-1.5 py-0.5 text-caption text-fg-1">{name}</span>
+        ))}
+      </div>
     </div>
   );
 }

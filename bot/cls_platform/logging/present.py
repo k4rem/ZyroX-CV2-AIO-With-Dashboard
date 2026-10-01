@@ -71,11 +71,45 @@ def _category_for(event_type: str) -> str:
     return "guild_events"
 
 
+EVENT_GROUPS = (
+    ("message_events", "Messages", ("message_edit", "message_delete", "message_bulk_delete")),
+    ("join_leave_events", "Joins and leaves", ("member_join", "member_leave")),
+    (
+        "member_moderation",
+        "Members",
+        ("member_kick", "member_ban", "member_unban", "member_timeout", "member_timeout_removed", "member_nickname"),
+    ),
+    ("role_events", "Roles", ("member_roles", "role_create", "role_update", "role_delete")),
+    ("channel_events", "Channels", ("channel_create", "channel_update", "channel_delete")),
+    ("voice_events", "Voice", ("voice_join", "voice_leave", "voice_move")),
+    ("guild_events", "Server", ("guild_update",)),
+    ("bot_actions", "Bot actions", ("logging_test",)),
+)
+
+
+def category_for_event(event_type: str) -> str:
+    for category, _label, events in EVENT_GROUPS:
+        if event_type in events:
+            return category
+    return _category_for(event_type)
+
+
 def catalog() -> list[dict]:
     return [
         {"id": key, "label": label, "category": _category_for(key)}
         for key, label in TITLES.items()
         if key != "logging_test"
+    ]
+
+
+def groups() -> list[dict]:
+    return [
+        {
+            "category": category,
+            "label": label,
+            "events": [{"id": event_id, "label": TITLES[event_id]} for event_id in events],
+        }
+        for category, label, events in EVENT_GROUPS
     ]
 
 
@@ -127,29 +161,27 @@ def _names(rows: list[dict], mention) -> tuple[str, str]:
     return pretty, linked
 
 
-def _footer(event: dict) -> str:
-    parts: list[str] = []
+def _identifiers(event: dict) -> list[str]:
     entities = _entities(event)
     target = entities.get("target") if isinstance(entities.get("target"), dict) else None
     actor = entities.get("actor") if isinstance(entities.get("actor"), dict) else None
     channel = entities.get("channel") if isinstance(entities.get("channel"), dict) else None
-    kind = event.get("event_type")
-    if kind and str(kind).startswith("message"):
+    kind = str(event.get("event_type") or "")
+    parts: list[str] = []
+    if kind.startswith("message"):
         if actor and actor.get("id"):
             parts.append(f"User ID: {actor['id']}")
         if event.get("target_id"):
             parts.append(f"Message ID: {event['target_id']}")
     elif target and target.get("id") and kind in {"role_create", "role_update", "role_delete"}:
         parts.append(f"Role ID: {target['id']}")
-    elif channel and channel.get("id") and kind and str(kind).startswith("channel"):
+    elif channel and channel.get("id") and kind.startswith("channel"):
         parts.append(f"Channel ID: {channel['id']}")
     elif target and target.get("id"):
         parts.append(f"User ID: {target['id']}")
     elif event.get("target_id"):
         parts.append(f"ID: {event['target_id']}")
-    if event.get("metadata", {}).get("test"):
-        parts.append("Test log")
-    return " • ".join(parts)
+    return parts
 
 
 def _base(event: dict, title: str, summary: str, fields: list[dict], change_line: str = "") -> dict:
@@ -170,7 +202,8 @@ def _base(event: dict, title: str, summary: str, fields: list[dict], change_line
         "channel": channel,
         "fields": fields,
         "changes": [{"label": field["name"], "value": field["dashboard"]} for field in fields],
-        "footer": _footer(event),
+        "footer": "",
+        "identifiers": _identifiers(event),
         "jump_url": metadata.get("jump_url"),
         "incident_id": metadata.get("incident_id"),
         "thumbnail": bool(actor and actor.get("avatar_url") and str(event.get("event_type", "")).startswith("member")),
@@ -229,14 +262,15 @@ def present_message_edit(event: dict) -> dict:
     new = (event.get("after") or {}).get("content")
     fields = [
         _field("Channel", channel_name, channel_mention(channel), True),
-        _field("Old", _clip(old, 500), _fence(old)),
-        _field("New", _clip(new, 500), _fence(new)),
+        _field("Before", _clip(old, 500), _fence(old)),
+        _field("After", _clip(new, 500), _fence(new)),
     ]
-    jump = (event.get("metadata") or {}).get("jump_url")
-    if jump:
-        fields.append(_field("Jump to message", "Open in Discord", f"[Jump to message]({jump})", True))
-    change = _clip(new, 80)
-    return _base(event, TITLES["message_edit"], f"{author} edited a message in {channel_name}", fields, change if change != "—" else "")
+    old_bit = _clip(old, 42)
+    new_bit = _clip(new, 42)
+    change = ""
+    if old_bit != "—" or new_bit != "—":
+        change = f"\"{'' if old_bit == '—' else old_bit}\" → \"{'' if new_bit == '—' else new_bit}\""
+    return _base(event, TITLES["message_edit"], f"{author} edited a message in {channel_name}", fields, change)
 
 
 def present_message_delete(event: dict) -> dict:

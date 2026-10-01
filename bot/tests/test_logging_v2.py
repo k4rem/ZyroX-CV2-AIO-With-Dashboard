@@ -148,3 +148,27 @@ async def test_snapshots_search_ignores_and_legacy_migration(db_reset):
     assert await migrate_legacy_payload(OTHER, {"log_enabled": {"voice_events": True}, "log_channels": {"voice_events": 99}}) == "skipped"
     voice = {row["category"]: row for row in await routes(OTHER)}["voice_events"]
     assert voice["enabled"] is False
+    from cls_platform.logging.store import appearance_for, delivery_target, event_routes, set_appearance, set_event_route
+
+    await set_route(guild_id=GUILD, category="message_events", enabled=True, channel_id=100000000000000501)
+    inherited = await delivery_target(GUILD, "message_events", "message_edit")
+    assert inherited["mode"] == "inherit" and inherited["deliver"] is True
+    assert inherited["channel_id"] == 100000000000000501
+    custom = await set_event_route(guild_id=GUILD, event_type="message_delete", mode="custom", channel_id=100000000000000502)
+    assert custom["channel_id"] == "100000000000000502"
+    deleted = await delivery_target(GUILD, "message_events", "message_delete")
+    assert deleted["mode"] == "custom" and deleted["channel_id"] == 100000000000000502
+    await set_event_route(guild_id=GUILD, event_type="message_bulk_delete", mode="stored_only", channel_id=None)
+    bulk = await delivery_target(GUILD, "message_events", "message_bulk_delete")
+    assert bulk["capture"] is True and bulk["deliver"] is False
+    await set_event_route(guild_id=GUILD, event_type="message_edit", mode="disabled", channel_id=None)
+    assert (await delivery_target(GUILD, "message_events", "message_edit"))["capture"] is False
+    assert (await delivery_target(OTHER, "message_events", "message_delete"))["mode"] == "inherit"
+    assert all(row["event_type"] != "message_delete" for row in await event_routes(OTHER))
+    saved_look = await set_appearance(GUILD, {"style": "compact", "show_ids": True, "colors": {"message_events": "#112233"}, "footer_mode": "custom", "footer_text": "Ops"})
+    assert saved_look["style"] == "compact"
+    assert saved_look["show_ids"] is True
+    assert saved_look["colors"]["message_events"] == "#112233"
+    assert (await appearance_for(OTHER))["style"] == "balanced"
+    assert (await appearance_for(OTHER))["show_ids"] is False
+    assert (await appearance_for(GUILD))["footer_text"] == "Ops"

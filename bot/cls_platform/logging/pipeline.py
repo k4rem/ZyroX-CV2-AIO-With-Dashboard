@@ -53,3 +53,28 @@ def delivery_state(
     if not can_embed:
         return "bot_cannot_embed"
     return "delivering"
+
+
+def resolve_delivery(
+    *,
+    category_enabled: bool,
+    category_channel_id: str | int | None,
+    mode: str = "inherit",
+    event_channel_id: str | int | None = None,
+) -> dict:
+    """How one event type uses the category default.
+
+    inherit follows the category route.
+    custom delivers only to the event channel.
+    stored_only is kept for the dashboard and is not posted.
+    disabled is not captured.
+    """
+    if mode == "disabled":
+        return {"capture": False, "deliver": False, "channel_id": None, "mode": "disabled"}
+    if mode == "stored_only":
+        return {"capture": True, "deliver": False, "channel_id": None, "mode": "stored_only"}
+    if mode == "custom":
+        channel = event_channel_id or None
+        return {"capture": True, "deliver": bool(channel), "channel_id": channel, "mode": "custom"}
+    channel = category_channel_id if category_enabled else None
+    return {"capture": True, "deliver": bool(channel), "channel_id": channel, "mode": "inherit"}

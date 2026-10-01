@@ -12,7 +12,13 @@ const EMPTY = {
   ignores: { channels: [], roles: [], users: [] },
 };
 
-export default async function LoggingPage({ params }: { params: { guildId: string } }) {
+export default async function LoggingPage({
+  params,
+  searchParams,
+}: {
+  params: { guildId: string };
+  searchParams?: { tab?: string };
+}) {
   const [home, channels, roles] = await Promise.all([
     api.getLoggingV2(params.guildId).catch(() => null),
     api.getChannels(params.guildId).catch(() => []),
@@ -24,6 +30,7 @@ export default async function LoggingPage({ params }: { params: { guildId: strin
       initial={home ?? EMPTY}
       channels={Array.isArray(channels) ? channels : []}
       roles={Array.isArray(roles) ? roles : []}
+      initialTab={searchParams?.tab}
     />
   );
 }

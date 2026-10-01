@@ -4,7 +4,7 @@ from pathlib import Path
 
 from cls_platform.logging.entities import snapshot_channel, snapshot_role, snapshot_user
 from cls_platform.logging.permissions import overwrite_diff, permission_diff
-from cls_platform.logging.pipeline import LEGACY_DELIVERY_DISABLED, delivery_state, message_ignored
+from cls_platform.logging.pipeline import LEGACY_DELIVERY_DISABLED, delivery_state, message_ignored, resolve_delivery
 from cls_platform.logging.present import present
 from cls_platform.logging.render import render_discord
 from cogs.cog_loader import _cog_specs
@@ -87,7 +87,8 @@ def test_member_roles_and_message_edit_read_without_raw_ids():
     assert SNOW not in roles["change_line"]
     assert any(change["label"] == "Roles added" and change["value"] == "VIP" for change in roles["changes"])
     assert any(change["label"] == "Moderator" and change["value"] == "Karim" for change in roles["changes"])
-    assert "User ID: 222" in roles["footer"]
+    assert "User ID: 222" in roles["identifiers"]
+    assert "User ID" not in (roles["footer"] or "")
     assert SNOW not in roles["footer"]
     embed = render_discord({"event_type": "member_roles", "presentation": roles, "metadata": {}})
     assert embed["title"] == "Member roles updated"
@@ -118,9 +119,9 @@ def test_member_roles_and_message_edit_read_without_raw_ids():
     assert "#general" in edited["summary"]
     assert SNOW not in edited["summary"]
     values = {change["label"]: change["value"] for change in edited["changes"]}
-    assert values["Old"] == "hello"
-    assert values["New"] == "hello there"
-    assert "Jump to message" in values
+    assert values["Before"] == "hello"
+    assert values["After"] == "hello there"
+    assert "hello" in edited["change_line"] and "hello there" in edited["change_line"]
     rendered = render_discord(
         {
             "category": "message_events",
@@ -138,9 +139,46 @@ def test_member_roles_and_message_edit_read_without_raw_ids():
             },
         }
     )
-    assert any("Jump to message" in field["value"] for field in rendered["fields"])
-    assert "Message ID: 900" in rendered["footer"]
+    assert rendered["jump_url"] == "https://discord.com/channels/1/300/900"
+    assert all("Jump to message" not in field["value"] for field in rendered["fields"])
+    assert "Message ID" not in rendered["footer"]
+    assert rendered["footer"].startswith("CLS •")
+    assert "Message Edited" in rendered["title"]
     assert rendered["title"] != SNOW
+    identified = render_discord(
+        {
+            "category": "message_events",
+            "event_type": "message_edit",
+            "actor_id": SNOW,
+            "target_id": "900",
+            "before": {"content": "hello"},
+            "after": {"content": "hello there"},
+            "presentation": edited,
+            "metadata": {"jump_url": "https://discord.com/channels/1/300/900"},
+        },
+        {"show_ids": True, "colors": {"message_events": "#112233"}, "style": "detailed", "show_jump": False},
+    )
+    assert identified["color"] == 0x112233
+    assert "Message ID: 900" in identified["footer"]
+    assert identified["jump_url"] is None
+    compact = render_discord(
+        {"category": "message_events", "event_type": "message_edit", "presentation": edited, "metadata": {}},
+        {"style": "compact"},
+    )
+    assert compact["fields"] == []
+    assert "hello" in compact["description"]
+
+
+def test_event_delivery_inherits_category_until_overridden():
+    inherited = resolve_delivery(category_enabled=True, category_channel_id="10", mode="inherit")
+    assert inherited == {"capture": True, "deliver": True, "channel_id": "10", "mode": "inherit"}
+    assert resolve_delivery(category_enabled=False, category_channel_id="10")["deliver"] is False
+    custom = resolve_delivery(category_enabled=True, category_channel_id="10", mode="custom", event_channel_id="20")
+    assert custom["channel_id"] == "20" and custom["deliver"] is True
+    stored = resolve_delivery(category_enabled=True, category_channel_id="10", mode="stored_only")
+    assert stored["capture"] is True and stored["deliver"] is False
+    disabled = resolve_delivery(category_enabled=True, category_channel_id="10", mode="disabled")
+    assert disabled["capture"] is False and disabled["deliver"] is False
 
 
 def test_routing_ignores_and_legacy_pipeline_is_off():

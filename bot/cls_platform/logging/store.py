@@ -11,8 +11,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from cls_platform.database import session_scope
 from cls_platform.discord_types import snowflake_to_str
-from cls_platform.logging.present import present
+from cls_platform.logging.pipeline import resolve_delivery
+from cls_platform.logging.present import TITLES, present
 from cls_platform.logging.redact import redact
+from cls_platform.logging.render import FOOTER_MODES, STYLES, default_appearance
 from cls_platform.models import Base
 
 CATEGORIES = (
@@ -81,6 +83,30 @@ class LogMigration(Base):
 
     guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     migrated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class LogEventRoute(Base):
+    __tablename__ = "log_event_routes"
+
+    guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(64), primary_key=True)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+
+class LogAppearance(Base):
+    __tablename__ = "log_appearance"
+
+    guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    style: Mapped[str] = mapped_column(String(16), nullable=False, default="balanced")
+    show_avatars: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    show_moderator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    show_jump: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    show_timestamp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    show_ids: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    footer_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="cls")
+    footer_text: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    colors: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
 class LoggingError(ValueError):
@@ -426,3 +452,113 @@ async def set_ignores(*, guild_id: int, channels: list[int], roles: list[int], u
                 session.add(LogIgnore(guild_id=guild_id, kind=kind, entity_id=int(value)))
         await session.flush()
     return await ignores_public(guild_id)
+
+
+def _known_event(event_type: str) -> bool:
+    return event_type in TITLES
+
+
+def _appearance_dict(row: LogAppearance | None) -> dict:
+    base = default_appearance()
+    if row is None:
+        return base
+    colors = row.colors if isinstance(row.colors, dict) else {}
+    return {
+        "style": row.style if row.style in STYLES else "balanced",
+        "show_avatars": bool(row.show_avatars),
+        "show_moderator": bool(row.show_moderator),
+        "show_jump": bool(row.show_jump),
+        "show_timestamp": bool(row.show_timestamp),
+        "show_ids": bool(row.show_ids),
+        "footer_mode": row.footer_mode if row.footer_mode in FOOTER_MODES else "cls",
+        "footer_text": row.footer_text,
+        "colors": {str(key): value for key, value in colors.items() if isinstance(value, str)},
+    }
+
+
+async def event_routes(guild_id: int) -> list[dict]:
+    async with session_scope() as session:
+        rows = (await session.execute(select(LogEventRoute).where(LogEventRoute.guild_id == guild_id))).scalars().all()
+        return [
+            {"event_type": row.event_type, "mode": row.mode, "channel_id": _sid(row.channel_id)}
+            for row in rows
+        ]
+
+
+async def set_event_route(*, guild_id: int, event_type: str, mode: str, channel_id: int | None) -> dict:
+    if not _known_event(event_type):
+        raise LoggingError("unknown_event")
+    if mode not in {"inherit", "custom", "stored_only", "disabled"}:
+        raise LoggingError("unknown_mode")
+    if mode == "custom" and channel_id is None:
+        raise LoggingError("custom_route_needs_channel")
+    if mode != "custom":
+        channel_id = None
+    async with session_scope() as session:
+        if mode == "inherit":
+            await session.execute(
+                delete(LogEventRoute).where(LogEventRoute.guild_id == guild_id, LogEventRoute.event_type == event_type)
+            )
+        else:
+            row = await session.get(LogEventRoute, (guild_id, event_type))
+            if row is None:
+                row = LogEventRoute(guild_id=guild_id, event_type=event_type, mode=mode)
+                session.add(row)
+            row.mode = mode
+            row.channel_id = channel_id
+    return {"event_type": event_type, "mode": mode, "channel_id": _sid(channel_id)}
+
+
+async def delivery_target(guild_id: int, category: str, event_type: str) -> dict:
+    async with session_scope() as session:
+        route = await session.get(LogRoute, (guild_id, category))
+        event = await session.get(LogEventRoute, (guild_id, event_type))
+    decision = resolve_delivery(
+        category_enabled=bool(route and route.enabled),
+        category_channel_id=route.channel_id if route else None,
+        mode=event.mode if event else "inherit",
+        event_channel_id=event.channel_id if event else None,
+    )
+    channel = decision["channel_id"]
+    return {**decision, "channel_id": int(channel) if channel else None}
+
+
+async def appearance_for(guild_id: int) -> dict:
+    async with session_scope() as session:
+        row = await session.get(LogAppearance, guild_id)
+        return _appearance_dict(row)
+
+
+def _valid_color(value: str) -> bool:
+    return len(value) == 7 and value.startswith("#") and all(char in "0123456789abcdefABCDEF" for char in value[1:])
+
+
+async def set_appearance(guild_id: int, patch: dict) -> dict:
+    async with session_scope() as session:
+        row = await session.get(LogAppearance, guild_id)
+        if row is None:
+            row = LogAppearance(guild_id=guild_id, colors={})
+            session.add(row)
+        if "style" in patch:
+            if patch["style"] not in STYLES:
+                raise LoggingError("unknown_style")
+            row.style = patch["style"]
+        for flag in ("show_avatars", "show_moderator", "show_jump", "show_timestamp", "show_ids"):
+            if flag in patch:
+                setattr(row, flag, bool(patch[flag]))
+        if "footer_mode" in patch:
+            if patch["footer_mode"] not in FOOTER_MODES:
+                raise LoggingError("unknown_footer")
+            row.footer_mode = patch["footer_mode"]
+        if "footer_text" in patch:
+            text = patch["footer_text"]
+            row.footer_text = None if text in {None, ""} else str(text)[:80]
+        if "colors" in patch and isinstance(patch["colors"], dict):
+            colors = dict(row.colors or {})
+            for key, value in patch["colors"].items():
+                if key not in CATEGORIES or not isinstance(value, str) or not _valid_color(value):
+                    raise LoggingError("invalid_color")
+                colors[key] = value.lower()
+            row.colors = colors
+        await session.flush()
+        return _appearance_dict(row)
