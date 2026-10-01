@@ -252,6 +252,14 @@ export const api = {
     }),
 
   getInvites: (guildId: string) => request<any>(`/guilds/${guildId}/invites`),
+  getInvitesV2: (guildId: string) => request<any>(`/guilds/${guildId}/invites/v2`),
+  getGiveaways: (guildId: string) => request<any>(`/guilds/${guildId}/giveaways`),
+  createGiveaway: (guildId: string, data: { prize: string; ends_at: string; channel_id?: string }) =>
+    request<any>(`/guilds/${guildId}/giveaways`, { method: "POST", body: JSON.stringify(data) }),
+  endGiveaway: (guildId: string, giveawayId: string) =>
+    request<any>(`/guilds/${guildId}/giveaways/${giveawayId}/end`, { method: "POST" }),
+  rerollGiveaway: (guildId: string, giveawayId: string) =>
+    request<any>(`/guilds/${guildId}/giveaways/${giveawayId}/reroll`, { method: "POST" }),
   updateInvites: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/invites`, {
       method: "PATCH",

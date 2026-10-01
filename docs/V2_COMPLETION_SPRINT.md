@@ -34,7 +34,10 @@ DONE on phase-7-security-center. Commit 7b0ebba. Real incident analytics, timeli
 DONE on phase-8-command-manager. Commit f7684e8. Runtime gate blocks disabled commands and role-restricted commands. Tests: tests/test_command_policy.py.
 
 ## Phase 6 disaster recovery
-DONE on phase-6-disaster-recovery. Dry run, confirmation, disposable-only execution. Absent members are REQUIRES MEMBER REAUTHORIZATION. Tests: tests/test_restore_v1.py. Production execution stays disabled.
+DONE on phase-6-disaster-recovery. Commit e354021. Dry run, confirmation, disposable-only execution. Absent members are REQUIRES MEMBER REAUTHORIZATION. Tests: tests/test_restore_v1.py. Production execution stays disabled.
+
+## Phase 9 invites and giveaways
+DONE on phase-9-invites-giveaways. Fresh invite history with certain/ambiguous/unknown. Persistent giveaways, end, and reroll. Tests: tests/test_growth_v2.py. Legacy invite counts are not used.
 
 
 

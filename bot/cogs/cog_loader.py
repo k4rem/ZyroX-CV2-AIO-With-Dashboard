@@ -150,6 +150,7 @@ def _cog_specs() -> list[CogSpec]:
         CogSpec("cogs.verification_v2", "VerificationV2", O),
         CogSpec("cogs.tickets_v2", "TicketsV2", O),
         CogSpec("cogs.logging_v2", "LoggingV2", O),
+        CogSpec("cogs.growth_v2", "GrowthV2", O),
         CogSpec("cogs.automod.antispam", "AntiSpam", O),
         CogSpec("cogs.automod.anticaps", "AntiCaps", O),
         CogSpec("cogs.automod.anti_invites", "AntiInvite", O),

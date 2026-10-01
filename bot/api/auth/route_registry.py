@@ -46,6 +46,8 @@ _GUILD_SUBROUTES = frozenset(
         "/autoreact",
         "/invcrole",
         "/invites",
+        "/invites/v2",
+        "/giveaways",
         "/reactionroles",
     }
 )
@@ -56,6 +58,8 @@ _GUILD_SUBROUTE_PREFIXES = (
     "/snapshots/",
     "/tickets/v2/",
     "/logging/v2/",
+    "/invites/v2/",
+    "/giveaways/",
 )
 
 _GUILDS_LIST = re.compile(r"^/api/v1/guilds/?$")

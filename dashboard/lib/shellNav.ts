@@ -162,7 +162,8 @@ export const NAV_ITEMS: NavItemDef[] = [
     scope: "guild",
     routes: [
       { path: "/tracking", label: "Tracking" },
-      { path: "/invites", label: "Leaderboard" },
+      { path: "/invites", label: "Invites" },
+      { path: "/giveaways", label: "Giveaways" },
     ],
   },
   {
