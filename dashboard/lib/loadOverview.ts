@@ -180,7 +180,7 @@ export async function loadOverview(opts: {
     settled(api.getGuildDetails(guildId)),
     settled(api.getBotStatus()),
     settled(api.getSystemHealth(guildId)),
-    settled(api.getAntiNuke(guildId)),
+    settled(api.getSecurity(guildId)),
     settled(api.getAutomod(guildId)),
     settled(api.getTickets(guildId)),
     settled(api.getWelcome(guildId)),
@@ -217,7 +217,13 @@ export async function loadOverview(opts: {
     return c ? c.name : null;
   };
 
-  const antinukeStatus = antinukeRes.ok ? Boolean(antinukeRes.value?.status) : null;
+  const antinukeStatus = antinukeRes.ok
+    ? antinukeRes.value?.human_mode === "OFF"
+      ? false
+      : antinukeRes.value?.human_mode
+        ? true
+        : null
+    : null;
   const loggingCfg = loggingRes.ok ? loggingRes.value : null;
   const ticketsCfg = ticketsRes.ok ? ticketsRes.value : null;
 

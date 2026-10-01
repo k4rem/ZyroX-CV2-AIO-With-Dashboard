@@ -214,11 +214,11 @@ export const NAV_ITEMS: NavItemDef[] = [
   },
   {
     id: "antinuke",
-    label: "Antinuke",
+    label: "Protection",
     icon: "antinuke",
     group: "security",
     scope: "guild",
-    routes: [{ path: "/antinuke", label: "Antinuke" }],
+    routes: [{ path: "/antinuke", label: "Protection" }],
   },
   {
     id: "settings",

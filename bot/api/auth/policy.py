@@ -56,6 +56,7 @@ def resolve_capability(method: str, suffix: Optional[str]) -> str:
         "/logging": "logging.config",
         "/welcome": "welcome.config",
         "/antinuke": "security.config",
+        "/security": "security.config",
         "/verification": "security.config",
         "/vanityroles": "bot.settings",
         "/autorole": "autorole.config",

@@ -179,6 +179,9 @@ class SecurityProtection(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
+        from cls_platform.security.legacy_archive import archive_legacy_anti_db
+
+        archive_legacy_anti_db()
         resumed = self._session_started
         self._session_started = True
         for guild in list(getattr(self.bot, "guilds", []) or []):

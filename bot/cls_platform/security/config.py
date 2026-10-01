@@ -9,7 +9,6 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cls_platform.database import session_scope
 from cls_platform.security.constants import (
-    ENFORCE_OPERATIONALLY_AVAILABLE,
     PROPOSED_GATEWAY_DEDUPE_S,
     PROPOSED_INCIDENT_INACTIVITY_S,
     PROPOSED_INCIDENT_MAX_LIFETIME_S,
@@ -114,17 +113,25 @@ def assert_mode_writable(mode: str) -> str:
         parsed = SecurityMode(mode)
     except ValueError as exc:
         raise ValueError(f"Unknown security mode {mode}") from exc
-    if parsed is SecurityMode.ENFORCE or not ENFORCE_OPERATIONALLY_AVAILABLE and mode == "ENFORCE":
-        raise EnforceUnavailable(
-            "ENFORCE is not operational until containment is implemented. OBSERVE is the highest functional mode."
-        )
+    if parsed is SecurityMode.ENFORCE:
+        from cls_platform.security.enforce_lock import enforce_unlocked
+
+        if not enforce_unlocked():
+            raise EnforceUnavailable(
+                "ENFORCE is locked. Production mode stays OBSERVE until the owner unlocks a disposable test."
+            )
     return parsed.value
 
 
 def effective_mode(configured: str) -> str:
-    """Highest functional mode in this pass is OBSERVE. ENFORCE never comes back as effective."""
+    """OBSERVE unless this process is explicitly unlocked for a disposable ENFORCE test."""
     if configured == SecurityMode.OFF.value:
         return SecurityMode.OFF.value
+    if configured == SecurityMode.ENFORCE.value:
+        from cls_platform.security.enforce_lock import enforce_unlocked
+
+        if enforce_unlocked():
+            return SecurityMode.ENFORCE.value
     return SecurityMode.OBSERVE.value
 
 
@@ -181,6 +188,10 @@ async def set_subsystem_mode(
     writable = assert_mode_writable(mode)
     column = "human_mode" if subsystem == "human" else "bot_mode"
     async with session_scope() as session:
+        if writable == "ENFORCE":
+            from cls_platform.security.enforce_lock import arm_enforce_session
+
+            await arm_enforce_session(session)
         await ensure_inside(session, guild_id)
         result = await session.execute(
             update(SecurityGuildConfig)

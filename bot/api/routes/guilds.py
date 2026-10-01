@@ -478,74 +478,20 @@ async def patch_guild_welcome(guild_id: int, data: WelcomeUpdate):
     return {"status": "success", "guild_id": guild_id}
 
 
-@router.get("/{guild_id}/antinuke", response_model=AntiNukeConfig, summary="Get AntiNuke config")
-async def get_guild_antinuke(guild_id: int):
-    import aiosqlite
-    
-    async with aiosqlite.connect("db/anti.db") as db:
-        async with db.execute("SELECT status FROM antinuke WHERE guild_id = ?", (guild_id,)) as cursor:
-            row = await cursor.fetchone()
-        
-        whitelisted = []
-        # Need to check if table exists first since it's created by the cog
-        cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='whitelisted_users'")
-        if await cursor.fetchone():
-            async with db.execute("SELECT user_id FROM whitelisted_users WHERE guild_id = ?", (guild_id,)) as wl_cursor:
-                wl_rows = await wl_cursor.fetchall()
-                whitelisted = [str(r[0]) for r in wl_rows]
-            
-    return AntiNukeConfig(
-        guild_id=guild_id,
-        status=bool(row[0]) if row else False,
-        whitelisted_users=whitelisted
-    )
+_RETIRED = {
+    "detail": "Legacy antinuke configuration is retired. Use the security workspace.",
+    "replacement": "/security",
+}
 
-@router.patch("/{guild_id}/antinuke", summary="Update AntiNuke config")
+
+@router.get("/{guild_id}/antinuke", summary="Retired antinuke config")
+async def get_guild_antinuke(guild_id: int):
+    raise HTTPException(status_code=410, detail=_RETIRED)
+
+
+@router.patch("/{guild_id}/antinuke", summary="Retired antinuke config")
 async def patch_guild_antinuke(guild_id: int, data: AntiNukeUpdate):
-    import aiosqlite
-    
-    async with aiosqlite.connect("db/anti.db") as db:
-        if data.status is not None:
-            # Get existing or create
-            async with db.execute("SELECT status FROM antinuke WHERE guild_id = ?", (guild_id,)) as cursor:
-                row = await cursor.fetchone()
-                
-            if not row:
-                await db.execute(
-                    "INSERT INTO antinuke (guild_id, status) VALUES (?, ?)",
-                    (guild_id, data.status)
-                )
-            else:
-                await db.execute(
-                    "UPDATE antinuke SET status = ? WHERE guild_id = ?",
-                    (data.status, guild_id)
-                )
-        
-        if data.add_whitelist:
-            # Only add if table exists to avoid errors
-            cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='whitelisted_users'")
-            if await cursor.fetchone():
-                try:
-                    user_id = int(data.add_whitelist)
-                    # Check if already whitelisted
-                    async with db.execute("SELECT * FROM whitelisted_users WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)) as wl_cursor:
-                        if not await wl_cursor.fetchone():
-                            await db.execute("INSERT INTO whitelisted_users (guild_id, user_id, ban, kick, prune, botadd, serverup, memup, chcr, chdl, chup, rlcr, rlup, rldl, meneve, mngweb, mngstemo) VALUES (?, ?, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)", (guild_id, user_id))
-                except ValueError:
-                    pass
-                    
-        if data.remove_whitelist:
-            cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='whitelisted_users'")
-            if await cursor.fetchone():
-                try:
-                    user_id = int(data.remove_whitelist)
-                    await db.execute("DELETE FROM whitelisted_users WHERE guild_id = ? AND user_id = ?", (guild_id, user_id))
-                except ValueError:
-                    pass
-            
-        await db.commit()
-        
-    return {"status": "success", "guild_id": guild_id}
+    raise HTTPException(status_code=410, detail=_RETIRED)
 
 
 @router.get("/{guild_id}/verification", response_model=VerificationConfig, summary="Get Verification config")

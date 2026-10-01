@@ -629,20 +629,6 @@ class Emergency(commands.Cog):
         proc_msg = await ctx.reply(
             view=LayoutView(build_container(TextDisplay("Processing Emergency Situation...")))
         )
-        guild_id = ctx.guild.id
-
-        antinuke_enabled = False
-        async with aiosqlite.connect("db/anti.db") as anti:
-            cursor = await anti.execute(
-                "SELECT status FROM antinuke WHERE guild_id = ?", (guild_id,)
-            )
-            row = await cursor.fetchone()
-            if row:
-                antinuke_enabled = True
-                await anti.execute(
-                    "DELETE FROM antinuke WHERE guild_id = ?", (guild_id,)
-                )
-                await anti.commit()
 
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
@@ -730,10 +716,6 @@ class Emergency(commands.Cog):
 
         await ctx.reply(view=result_view)
 
-        if antinuke_enabled:
-            async with aiosqlite.connect("db/anti.db") as anti:
-                await anti.execute("INSERT INTO antinuke VALUES (?, 1)", (guild_id,))
-                await anti.commit()
         await proc_msg.delete()
 
     @commands.command(name="emergencyrestore", aliases=["emgrestore"])

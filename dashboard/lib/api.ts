@@ -136,6 +136,17 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  getSecurity: (guildId: string) => request<any>(`/guilds/${guildId}/security`),
+  setSecurityMode: (
+    guildId: string,
+    data: { subsystem: string; mode: string; expected_version: number },
+  ) =>
+    request<{ human_mode: string; bot_mode: string; version: number }>(`/guilds/${guildId}/security/mode`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  releaseQuarantine: (guildId: string, userId: string) =>
+    request<{ status: string }>(`/guilds/${guildId}/security/quarantine/${userId}/release`, { method: "POST" }),
 
   getVerification: (guildId: string) => request<any>(`/guilds/${guildId}/verification`),
   updateVerification: (guildId: string, data: any) =>

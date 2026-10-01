@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from cls_platform.security.config import DEFAULT_POLICIES
-from cls_platform.security.constants import ENFORCE_OPERATIONALLY_AVAILABLE, SecurityMode
+from cls_platform.security.constants import SecurityMode
 from cls_platform.security.tiers import CONTAINMENT_SIGNAL_TIERS
 
 DESTRUCTIVE_CLASSES = frozenset(
@@ -67,8 +67,13 @@ class Decision:
 def effective_mode(configured: str, *, maintenance_active: bool) -> str:
     if configured == SecurityMode.OFF.value:
         return SecurityMode.OFF.value
-    if maintenance_active or configured == SecurityMode.ENFORCE.value or not ENFORCE_OPERATIONALLY_AVAILABLE:
+    if maintenance_active:
         return SecurityMode.OBSERVE.value
+    if configured == SecurityMode.ENFORCE.value:
+        from cls_platform.security.enforce_lock import enforce_unlocked
+
+        if enforce_unlocked():
+            return SecurityMode.ENFORCE.value
     return SecurityMode.OBSERVE.value
 
 

@@ -62,7 +62,7 @@ export function deriveAttention(input: DeriveAttentionInput): AttentionItem[] {
     items.push({
       id: "antinuke-off",
       severity: "info",
-      message: "Antinuke is disabled.",
+      message: "Human protection is off.",
       href: `${base}/antinuke`,
       origin: "Antinuke",
     });
