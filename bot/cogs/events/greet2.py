@@ -19,6 +19,15 @@ import re
 import asyncio
 from discord.ext import commands
 
+def coerce_channel_id(value):
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class greet(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -50,7 +59,8 @@ class greet(commands.Cog):
             if row is None:
                 continue
             welcome_type, welcome_message, channel_id, embed_data, auto_delete_duration = row
-            welcome_channel = self.bot.get_channel(channel_id)
+            channel_key = coerce_channel_id(channel_id)
+            welcome_channel = self.bot.get_channel(channel_key) if channel_key else None
             if not welcome_channel:
                 continue
             placeholders = {
@@ -59,7 +69,7 @@ class greet(commands.Cog):
                 "user_name": member.name,
                 "user_id": member.id,
                 "user_nick": member.display_name,
-                "user_joindate": member.joined_at.strftime("%a, %b %d, %Y"),
+                "user_joindate": member.joined_at.strftime("%a, %b %d, %Y") if member.joined_at else "",
                 "user_createdate": member.created_at.strftime("%a, %b %d, %Y"),
                 "server_name": guild.name,
                 "server_id": guild.id,

@@ -37,7 +37,10 @@ DONE on phase-8-command-manager. Commit f7684e8. Runtime gate blocks disabled co
 DONE on phase-6-disaster-recovery. Commit e354021. Dry run, confirmation, disposable-only execution. Absent members are REQUIRES MEMBER REAUTHORIZATION. Tests: tests/test_restore_v1.py. Production execution stays disabled.
 
 ## Phase 9 invites and giveaways
-DONE on phase-9-invites-giveaways. Fresh invite history with certain/ambiguous/unknown. Persistent giveaways, end, and reroll. Tests: tests/test_growth_v2.py. Legacy invite counts are not used.
+DONE on phase-9-invites-giveaways. Commit e41c2a2. Fresh invite history with certain/ambiguous/unknown. Persistent giveaways, end, and reroll. Tests: tests/test_growth_v2.py. Legacy invite counts are not used.
+
+## Phase 10 engagement
+DONE on phase-10-engagement. Welcome delivery accepts dashboard snowflake channel ids and skips a missing join time. Tests: tests/test_welcome_channel.py. Leveling, games, and Minecraft stay deferred.
 
 
 
