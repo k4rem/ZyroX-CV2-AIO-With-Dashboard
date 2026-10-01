@@ -27,9 +27,14 @@ class ApiLifecycle:
             if not root_owner_configured():
                 print("\033[33m[*] ROOT_OWNER_ID is not set; root Dashboard operations fail closed.\033[0m")
 
-        from cls_platform.scheduler_bootstrap import register_scheduler_handlers
+        from cls_platform.scheduler_bootstrap import (
+            ensure_recurring_security_jobs,
+            register_scheduler_handlers,
+        )
 
         register_scheduler_handlers(bot)
+        if POSTGRES_ENABLED:
+            await ensure_recurring_security_jobs()
 
         self._scheduler_stop = asyncio.Event()
         self._scheduler_task = asyncio.create_task(

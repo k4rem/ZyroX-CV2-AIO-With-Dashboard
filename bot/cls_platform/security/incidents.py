@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from cls_platform.database import session_scope
 from cls_platform.security.config import ensure_guild_config
@@ -66,6 +67,17 @@ def evidence_payload(observation: SecurityObservation) -> dict:
     return _redact(payload)
 
 
+def _subject_for(observation: SecurityObservation, engine: Optional[str]) -> tuple[Optional[int], str]:
+    if observation.action_class == "bot.add" and observation.target_id is not None:
+        return int(observation.target_id), "bot"
+    if observation.attribution_state == "UNATTRIBUTED" or observation.actor_id is None:
+        chosen = engine or ("bot" if observation.actor_is_bot else "human")
+        return None, chosen
+    if observation.actor_is_bot or observation.action_class.startswith("bot."):
+        return int(observation.actor_id), engine or "bot"
+    return int(observation.actor_id), engine or "human"
+
+
 async def attach_observation(
     observation_id: uuid.UUID,
     *,
@@ -74,31 +86,51 @@ async def attach_observation(
 ) -> Optional[uuid.UUID]:
     moment = _now(now)
     async with session_scope() as session:
-        observation = (
+        preview = (
             await session.execute(
                 select(SecurityObservation).where(SecurityObservation.id == observation_id)
             )
         ).scalar_one_or_none()
-        if observation is None or observation.incident_id is not None:
-            return observation.incident_id if observation else None
-        guild_id = int(observation.guild_id)
-        subject_id = observation.actor_id
-        chosen_engine = engine or ("bot" if observation.action_class.startswith("bot.") else "human")
-        if observation.attribution_state == "UNATTRIBUTED":
-            subject_id = None
-        config = await ensure_guild_config(guild_id)
-        incident_id = await _correlate(
-            session,
-            guild_id=guild_id,
-            subject_id=subject_id,
-            engine=chosen_engine,
-            severity=observation.severity,
-            moment=moment,
-            inactivity_s=int(config.incident_inactivity_s),
-            lifetime_s=int(config.incident_max_lifetime_s),
-            payload=evidence_payload(observation),
-        )
-        observation.incident_id = incident_id
+        if preview is None or preview.incident_id is not None:
+            return preview.incident_id if preview else None
+        guild_id = int(preview.guild_id)
+    async with guild_lock(guild_id):
+        async with session_scope() as session:
+            observation = (
+                await session.execute(
+                    select(SecurityObservation)
+                    .where(SecurityObservation.id == observation_id)
+                    .with_for_update()
+                )
+            ).scalar_one()
+            if observation.incident_id is not None:
+                return observation.incident_id
+            subject_id, chosen_engine = _subject_for(observation, engine)
+            config = await ensure_guild_config(guild_id)
+            opened_payload = evidence_payload(observation)
+            incident_id, opened = await _correlate(
+                session,
+                guild_id=guild_id,
+                subject_id=subject_id,
+                engine=chosen_engine,
+                severity=observation.severity,
+                moment=moment,
+                inactivity_s=int(config.incident_inactivity_s),
+                lifetime_s=int(config.incident_max_lifetime_s),
+                payload=opened_payload,
+            )
+            observation.incident_id = incident_id
+        if opened:
+            from cls_platform.security.alerts import enqueue_alert
+
+            await enqueue_alert(
+                guild_id=guild_id,
+                incident_id=incident_id,
+                kind="open",
+                payload=opened_payload,
+                now=moment,
+                coalesce=False,
+            )
         return incident_id
 
 
@@ -113,68 +145,93 @@ async def _correlate(
     inactivity_s: int,
     lifetime_s: int,
     payload: dict,
-) -> uuid.UUID:
-    async with guild_lock(guild_id):
-        current = None
-        if subject_id is not None:
-            current = (
-                await session.execute(
-                    select(SecurityIncident)
-                    .where(
-                        SecurityIncident.guild_id == guild_id,
-                        SecurityIncident.subject_id == subject_id,
-                        SecurityIncident.engine == engine,
-                        SecurityIncident.status == IncidentStatus.ACTIVE.value,
-                    )
-                    .with_for_update()
-                )
-            ).scalar_one_or_none()
-        previous_id = None
-        if current is not None:
-            inactive = (moment - current.last_activity_at).total_seconds() > inactivity_s
-            expired = (moment - current.opened_at).total_seconds() > lifetime_s
-            if not inactive and not expired:
-                current.last_activity_at = moment
-                current.severity = _higher(current.severity, severity)
-                session.add(
-                    SecurityIncidentEvent(
-                        incident_id=current.id,
-                        guild_id=guild_id,
-                        kind="observation",
-                        payload=payload,
-                    )
-                )
-                return current.id
-            current.status = IncidentStatus.CLOSED.value
-            current.closure = (
-                IncidentClosure.EXPIRED_LIFETIME.value if expired else IncidentClosure.EXPIRED_INACTIVE.value
+) -> tuple[uuid.UUID, bool]:
+    current = (
+        await session.execute(
+            select(SecurityIncident)
+            .where(
+                SecurityIncident.guild_id == guild_id,
+                SecurityIncident.subject_id == subject_id if subject_id is not None else SecurityIncident.subject_id.is_(None),
+                SecurityIncident.engine == engine,
+                SecurityIncident.status == IncidentStatus.ACTIVE.value,
             )
-            current.closed_at = moment
-            previous_id = current.id
-            await session.flush()
-        created = SecurityIncident(
-            guild_id=guild_id,
-            subject_id=subject_id,
-            engine=engine,
-            status=IncidentStatus.ACTIVE.value,
-            severity=severity,
-            opened_at=moment,
-            last_activity_at=moment,
-            previous_incident_id=previous_id,
-            tier_map_version="2026-10-01",
-            trust_snapshot={},
+            .with_for_update()
         )
-        session.add(created)
+    ).scalar_one_or_none()
+    previous_id = None
+    if current is not None:
+        inactive = (moment - current.last_activity_at).total_seconds() > inactivity_s
+        expired = (moment - current.opened_at).total_seconds() > lifetime_s
+        if not inactive and not expired:
+            current.last_activity_at = moment
+            current.severity = _higher(current.severity, severity)
+            session.add(
+                SecurityIncidentEvent(
+                    incident_id=current.id,
+                    guild_id=guild_id,
+                    kind="observation",
+                    payload=payload,
+                )
+            )
+            return current.id, False
+        current.status = IncidentStatus.CLOSED.value
+        current.closure = (
+            IncidentClosure.EXPIRED_LIFETIME.value if expired else IncidentClosure.EXPIRED_INACTIVE.value
+        )
+        current.closed_at = moment
+        previous_id = current.id
         await session.flush()
+    created = SecurityIncident(
+        guild_id=guild_id,
+        subject_id=subject_id,
+        engine=engine,
+        status=IncidentStatus.ACTIVE.value,
+        severity=severity,
+        opened_at=moment,
+        last_activity_at=moment,
+        previous_incident_id=previous_id,
+        tier_map_version="2026-10-01",
+        trust_snapshot={},
+    )
+    try:
+        async with session.begin_nested():
+            session.add(created)
+            await session.flush()
+    except IntegrityError:
+        current = (
+            await session.execute(
+                select(SecurityIncident)
+                .where(
+                    SecurityIncident.guild_id == guild_id,
+                    SecurityIncident.subject_id == subject_id
+                    if subject_id is not None
+                    else SecurityIncident.subject_id.is_(None),
+                    SecurityIncident.engine == engine,
+                    SecurityIncident.status == IncidentStatus.ACTIVE.value,
+                )
+                .with_for_update()
+            )
+        ).scalar_one()
+        current.last_activity_at = moment
+        current.severity = _higher(current.severity, severity)
         session.add(
             SecurityIncidentEvent(
-                incident_id=created.id,
+                incident_id=current.id,
                 guild_id=guild_id,
                 kind="observation",
                 payload=payload,
             )
         )
-        return created.id
+        return current.id, False
+    session.add(
+        SecurityIncidentEvent(
+            incident_id=created.id,
+            guild_id=guild_id,
+            kind="observation",
+            payload=payload,
+        )
+    )
+    return created.id, True
 
 
 async def close_incident(

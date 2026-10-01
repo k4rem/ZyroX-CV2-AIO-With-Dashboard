@@ -22,7 +22,31 @@ except ImportError:  # phase-0 tests stub utils; production imports the real mod
         return False
 
 
+def allowlist_config_status() -> str:
+    """ok, empty, or malformed. A bad parse must not become a leave decision."""
+    try:
+        from utils.env_parse import parse_discord_snowflake_list, parse_env_bool
+    except ImportError:
+        return "ok" if ALLOWLIST_ENFORCED else "empty"
+    try:
+        allow_empty = parse_env_bool("ALLOW_EMPTY_GUILD_ALLOWLIST", "false")
+        ids = parse_discord_snowflake_list("ALLOWED_GUILD_IDS")
+    except SystemExit:
+        logger.error("Guild allowlist config is malformed. Refusing to leave any guild.")
+        return "malformed"
+    except Exception:
+        logger.exception("Guild allowlist config could not be read. Refusing to leave any guild.")
+        return "malformed"
+    if not ids and not allow_empty:
+        logger.error("ALLOWED_GUILD_IDS is empty. Refusing to leave any guild.")
+        return "empty"
+    return "ok"
+
+
 async def sweep_non_allowlisted_guilds(bot) -> list[int]:
+    status = allowlist_config_status()
+    if status != "ok":
+        return []
     if not ALLOWLIST_ENFORCED:
         return []
     left: list[int] = []

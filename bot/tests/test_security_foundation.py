@@ -136,14 +136,15 @@ async def test_sweep_keeps_product_and_ops_guilds():
     class Bot:
         guilds = [product, ops, stranger]
 
-    previous = (sweep.ALLOWLIST_ENFORCED, sweep.OPS_GUILD_ID, sweep.is_guild_allowed)
+    previous = (sweep.ALLOWLIST_ENFORCED, sweep.OPS_GUILD_ID, sweep.is_guild_allowed, sweep.allowlist_config_status)
     sweep.ALLOWLIST_ENFORCED = True
     sweep.OPS_GUILD_ID = ops.id
     sweep.is_guild_allowed = lambda gid: gid == product.id
+    sweep.allowlist_config_status = lambda: "ok"
     try:
         left = await sweep.sweep_non_allowlisted_guilds(Bot())
     finally:
-        sweep.ALLOWLIST_ENFORCED, sweep.OPS_GUILD_ID, sweep.is_guild_allowed = previous
+        sweep.ALLOWLIST_ENFORCED, sweep.OPS_GUILD_ID, sweep.is_guild_allowed, sweep.allowlist_config_status = previous
     assert left == [stranger.id]
     assert product.left is False
     assert ops.left is False

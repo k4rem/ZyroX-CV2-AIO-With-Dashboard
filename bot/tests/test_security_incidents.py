@@ -166,7 +166,7 @@ async def test_outbox_dedupe_retry_backoff_coalesce_and_ops_guild(db_reset, monk
     assert sender.sent == []
     async with session_scope() as session:
         row = (await session.execute(select(SecurityAlertOutbox))).scalar_one()
-        assert row.status == "UNDELIVERABLE_NO_DESTINATION"
+        assert row.status == "DEGRADED"
         assert row.payload["token"] == "[REDACTED]"
         state = (
             await session.execute(select(SecurityGuildState).where(SecurityGuildState.guild_id == TEST_GUILD_A))
@@ -174,7 +174,6 @@ async def test_outbox_dedupe_retry_backoff_coalesce_and_ops_guild(db_reset, monk
         assert state.ops_destination_ok is False
     async with session_scope() as session:
         current = (await session.execute(select(SecurityAlertOutbox))).scalar_one()
-        current.status = "PENDING"
         current.next_attempt_at = START
     ops_channel = _Channel(ops, channel_id)
     failing = _Sender(ops_channel, fail_times=1)
@@ -213,7 +212,7 @@ async def test_alert_coalesce_and_cap(db_reset, monkeypatch):
         now=START + timedelta(seconds=10),
     )
     assert opened is not None
-    assert skipped is None
+    assert skipped == opened
     for index in range(19):
         await enqueue_alert(
             guild_id=TEST_GUILD_A,

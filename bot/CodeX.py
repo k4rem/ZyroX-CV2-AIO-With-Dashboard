@@ -74,14 +74,16 @@ async def on_ready():
     allowlist_msg = guild_allowlist_startup_message()
     if allowlist_msg:
         print(f"\033[33m[*] {allowlist_msg}\033[0m")
-    try:
-        from cls_platform.security.allowlist_sweep import sweep_non_allowlisted_guilds
+    if not getattr(client, "_cls_allowlist_reconciled", False):
+        client._cls_allowlist_reconciled = True
+        try:
+            from cls_platform.security.allowlist_sweep import sweep_non_allowlisted_guilds
 
-        left = await sweep_non_allowlisted_guilds(client)
-        if left:
-            print(f"[guild allowlist] Left {len(left)} non-allowlisted guild(s) on startup.")
-    except Exception as exc:
-        print(f"[guild allowlist] Startup sweep failed: {exc}")
+            left = await sweep_non_allowlisted_guilds(client)
+            if left:
+                print(f"[guild allowlist] Left {len(left)} non-allowlisted guild(s) on startup.")
+        except Exception as exc:
+            print(f"[guild allowlist] Startup sweep failed closed: {exc}")
 
     # Sync application emojis on startup
     await run_sync(TOKEN)
