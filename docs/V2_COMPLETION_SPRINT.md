@@ -40,7 +40,10 @@ DONE on phase-6-disaster-recovery. Commit e354021. Dry run, confirmation, dispos
 DONE on phase-9-invites-giveaways. Commit e41c2a2. Fresh invite history with certain/ambiguous/unknown. Persistent giveaways, end, and reroll. Tests: tests/test_growth_v2.py. Legacy invite counts are not used.
 
 ## Phase 10 engagement
-DONE on phase-10-engagement. Welcome delivery accepts dashboard snowflake channel ids and skips a missing join time. Tests: tests/test_welcome_channel.py. Leveling, games, and Minecraft stay deferred.
+DONE on phase-10-engagement. Commit c1daeba. Welcome delivery accepts dashboard snowflake channel ids and skips a missing join time. Tests: tests/test_welcome_channel.py. Leveling, games, and Minecraft stay deferred.
+
+## Phase 11 legacy cleanup
+DONE on phase-11-legacy-cleanup. Removed the duplicate welcome routes and the unused legacy logging and ticket dashboard components. Licenses, migration history, and deferred module source stay.
 
 
 
