@@ -45,6 +45,16 @@ DONE on phase-10-engagement. Commit c1daeba. Welcome delivery accepts dashboard 
 ## Phase 11 legacy cleanup
 DONE on phase-11-legacy-cleanup. Commit da0babd. Removed the duplicate welcome routes and the unused legacy logging and ticket dashboard components. Licenses, migration history, and deferred module source stay.
 
+## Release candidate
+RELEASE CANDIDATE READY on phase-11-legacy-cleanup. Authenticated walkthrough of the surfaced modules passed. ENFORCE stays locked. Restore execution stays disabled.
+
+Manual before production:
+- live Discord semantic verification
+- production deployment
+- production ENFORCE activation
+- legacy ticket.db import
+- legacy invite counts are not imported
+
 
 
 

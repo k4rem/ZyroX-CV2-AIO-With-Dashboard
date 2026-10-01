@@ -68,7 +68,7 @@ test("nav hrefs never contain a server-only root id and always include the guild
 
 test("breadcrumbs: guild / group / page, with tab label for grouped routes", () => {
   const crumbs = resolveBreadcrumbs({ pathname: "/dashboard/guild/5/antinuke", guildId: "5", guildName: "CLS Main" });
-  assert.deepEqual(crumbs.map((c) => c.label), ["CLS Main", "Security", "Antinuke"]);
+  assert.deepEqual(crumbs.map((c) => c.label), ["CLS Main", "Security", "Protection"]);
   assert.equal(crumbs[0].userContent, true);
 
   const grouped = resolveBreadcrumbs({ pathname: "/dashboard/guild/5/joindm", guildId: "5", guildName: "CLS Main" });

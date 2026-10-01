@@ -163,8 +163,15 @@ export const NAV_ITEMS: NavItemDef[] = [
     routes: [
       { path: "/tracking", label: "Tracking" },
       { path: "/invites", label: "Invites" },
-      { path: "/giveaways", label: "Giveaways" },
     ],
+  },
+  {
+    id: "giveaways",
+    label: "Giveaways",
+    icon: "invites",
+    group: "engagement",
+    scope: "guild",
+    routes: [{ path: "/giveaways", label: "Giveaways" }],
   },
   {
     id: "j2c",
