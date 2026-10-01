@@ -25,7 +25,7 @@ PARTIAL. No deploy. Health stays `/health`. Rollback of verification is alembic 
 DONE WITH SAFE DEFERRALS on phase-4-tickets-v2. Commit f8f73cf. Cooldown and blacklist enforced. Tests: tests/test_tickets_v2.py. Deferral: legacy ticket.db import; browser QA not run. V2 starts fresh without writing legacy storage.
 
 ## Phase 5 logging
-DONE on phase-5-logging-v2. Postgres events, 30-day message content, 90-day event retention, routing, dashboard stream. Tests: tests/test_logging_v2.py, tests/test_postgres_migrations.py, tests/test_route_coverage.py. Deferral: authenticated visual QA (session ended).
+DONE on phase-5-logging-v2. Commit 79d1571. Postgres events, 30-day message content, 90-day event retention, routing, dashboard stream. Tests: tests/test_logging_v2.py, tests/test_postgres_migrations.py, tests/test_route_coverage.py. Deferral: authenticated visual QA (session ended).
 
 
 
