@@ -1,17 +1,7 @@
 import * as React from "react";
 import type { OverviewPayload } from "@/lib/loadOverview";
-import { COVERAGE_LABELS, COVERAGE_ORDER, type CoverageBucket } from "@/lib/overviewModel";
 import { SectionRule } from "@/components/ui/section-rule";
-import { StateBar } from "@/components/ui/state-bar";
-import { MicroBars } from "@/components/ui/micro-bar";
 import { cn } from "@/lib/utils";
-
-const COVERAGE_FILL: Record<CoverageBucket, string> = {
-  on: "bg-ok",
-  partial: "bg-warn",
-  off: "bg-fg-4",
-  unavailable: "bg-neutral",
-};
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -22,7 +12,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-/** Facts column (RP §1.1): composition and plain facts — no statuses to act on here. */
+/** Facts column (RP §1.1): plain facts — no statuses to act on here. Composition lives in the instrument deck. */
 export function FactsColumn({
   data,
   className,
@@ -33,42 +23,22 @@ export function FactsColumn({
   style?: React.CSSProperties;
 }) {
   const g = data.guild;
-  const parts = COVERAGE_ORDER.filter((b) => b !== "unavailable" || data.coverage.unavailable > 0).map((b) => ({
-    key: b,
-    label: COVERAGE_LABELS[b],
-    value: data.coverage[b],
-    fill: COVERAGE_FILL[b],
-  }));
 
   return (
-    <div className={cn("grid content-start gap-x-8 gap-y-7 md:grid-cols-3 xl:grid-cols-1", className)} style={style}>
-      <section aria-labelledby="ov-state">
-        <SectionRule id="ov-state" label="Module state" meta={data.modules.length} />
-        <StateBar className="mt-3" parts={parts} label="Module state" />
-      </section>
-
+    <div className={cn("grid content-start gap-x-8 gap-y-7 md:grid-cols-2 xl:grid-cols-1", className)} style={style}>
       <section aria-labelledby="ov-server">
         <SectionRule id="ov-server" label="Server" />
         {g ? (
-          <>
-            <dl className="mt-1.5">
-              <Fact label="Members">{g.member_count.toLocaleString()}</Fact>
-              <Fact label="Roles">{g.role_count.toLocaleString()}</Fact>
-              <Fact label="Channels">{g.channel_count.toLocaleString()}</Fact>
-              {data.prefix && (
-                <Fact label="Command prefix">
-                  <span dir="ltr">{data.prefix}</span>
-                </Fact>
-              )}
-            </dl>
-            {data.channels && data.channels.length > 0 && (
-              <MicroBars
-                className="mt-3"
-                label="Channels by type"
-                rows={data.channels.map((c) => ({ key: c.kind, label: c.label, value: c.count }))}
-              />
+          <dl className="mt-1.5">
+            <Fact label="Members">{g.member_count.toLocaleString()}</Fact>
+            <Fact label="Roles">{g.role_count.toLocaleString()}</Fact>
+            <Fact label="Channels">{g.channel_count.toLocaleString()}</Fact>
+            {data.prefix && (
+              <Fact label="Command prefix">
+                <span dir="ltr">{data.prefix}</span>
+              </Fact>
             )}
-          </>
+          </dl>
         ) : (
           <p className="mt-2 text-body text-fg-2">{data.guildError ?? "Server details unavailable."}</p>
         )}

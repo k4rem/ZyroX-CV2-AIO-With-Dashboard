@@ -2,19 +2,16 @@
 
 import * as React from "react";
 import { usePathname } from "next/navigation";
-import { api } from "@/lib/api";
 import { parseDashboardPath } from "@/lib/shellNav";
 import {
   deriveHealth,
   permissionSummaryForGuild,
   type HealthLevel,
-  type SystemHealthLike,
 } from "@/lib/shellHealth";
 import { cn } from "@/lib/utils";
+import { useHealthReading } from "./health-reading";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { StatusLabel, type Status } from "@/components/ui/status";
-
-const POLL_MS = 30_000;
 
 const LEVEL_STATUS: Record<HealthLevel, Status> = {
   loading: "unknown",
@@ -29,116 +26,6 @@ const LEVEL_TEXT: Record<HealthLevel, string> = {
   degraded: "Degraded",
   offline: "Bot unreachable",
 };
-
-interface Reading {
-  statusLatency: number | null;
-  statusFailed: boolean;
-  /** A probe came back 401: the dashboard session ended, which is not the same as the bot being down. */
-  sessionEnded: boolean;
-  health: SystemHealthLike | null;
-  healthFailed: boolean;
-  at: Date | null;
-}
-
-const INITIAL: Reading = {
-  statusLatency: null,
-  statusFailed: false,
-  sessionEnded: false,
-  health: null,
-  healthFailed: false,
-  at: null,
-};
-
-/** A hung probe must resolve to "unreachable", never freeze the last (possibly green) reading. */
-const PROBE_TIMEOUT_MS = 8_000;
-
-function withTimeout<T>(p: Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error("timeout")), PROBE_TIMEOUT_MS);
-    p.then(
-      (v) => {
-        clearTimeout(t);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(t);
-        reject(e);
-      },
-    );
-  });
-}
-
-class ProbeError extends Error {
-  constructor(public status: number) {
-    super(String(status));
-  }
-}
-
-async function readHealth(): Promise<SystemHealthLike | null> {
-  const res = await fetch("/api/bot/system/health", {
-    credentials: "same-origin",
-    cache: "no-store",
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-  });
-  if (!res.ok) throw new ProbeError(res.status);
-  return (await res.json()) as SystemHealthLike;
-}
-
-function isUnauthorized(result: PromiseSettledResult<unknown>) {
-  return result.status === "rejected" && (result.reason as { status?: number } | undefined)?.status === 401;
-}
-
-function useHealthReading() {
-  const [reading, setReading] = React.useState<Reading>(INITIAL);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const tick = async () => {
-      try {
-        const [status, health] = await Promise.allSettled([withTimeout(api.getBotStatus()), readHealth()]);
-        if (cancelled) return;
-        setReading({
-          statusLatency: status.status === "fulfilled" ? status.value.latency : null,
-          statusFailed: status.status === "rejected",
-          sessionEnded: isUnauthorized(status) || isUnauthorized(health),
-          health: health.status === "fulfilled" ? health.value : null,
-          healthFailed: health.status === "rejected",
-          at: new Date(),
-        });
-      } finally {
-        schedule();
-      }
-    };
-
-    const schedule = () => {
-      if (cancelled) return;
-      timer = setTimeout(() => {
-        if (document.visibilityState === "visible") void tick();
-        else schedule();
-      }, POLL_MS);
-    };
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        if (timer) clearTimeout(timer);
-        void tick();
-      }
-    };
-
-    void tick();
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, []);
-
-  return reading;
-}
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -164,7 +51,7 @@ const timeFmt = new Intl.DateTimeFormat(undefined, {
 export function HealthIndicator() {
   const pathname = usePathname() ?? "";
   const { guildId } = parseDashboardPath(pathname);
-  const reading = useHealthReading();
+  const { reading } = useHealthReading();
 
   const snapshot = deriveHealth({
     status: reading.statusLatency === null ? null : { latency: reading.statusLatency },

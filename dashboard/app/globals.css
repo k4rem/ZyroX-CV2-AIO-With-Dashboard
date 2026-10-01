@@ -502,6 +502,46 @@
     transform-origin: right center;
   }
 
+  /* Instrument ring segment (Task A.1): arms once on mount, staggered by --i; a
+     state change afterwards only transitions the fill. DATA tier. */
+  .cls-arc {
+    transition: fill var(--cls-dur-data) var(--cls-ease-out), opacity var(--cls-dur-micro) var(--cls-ease-out);
+    animation: cls-arc-in var(--cls-dur-data) var(--cls-ease-out) backwards;
+    animation-delay: calc(var(--i, 0) * var(--cls-stagger));
+  }
+  @keyframes cls-arc-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  /* Hover/focus on one item dims the rest of its instrument. */
+  [data-active] .cls-arc:not([data-active-item]) {
+    opacity: 0.35;
+  }
+
+  /* Sparkline: the newest segment draws in when a sample arrives. */
+  .cls-draw {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+    animation: cls-draw var(--cls-dur-data) var(--cls-ease-out) both;
+  }
+  @keyframes cls-draw {
+    from {
+      stroke-dashoffset: 1;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  /* A live number that changed: settles in from 3 px below. */
+  .cls-num {
+    animation: cls-rise var(--cls-dur-data) var(--cls-ease-out) both;
+  }
+
   /* Page-region entrance: STATE tier, staggered by --i. Reduced motion → instant. */
   .cls-enter {
     animation: cls-rise var(--cls-dur-standard) var(--cls-ease-out) both;
@@ -545,7 +585,10 @@
 
   @media (prefers-reduced-motion: reduce) {
     .cls-enter,
-    .cls-changed {
+    .cls-changed,
+    .cls-arc,
+    .cls-draw,
+    .cls-num {
       animation: none !important;
     }
     .cls-row:hover .cls-row-go,

@@ -190,6 +190,47 @@ export function permissionCoverage(health: SystemHealthLike | null, guildId: str
   };
 }
 
+// --- System Core rings --------------------------------------------------------
+// One segment per real item. `null` means the source did not report, which the
+// instrument draws as a neutral ring — never as healthy.
+
+/** Bot-side cog / module names → dashboard names. Unknown names pass through. */
+const MODULE_DISPLAY: Record<string, string> = {
+  Welcomer: "Welcome",
+  TicketCog: "Tickets",
+  JoinToCreate: "Join to Create",
+};
+
+export function moduleDisplayName(name: string): string {
+  return MODULE_DISPLAY[name] ?? name;
+}
+
+export interface CoreItem {
+  key: string;
+  label: string;
+  state: "ok" | "failed" | "missing";
+}
+
+export function requiredModuleItems(health: SystemHealthLike | null): CoreItem[] | null {
+  const ok = health?.modules?.required_ok ?? [];
+  const failed = health?.modules?.required_failed ?? [];
+  if (!health?.modules || ok.length + failed.length === 0) return null;
+  return [
+    ...ok.map((n) => ({ key: `m-${n}`, label: moduleDisplayName(n), state: "ok" as const })),
+    ...failed.map((f) => ({ key: `m-${f.name}`, label: moduleDisplayName(f.name), state: "failed" as const })),
+  ];
+}
+
+export function permissionItems(health: SystemHealthLike | null, guildId: string): CoreItem[] | null {
+  const cov = permissionCoverage(health, guildId);
+  if (!cov.known) return null;
+  return Object.keys(health?.permissions?.module_requirements ?? {}).map((m) => ({
+    key: `p-${m}`,
+    label: moduleDisplayName(m),
+    state: cov.missingModules.includes(m) ? ("missing" as const) : ("ok" as const),
+  }));
+}
+
 // --- Attention ranking ------------------------------------------------------
 
 const SEVERITY_RANK = { critical: 0, warning: 1, info: 2 } as const;

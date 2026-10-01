@@ -5,8 +5,11 @@ import {
   j2cEnabled,
   j2cSteps,
   loggingRouting,
+  moduleDisplayName,
   permissionCoverage,
+  permissionItems,
   rankAttention,
+  requiredModuleItems,
   stepsDone,
   summarizeCoverage,
   ticketSteps,
@@ -111,4 +114,34 @@ test("activity band ships with no widgets and filters by available sources", () 
     availableActivityWidgets(new Set(["security.events"]), registry).map((w) => w.id),
     ["s"],
   );
+});
+
+test("System Core outer ring: one item per required module, failures included, display names", () => {
+  assert.equal(requiredModuleItems(null), null);
+  assert.equal(requiredModuleItems({ modules: { required_ok: [], required_failed: [] } }), null);
+  const items = requiredModuleItems({
+    modules: { required_ok: ["Welcomer", "Logging"], required_failed: [{ name: "TicketCog", error: "boom" }] },
+  });
+  assert.deepEqual(items, [
+    { key: "m-Welcomer", label: "Welcome", state: "ok" },
+    { key: "m-Logging", label: "Logging", state: "ok" },
+    { key: "m-TicketCog", label: "Tickets", state: "failed" },
+  ]);
+  assert.equal(moduleDisplayName("Unknown"), "Unknown");
+});
+
+test("System Core inner ring: per-guild permission requirements; unknown guild is not reported", () => {
+  const health = {
+    permissions: {
+      module_requirements: { Moderation: ["ban_members"], Logging: ["view_audit_log"], Tickets: ["manage_channels"] },
+      guilds: [{ guild_id: "1543105121804615781", missing_by_module: { Logging: ["view_audit_log"], Tickets: [] } }],
+    },
+  };
+  assert.equal(permissionItems(health, "999"), null);
+  assert.equal(permissionItems(null, "1543105121804615781"), null);
+  assert.deepEqual(permissionItems(health, "1543105121804615781"), [
+    { key: "p-Moderation", label: "Moderation", state: "ok" },
+    { key: "p-Logging", label: "Logging", state: "missing" },
+    { key: "p-Tickets", label: "Tickets", state: "ok" },
+  ]);
 });

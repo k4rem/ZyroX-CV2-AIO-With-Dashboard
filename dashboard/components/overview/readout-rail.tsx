@@ -1,11 +1,13 @@
 import * as React from "react";
 import type { OverviewPayload } from "@/lib/loadOverview";
 import { Avatar } from "@/components/ui/avatar";
-import { StatusLabel, type Status } from "@/components/ui/status";
-import { SegmentMeter } from "@/components/ui/segment-meter";
+import { StatusDot, StatusLabel, type Status } from "@/components/ui/status";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ChangeMark, Readout } from "@/components/ui/readout";
 import { CheckedReadout } from "./checked-readout";
+import { LiveLatency } from "./live-latency";
+
+const TONE_STATUS: Record<"ok" | "warn" | "danger", Status> = { ok: "online", warn: "degraded", danger: "offline" };
 
 function botState(data: OverviewPayload): { status: Status; label: string } {
   if (data.healthLevel === "offline") return { status: "offline", label: "Offline" };
@@ -29,12 +31,13 @@ function RatioValue({
 }) {
   return (
     <Tooltip content={tip} side="bottom" align="start">
-      <span tabIndex={0} className="inline-flex items-center gap-2.5 rounded-xs">
-        <SegmentMeter value={ok} total={total} tone={tone} label={srLabel} />
+      <span tabIndex={0} className="inline-flex items-center gap-2 rounded-xs">
+        <StatusDot status={TONE_STATUS[tone]} />
         <ChangeMark watch={`${ok}/${total}`}>
-          <span className="font-mono tabular-nums" dir="ltr">
+          <span className="font-mono tabular-nums" dir="ltr" aria-hidden="true">
             {ok}/{total}
           </span>
+          <span className="sr-only">{srLabel}</span>
         </ChangeMark>
       </span>
     </Tooltip>
@@ -43,7 +46,7 @@ function RatioValue({
 
 /**
  * Readout rail (RP §1.1): one instrument strip for the server and the bot's state
- * in it. The page's anchor panel, so it carries the cut and the signal edge.
+ * in it. Carries the cut; the signal edge belongs to the instrument deck below.
  */
 export function ReadoutRail({ data, className, style }: { data: OverviewPayload; className?: string; style?: React.CSSProperties }) {
   const bot = botState(data);
@@ -54,7 +57,7 @@ export function ReadoutRail({ data, className, style }: { data: OverviewPayload;
 
   return (
     <section aria-label="Server and bot status" className={className} style={style}>
-      <dl className="cls-cut cls-signal-edge grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line-subtle shadow-hl-1 md:grid-cols-3 xl:grid-cols-[minmax(0,1.2fr)_repeat(6,minmax(0,1fr))] [&>div]:bg-surface-1">
+      <dl className="cls-cut grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line-subtle shadow-hl-1 md:grid-cols-3 xl:grid-cols-[minmax(0,1.2fr)_repeat(6,minmax(0,1fr))] [&>div]:bg-surface-1">
         <Readout label="Server" className="col-span-2 md:col-span-3 xl:col-span-1">
           <Avatar src={data.guildIconUrl} name={g?.name} size={24} />
           <span className="min-w-0 truncate" dir="auto">
@@ -68,11 +71,7 @@ export function ReadoutRail({ data, className, style }: { data: OverviewPayload;
               <span className="text-fg-1">{bot.label}</span>
             </StatusLabel>
           </ChangeMark>
-          {data.botLatencyMs != null && (
-            <span className="font-mono text-small font-normal tabular-nums text-fg-3" dir="ltr">
-              {data.botLatencyMs} ms
-            </span>
-          )}
+          <LiveLatency initialMs={data.botLatencyMs} />
         </Readout>
 
         <Readout label="Required modules">

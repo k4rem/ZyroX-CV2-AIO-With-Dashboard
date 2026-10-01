@@ -14,13 +14,16 @@ import {
   j2cSteps,
   loggingRouting,
   permissionCoverage,
+  permissionItems,
   rankAttention,
+  requiredModuleItems,
   stepsDone,
   summarizeCoverage,
   ticketSteps,
   welcomeSteps,
   type ChannelKind,
   type ChecklistStep,
+  type CoreItem,
   type CoverageBucket,
   type ModuleDomain,
   type PermissionCoverage,
@@ -62,6 +65,10 @@ export interface OverviewPayload {
   requiredOkNames: string[];
   requiredFailedNames: string[];
   permissions: PermissionCoverage;
+  /** System Core outer ring: one item per required module. `null` = not reported. */
+  coreModules: CoreItem[] | null;
+  /** System Core inner ring: one item per module permission requirement. `null` = not reported. */
+  corePermissions: CoreItem[] | null;
   postgresConnected: boolean | null;
   postgresEnabled: boolean | null;
   schedulerRunning: boolean | null;
@@ -403,6 +410,8 @@ export async function loadOverview(opts: {
     requiredOkNames: systemHealth?.modules?.required_ok ?? [],
     requiredFailedNames: (systemHealth?.modules?.required_failed ?? []).map((f) => f.name),
     permissions: permissionCoverage(systemHealth, guildId),
+    coreModules: requiredModuleItems(systemHealth),
+    corePermissions: permissionItems(systemHealth, guildId),
     postgresConnected: systemHealth?.postgres?.connected ?? null,
     postgresEnabled: systemHealth?.postgres?.enabled ?? null,
     schedulerRunning: systemHealth?.scheduler?.worker_running ?? null,

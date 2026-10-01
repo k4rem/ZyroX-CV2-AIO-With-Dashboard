@@ -8,6 +8,7 @@ import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { UiProviders } from "@/components/providers/ui-providers";
 import { SidebarContent, SIDEBAR_ID } from "./sidebar";
 import { Topbar } from "./topbar";
+import { HealthReadingProvider } from "./health-reading";
 import { useSidebarState, type SidebarPref } from "./use-sidebar-state";
 import type { ShellGuild, ShellUser } from "./shell-types";
 
@@ -78,6 +79,7 @@ export function AppShell({ user, isRoot, guilds, guildsError, dir, initialSideba
 
   return (
     <UiProviders dir={dir}>
+      <HealthReadingProvider>
       <div
         className="cls-shell min-h-dvh bg-canvas text-fg-1"
         data-booting={booting ? "true" : "false"}
@@ -177,6 +179,7 @@ export function AppShell({ user, isRoot, guilds, guildsError, dir, initialSideba
           </Drawer>
         )}
       </div>
+      </HealthReadingProvider>
     </UiProviders>
   );
 }

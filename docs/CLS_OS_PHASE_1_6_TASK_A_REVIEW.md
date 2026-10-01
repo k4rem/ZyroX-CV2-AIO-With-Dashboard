@@ -154,3 +154,91 @@ Report (`node scripts/check-legacy-tokens.mjs`, report-only): 23 files — `slat
 2. The "module source failed" row state is not covered by a unit test: `loadOverview` imports the server API client through path aliases that `node --test` cannot resolve. The failure path is one shared helper (`unavailableRow`).
 3. The ticket panel channel name contains an emoji that renders as a colour glyph in the row detail; it is real Discord data and left as-is.
 4. `health.permissions.top_role_position` already exists in the API; RP §4.2 calls it "future". Worth using in Task C (Bot settings / Security).
+
+---
+
+## 13. ANALYTICS / INSTRUMENT REFINEMENT (Task A.1)
+
+Owner feedback on Task A: the Graphite direction is approved, but the Overview read as text-heavy and lacked a focal point. Task A.1 adds an **instrument deck** directly under the readout rail. Hierarchy is now: page header → readout rail → instrument deck (focal) → needs attention → module matrix + facts. Future activity slots stay unrendered.
+
+### 13.1 Deck composition
+
+One dark stage (`bg-void`, the `#040306` L0 token), hairline-separated regions (`gap-px` over `line-subtle`), not a card per chart. The deck now carries the page's signal edge (moved off the rail) and one CLS cut; the rail keeps its cut — two cuts per viewport, the AD maximum.
+
+| Width | Layout |
+|---|---|
+| < 768 | One column, priority order: System Core → Live latency → Module state → Server composition |
+| 768–1279 | System Core full width; Module state + Composition side by side; Live latency full width |
+| 1280–1919 | System Core left spanning two rows (`1.35fr`); Module state and Composition stacked right; Live latency full width |
+| ≥ 1920 | Three columns: System Core spanning two rows; Module state + Composition side by side; Live latency under them |
+
+Future Security / Tickets / Logging instruments get a region in this grid only when their sources exist (`overviewWidgets`); none is rendered.
+
+### 13.2 Real-data mapping
+
+| Instrument | Encodes | Source |
+|---|---|---|
+| **System Core — outer ring** | One segment per required bot module. `ok` = success, `failed` = danger. | `/system/health` → `modules.required_ok` / `required_failed` (`requiredModuleItems`) |
+| **System Core — inner ring** | One segment per module that declares permission requirements, for **this** guild. `ok` = success (less ink), `missing` = warning. | `permissions.module_requirements` + `permissions.guilds[guild].missing_by_module` (`permissionItems`) |
+| **System Core — centre** | Live bot state (Online / Degraded / Offline / Unknown) and gateway latency in ms. | Shared shell poll (`/bot/status` + `/system/health`), SSR reading until the first poll lands |
+| **Module state** | One segment per module row in the matrix, ordered On → Incomplete → Off → Unavailable; centre = On count / total. | The matrix's own `ModuleRow.bucket` values — the same numbers as the matrix, never a score |
+| **Server composition** | One slanted tick per real channel grouped by Discord type (Text, Voice, Categories, Other); proportional runs above 96 channels. | `getChannels` → `channelComposition` |
+| **Live latency** | Gateway latency samples collected during this browser session. | The shared shell poll — see 13.3 |
+
+Not reported ≠ healthy: a ring whose source did not report is drawn as a dashed **neutral** track with "Not reported by the bot." No health percentage, security score, trend or history is computed anywhere.
+
+Bot module names are mapped to dashboard names for display only (`Welcomer` → Welcome, `TicketCog` → Tickets, `JoinToCreate` → Join to Create).
+
+### 13.3 Latency sampling
+
+- The topbar indicator already polled `/bot/status` + `/system/health` every 30 s while the tab is visible. That poll moved into one `HealthReadingProvider` in the shell; the topbar, the rail's bot latency, System Core and the sparkline all read it. **No new interval, no new endpoint.** Measured on the preview: 2 status + 2 health requests in 65 s.
+- Each successful status reading appends `{at, ms}` to an in-memory buffer bounded to **20 samples** (`appendLatencySample`; ≈ 10 minutes at 30 s). Non-finite or negative values are rejected.
+- The buffer lives for the tab session (the provider sits in the dashboard shell), so navigating away from the Overview and back keeps the series; a reload starts a new one. It is labelled "This session · N samples · every 30 s". No backend persistence, no DB table.
+- "Check again" also triggers the shared probe (guarded by an in-flight flag, so it never overlaps the scheduled one) and therefore adds a real sample.
+- The value is Discord's gateway heartbeat latency, which updates roughly every 40 s, so consecutive samples are often identical; a flat line is the honest reading. The range readout is hidden while min = max.
+
+### 13.4 Accessibility
+
+- Every instrument has a text equivalent next to it (legends with counts and states) and an `aria-label` summary on the graphic.
+- System Core and Module state legend items are focusable; focus or hover highlights the matching segment(s) and dims the rest, and an `aria-live` caption names the item ("Logging — loaded"). Segments carry `<title>` tooltips.
+- The sparkline is focusable; ←/→ step through samples ("158 ms · 03:12:43"), Esc clears.
+- States are never colour-only: non-OK items show "Failed" / "Missing" in text; OK items carry an sr-only state.
+
+### 13.5 Motion (DATA tier, 400 ms)
+
+Ring segments fade in once, staggered (30 ms); a changed state transitions its fill; live numbers settle in when they change; the newest sparkline segment draws in. Hover dimming uses the micro tier. No spinning, pulsing, scanning or ambient loops. Under `prefers-reduced-motion` every one of these is `animation: none` (verified in the browser: `.cls-arc`, `.cls-num`, `.cls-enter` all `none`).
+
+### 13.6 RTL
+
+The page mirrors. Rings stay clockwise from 12 o'clock (a gauge is not text); the sparkline keeps a left-to-right time axis (`dir="ltr"`); the channel strip follows the page direction so it reads in the same order as its legend.
+
+### 13.7 Rail and facts changes
+
+- Rail: segment meters for Required modules and Permissions removed (System Core now draws them); the `6/6` ratio stays with a status dot and the per-module tooltip. Bot latency is live from the shared poll.
+- Facts: the "Module state" bar and the "Channels by type" bars are removed — both moved into the deck. Server facts (members, roles, channels, prefix) and access remain.
+
+### 13.8 Self-review (cls-os-ui-review + impeccable)
+
+- First render: rings read as a solid green donut and the core legends were twelve text rows. Fixed: thinner bands with wider gaps so the slanted 30° segment ends show, inner ring at reduced ink, legends compacted to wrapping items with state text only when not OK.
+- Rail latency rendered unrounded (`157.93…`) and broke the cell. Fixed (rounded).
+- RTL: channel strip was forced LTR while its legend mirrored. Fixed.
+- Mobile ring capped at 14 rem so System Core does not consume the first screen.
+- Impeccable detector on the changed UI: 0 findings. Legacy-token report: no Overview / instrument / shell file listed.
+- No BLOCKER or HIGH remains. POLISH: legend items are ~24 px tall on mobile (informational, not actions).
+
+### 13.9 Tests
+
+`node --test lib/*.test.mjs` — 62 / 62 pass. New: `instruments.test.mjs` (bounded buffer, no mutation, invalid readings, stats, sparkline sizes/flat series/extension, ring segments for 0 / negative / NaN / huge counts, numeric-only paths, invalid segment/tick input, 30° slant, polar origin) and System Core aggregation in `overviewModel.test.mjs`. `tsc --noEmit`, `npm run lint` (pre-existing warnings only), `git diff --check` clean. `npm run build` passes in an isolated copy; `.next/static` contains no env secret value.
+
+Note: the port-3000 dev server is running with a Tailwind config loaded before Task A, so config-only utilities from Task A (e.g. `text-readout`) do not render there; the production build includes them.
+
+### 13.10 Screenshots (outside Git — contain account data)
+
+`C:\Users\aero\AppData\Local\Temp\cls-p16-taskA1\`:
+
+- `taskA1-2560.png`, `taskA1-1440.png` (full page), `taskA1-1024.png`, `taskA1-390.png`
+- `taskA1-1440-rtl.png`, `taskA1-1440-reduced-motion.png`
+- `taskA1-latency-samples-hover.png` (15 real samples, hover tooltip)
+- `taskA1-core-hover.png` (System Core focus state: "Logging — loaded")
+
+**Status: READY FOR OWNER VISUAL APPROVAL.** Task A is not marked owner-approved.

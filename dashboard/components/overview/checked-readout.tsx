@@ -4,10 +4,12 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useHealthReading } from "@/components/shell/health-reading";
 
 /** "Checked hh:mm:ss" plus a re-check. The time is formatted in the viewer's zone after mount. */
 export function CheckedReadout({ checkedAt }: { checkedAt: string }) {
   const router = useRouter();
+  const { refresh } = useHealthReading();
   const [pending, startTransition] = React.useTransition();
   const [text, setText] = React.useState<string | null>(null);
 
@@ -29,7 +31,10 @@ export function CheckedReadout({ checkedAt }: { checkedAt: string }) {
       </time>
       <button
         type="button"
-        onClick={() => startTransition(() => router.refresh())}
+        onClick={() => {
+          refresh();
+          startTransition(() => router.refresh());
+        }}
         disabled={pending}
         aria-label="Check again"
         title="Check again"
