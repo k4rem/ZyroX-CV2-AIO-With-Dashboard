@@ -25,6 +25,7 @@ DATABASE_URL: str = os.getenv(
 
 ROOT_OWNER_ID: Optional[int] = _optional_snowflake("ROOT_OWNER_ID")
 OPS_GUILD_ID: Optional[int] = _optional_snowflake("OPS_GUILD_ID")
+OPS_SECURITY_ALERT_CHANNEL_ID: Optional[int] = _optional_snowflake("OPS_SECURITY_ALERT_CHANNEL_ID")
 
 INTERNAL_SERVICE_KEY: Optional[str] = os.getenv("INTERNAL_SERVICE_KEY", "").strip() or None
 INTERNAL_IDENTITY_SIGNING_KEY: Optional[str] = (

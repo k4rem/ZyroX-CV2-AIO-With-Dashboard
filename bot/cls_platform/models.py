@@ -84,6 +84,8 @@ class SchedulerJob(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
     attempt_count: Mapped[int] = mapped_column(default=0)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 

@@ -4,8 +4,17 @@ from __future__ import annotations
 
 from typing import FrozenSet
 
-# Root-only capabilities (never assignable via Dashboard roles)
-ROOT_ONLY: FrozenSet[str] = frozenset({"rbac.manage"})
+# Root-only capabilities (never assignable via Dashboard roles).
+# Discord Administrator is not a Dashboard capability and is not equivalent.
+ROOT_ONLY: FrozenSet[str] = frozenset(
+    {
+        "rbac.manage",
+        "security.enforce.manage",
+        "security.trust.manage",
+        "security.quarantine.release",
+        "security.maintenance.manage",
+    }
+)
 
 ALL_CAPABILITIES: tuple[str, ...] = (
     "guild.view",
@@ -22,6 +31,7 @@ ALL_CAPABILITIES: tuple[str, ...] = (
     "security.view",
     "security.config",
     "security.incidents.view",
+    "security.incidents.manage",
     "audit.view",
     "giveaways.manage",
     "invites.manage",

@@ -1,6 +1,6 @@
 # CLS OS — Phase 2 Implementation Plan
 
-**Status:** APPROVED SEQUENCE. Runtime implementation not started.\
+**Status:** 2A.1 foundation implemented. Steps 2A.2 onward not started.\
 **Architecture:** `docs/CLS_OS_PHASE_2_ARCHITECTURE.md`\
 **Decisions:** `docs/PHASE_2_OWNER_DECISIONS.md`\
 **Spec:** `docs/CLS_DISCORD_V2_SPEC.md` v1.1, §59

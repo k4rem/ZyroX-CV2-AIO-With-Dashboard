@@ -119,6 +119,18 @@ async def db_reset(postgres_ready):
     factory = get_session_factory()
     async with factory() as session:
         for table in (
+            "security_alert_outbox",
+            "security_quarantines",
+            "security_response_actions",
+            "security_incident_events",
+            "security_gateway_signals",
+            "security_observations",
+            "security_incidents",
+            "security_maintenance_windows",
+            "security_trusted_actors",
+            "security_action_policies",
+            "security_guild_state",
+            "security_guild_configs",
             "dashboard_grants",
             "audit_events",
             "scheduler_jobs",

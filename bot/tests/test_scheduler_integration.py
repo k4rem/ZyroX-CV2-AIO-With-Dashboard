@@ -63,8 +63,19 @@ async def test_scheduler_bounded_retry(db_reset):
         {},
         dedupe_key="fail:1",
     )
+    from sqlalchemy import text
+
     for _ in range(6):
         await run_scheduler_tick()
+        factory = get_session_factory()
+        async with factory() as session:
+            await session.execute(
+                text(
+                    "UPDATE scheduler_jobs SET run_at = NOW() - interval '1 second' "
+                    "WHERE status = 'pending'"
+                )
+            )
+            await session.commit()
     factory = get_session_factory()
     async with factory() as session:
         row = (

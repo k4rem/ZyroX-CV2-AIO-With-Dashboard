@@ -1,6 +1,6 @@
 Quart
 discord
-discord.py
+discord.py==2.7.1
 discord.ui
 jishaku
 mcstatus

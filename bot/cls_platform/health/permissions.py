@@ -9,7 +9,8 @@ import discord
 
 MODULE_REQUIRED: dict[str, list[str]] = {
     "Moderation": ["manage_roles", "kick_members", "ban_members", "moderate_members"],
-    "Antinuke": ["manage_guild", "ban_members", "manage_roles"],
+    # view_audit_log is OBSERVABILITY health only. It is not an escalation trigger.
+    "Antinuke": ["manage_guild", "ban_members", "manage_roles", "view_audit_log"],
     "Tickets": ["manage_channels", "manage_roles"],
     "Welcome": ["manage_roles", "send_messages"],
     "JoinToCreate": ["manage_channels", "move_members", "connect"],
