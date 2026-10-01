@@ -48,6 +48,8 @@ def resolve_capability(method: str, suffix: Optional[str]) -> str:
     path = suffix or ""
     if method == "GET" and path in ("", "/"):
         return "guild.view"
+    if path == "/commands" or path.startswith("/commands/"):
+        return "guild.view" if method == "GET" else "bot.settings"
     mapping = {
         "/prefix": "bot.settings",
         "/automod": "moderation.config",
@@ -70,6 +72,7 @@ def resolve_capability(method: str, suffix: Optional[str]) -> str:
         "/reactionroles": "reactionroles.config",
         "/invites": "invites.manage",
         "/channels": "guild.view",
+        "/commands": "bot.settings",
         "/roles": "guild.view",
     }
     for prefix, cap in mapping.items():

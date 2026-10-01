@@ -174,6 +174,14 @@ export const NAV_ITEMS: NavItemDef[] = [
     routes: [{ path: "/j2c", label: "Join to Create" }],
   },
   {
+    id: "commands",
+    label: "Commands",
+    icon: "settings",
+    group: "moderation",
+    scope: "guild",
+    routes: [{ path: "/commands", label: "Commands" }],
+  },
+  {
     id: "automod",
     label: "Automod",
     icon: "automod",

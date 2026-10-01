@@ -81,6 +81,9 @@ def attach_bot_lifecycle(bot, app: FastAPI, api_cfg: ApiBindConfig) -> None:
 
     async def setup_hook():
         await original_setup()
+        from cls_platform.commands.policy import install_command_gate
+
+        install_command_gate(bot)
         await _api_lifecycle.startup(app, bot, api_cfg)
 
     bot.setup_hook = setup_hook  # type: ignore[method-assign]

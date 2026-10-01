@@ -123,6 +123,9 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  getCommands: (guildId: string) => request<{ commands: any[] }>(`/guilds/${guildId}/commands`),
+  updateCommand: (guildId: string, data: { command_name: string; enabled: boolean; allowed_role_ids: string[] }) =>
+    request<any>(`/guilds/${guildId}/commands`, { method: "PUT", body: JSON.stringify(data) }),
   getLoggingV2: (guildId: string, query = "") => request<any>(`/guilds/${guildId}/logging/v2${query}`),
   getLoggingEvent: (guildId: string, eventId: string) => request<any>(`/guilds/${guildId}/logging/v2/events/${eventId}`),
   updateLoggingRoute: (guildId: string, data: { category: string; enabled: boolean; channel_id: string | null }) =>
