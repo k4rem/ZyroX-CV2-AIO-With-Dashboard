@@ -43,7 +43,7 @@ DONE on phase-9-invites-giveaways. Commit e41c2a2. Fresh invite history with cer
 DONE on phase-10-engagement. Commit c1daeba. Welcome delivery accepts dashboard snowflake channel ids and skips a missing join time. Tests: tests/test_welcome_channel.py. Leveling, games, and Minecraft stay deferred.
 
 ## Phase 11 legacy cleanup
-DONE on phase-11-legacy-cleanup. Removed the duplicate welcome routes and the unused legacy logging and ticket dashboard components. Licenses, migration history, and deferred module source stay.
+DONE on phase-11-legacy-cleanup. Commit da0babd. Removed the duplicate welcome routes and the unused legacy logging and ticket dashboard components. Licenses, migration history, and deferred module source stay.
 
 
 
