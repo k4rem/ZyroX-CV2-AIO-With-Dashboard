@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   deriveAttention,
   countLoggingEnabledWithoutChannel,
+  countLoggingV2Gaps,
   countTicketCategoriesMissingStaff,
 } from "./deriveAttention.ts";
 
@@ -77,6 +78,17 @@ test("deriveAttention: empty when nothing to report", () => {
       ticketsGap: { categoriesMissingStaff: 0 },
     }),
     [],
+  );
+});
+
+test("countLoggingV2Gaps uses route rows, not the legacy map", () => {
+  assert.equal(
+    countLoggingV2Gaps([
+      { enabled: true, channel_id: "1543105121804615999" },
+      { enabled: true, channel_id: "" },
+      { enabled: false, channel_id: null },
+    ]),
+    1,
   );
 });
 

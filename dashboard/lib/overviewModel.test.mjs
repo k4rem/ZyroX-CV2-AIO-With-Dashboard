@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   channelComposition,
   j2cEnabled,
   j2cSteps,
   loggingRouting,
+  loggingV2Routing,
   moduleDisplayName,
   permissionCoverage,
   permissionItems,
@@ -49,6 +51,22 @@ test("tickets: every category needs staff for the third step", () => {
     stepsDone(ticketSteps({ panel_channel: "1", categories: [{ staff_roles: ["2"] }, { staff_roles: ["3"] }] })),
     3,
   );
+});
+
+test("logging v2: overview counts the same routes as the logging page", () => {
+  assert.deepEqual(
+    loggingV2Routing([
+      { enabled: true, channel_id: "1543105121804615999" },
+      { enabled: true, channel_id: null },
+      { enabled: false, channel_id: "42" },
+    ]),
+    { enabled: 2, routed: 1 },
+  );
+  assert.deepEqual(loggingV2Routing([]), { enabled: 0, routed: 0 });
+  const source = readFileSync(new URL("./loadOverview.ts", import.meta.url), "utf8");
+  assert.match(source, /getLoggingV2\(/);
+  assert.match(source, /loggingV2Routing/);
+  assert.doesNotMatch(source, /getLogging\(/);
 });
 
 test("logging: routed counts only enabled categories with a real channel", () => {

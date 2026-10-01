@@ -44,6 +44,8 @@ LOG_CATEGORIES = [
 ]
 
 CONFIG_FILE = "jsondb/logging_config.json"
+# Logging V2 owns Discord delivery. This cog must not post, even if it is loaded.
+PIPELINE_RETIRED = True
 LOGS_DIR = "logs"
 MAX_AUDIT_CACHE_SIZE = 1000
 AUDIT_CACHE_TTL = 300
@@ -1402,6 +1404,8 @@ class Logging(commands.Cog):
         author_id: Optional[int] = None,
     ):
         """Send log embed with comprehensive filtering and error handling."""
+        if PIPELINE_RETIRED:
+            return
         try:
             config = await self._get_log_config(guild.id)
             if not config or not config.get("log_enabled", {}).get(category, False):

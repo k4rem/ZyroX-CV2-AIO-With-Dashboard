@@ -98,6 +98,20 @@ export function ticketSteps(cfg: TicketsLike | null | undefined): ChecklistStep[
 
 // --- Logging ---------------------------------------------------------------
 
+export function loggingV2Routing(
+  routes: Array<{ enabled?: boolean; channel_id?: string | null }> | null | undefined,
+): { enabled: number; routed: number } {
+  let enabled = 0;
+  let routed = 0;
+  for (const row of routes ?? []) {
+    if (!row.enabled) continue;
+    enabled += 1;
+    const channel = row.channel_id;
+    if (channel != null && channel !== "" && channel !== "0") routed += 1;
+  }
+  return { enabled, routed };
+}
+
 export function loggingRouting(
   logEnabled: Record<string, boolean> | undefined,
   logChannels: Record<string, string> | undefined,

@@ -128,8 +128,16 @@ export const api = {
     request<any>(`/guilds/${guildId}/commands`, { method: "PUT", body: JSON.stringify(data) }),
   getLoggingV2: (guildId: string, query = "") => request<any>(`/guilds/${guildId}/logging/v2${query}`),
   getLoggingEvent: (guildId: string, eventId: string) => request<any>(`/guilds/${guildId}/logging/v2/events/${eventId}`),
+  searchLoggingMembers: (guildId: string, query: string) =>
+    request<{ members: Array<{ id: string; display_name: string; username: string | null; avatar_url: string | null }> }>(
+      `/guilds/${guildId}/logging/v2/members?q=${encodeURIComponent(query)}`,
+    ),
   updateLoggingRoute: (guildId: string, data: { category: string; enabled: boolean; channel_id: string | null }) =>
     request<any>(`/guilds/${guildId}/logging/v2/routes`, { method: "PUT", body: JSON.stringify(data) }),
+  updateLoggingIgnores: (guildId: string, data: { channels: string[]; roles: string[]; users: string[] }) =>
+    request<any>(`/guilds/${guildId}/logging/v2/ignores`, { method: "PUT", body: JSON.stringify(data) }),
+  sendLoggingTest: (guildId: string, category: string) =>
+    request<{ status: string; channel_id: string }>(`/guilds/${guildId}/logging/v2/routes/${category}/test`, { method: "POST" }),
   getLogging: (guildId: string) => request<LoggingConfig>(`/guilds/${guildId}/logging`),
   updateLogging: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/logging`, {

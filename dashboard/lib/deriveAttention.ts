@@ -99,6 +99,19 @@ export function deriveAttention(input: DeriveAttentionInput): AttentionItem[] {
   return items;
 }
 
+/** Logging V2 routes that are on without a destination channel. */
+export function countLoggingV2Gaps(
+  routes: Array<{ enabled?: boolean; channel_id?: string | null }> | null | undefined,
+): number {
+  let n = 0;
+  for (const row of routes ?? []) {
+    if (!row.enabled) continue;
+    const channel = row.channel_id;
+    if (channel == null || channel === "" || channel === "0") n += 1;
+  }
+  return n;
+}
+
 /** Count logging categories that are on but have no destination channel. */
 export function countLoggingEnabledWithoutChannel(
   logEnabled: Record<string, boolean> | undefined,

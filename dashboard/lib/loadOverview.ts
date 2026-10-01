@@ -3,7 +3,7 @@ import type { DiscordChannel, GuildDetails } from "@/types/api";
 import type { SystemHealthLike } from "@/lib/shellHealth";
 import { deriveHealth } from "@/lib/shellHealth";
 import {
-  countLoggingEnabledWithoutChannel,
+  countLoggingV2Gaps,
   countTicketCategoriesMissingStaff,
   deriveAttention,
   type AttentionItem,
@@ -12,7 +12,7 @@ import {
   channelComposition,
   j2cEnabled,
   j2cSteps,
-  loggingRouting,
+  loggingV2Routing,
   permissionCoverage,
   permissionItems,
   rankAttention,
@@ -185,7 +185,7 @@ export async function loadOverview(opts: {
     settled(api.getTickets(guildId)),
     settled(api.getWelcome(guildId)),
     settled(api.getJ2C(guildId)),
-    settled(api.getLogging(guildId)),
+    settled(api.getLoggingV2(guildId)),
     settled(api.getAutoRole(guildId)),
     settled(api.getRR(guildId)),
     settled(api.getChannels(guildId)),
@@ -224,7 +224,8 @@ export async function loadOverview(opts: {
         ? true
         : null
     : null;
-  const loggingCfg = loggingRes.ok ? loggingRes.value : null;
+  const loggingHome = loggingRes.ok ? loggingRes.value : null;
+  const loggingRoutes = loggingHome?.routes ?? null;
   const ticketsCfg = ticketsRes.ok ? ticketsRes.value : null;
 
   const attention = rankAttention(
@@ -232,8 +233,8 @@ export async function loadOverview(opts: {
       guildId,
       health: systemHealth,
       antinukeStatus,
-      loggingPartial: loggingCfg
-        ? { enabledWithoutChannel: countLoggingEnabledWithoutChannel(loggingCfg.log_enabled, loggingCfg.log_channels) }
+      loggingPartial: loggingRoutes
+        ? { enabledWithoutChannel: countLoggingV2Gaps(loggingRoutes) }
         : null,
       ticketsGap: ticketsCfg
         ? { categoriesMissingStaff: countTicketCategoriesMissingStaff(ticketsCfg.categories) }
@@ -274,8 +275,8 @@ export async function loadOverview(opts: {
     });
   } else modules.push(unavailableRow("automod", "Automod", "moderation", `${base}/automod`));
 
-  if (loggingCfg) {
-    const { enabled, routed } = loggingRouting(loggingCfg.log_enabled, loggingCfg.log_channels);
+  if (loggingHome) {
+    const { enabled, routed } = loggingV2Routing(loggingRoutes);
     const partial = enabled > 0 && routed < enabled;
     const st: Status = enabled === 0 ? "disabled" : partial ? "degraded" : "online";
     modules.push({

@@ -5,12 +5,13 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import BigInteger, Boolean, DateTime, String, Text, and_, delete, func, or_, select
+from sqlalchemy import BigInteger, Boolean, DateTime, String, Text, and_, cast, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB, UUID, insert
 from sqlalchemy.orm import Mapped, mapped_column
 
 from cls_platform.database import session_scope
 from cls_platform.discord_types import snowflake_to_str
+from cls_platform.logging.present import present
 from cls_platform.logging.redact import redact
 from cls_platform.models import Base
 
@@ -54,6 +55,7 @@ class LogMessage(Base):
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     author_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    attachments: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -64,6 +66,21 @@ class LogRoute(Base):
     category: Mapped[str] = mapped_column(String(32), primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+
+class LogIgnore(Base):
+    __tablename__ = "log_ignores"
+
+    guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), primary_key=True)
+    entity_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+
+
+class LogMigration(Base):
+    __tablename__ = "log_migrations"
+
+    guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    migrated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class LoggingError(ValueError):
@@ -91,9 +108,23 @@ def _event_dict(row: LogEvent) -> dict:
     }
 
 
-async def remember_message(*, guild_id: int, message_id: int, channel_id: int, author_id: int, content: str) -> None:
+def _with_presentation(event: dict) -> dict:
+    event["presentation"] = present(event)
+    return event
+
+
+async def remember_message(
+    *,
+    guild_id: int,
+    message_id: int,
+    channel_id: int,
+    author_id: int,
+    content: str,
+    attachments: list | None = None,
+) -> None:
     now = datetime.now(timezone.utc)
     body = redact(content or "")[:2000]
+    files = redact(attachments or [])
     async with session_scope() as session:
         stmt = insert(LogMessage).values(
             guild_id=guild_id,
@@ -101,11 +132,12 @@ async def remember_message(*, guild_id: int, message_id: int, channel_id: int, a
             channel_id=channel_id,
             author_id=author_id,
             content=body,
+            attachments=files,
             created_at=now,
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=["guild_id", "message_id"],
-            set_={"content": body, "channel_id": channel_id, "author_id": author_id},
+            set_={"content": body, "channel_id": channel_id, "author_id": author_id, "attachments": files},
         )
         await session.execute(stmt)
 
@@ -118,6 +150,21 @@ async def stored_message(guild_id: int, message_id: int) -> str | None:
         if datetime.now(timezone.utc) - row.created_at > timedelta(days=MESSAGE_RETENTION_DAYS):
             return None
         return row.content
+
+
+async def stored_message_record(guild_id: int, message_id: int) -> dict | None:
+    async with session_scope() as session:
+        row = await session.get(LogMessage, (guild_id, message_id))
+        if row is None:
+            return None
+        if datetime.now(timezone.utc) - row.created_at > timedelta(days=MESSAGE_RETENTION_DAYS):
+            return None
+        return {
+            "content": row.content,
+            "author_id": row.author_id,
+            "channel_id": row.channel_id,
+            "attachments": row.attachments or [],
+        }
 
 
 async def record_event(
@@ -159,7 +206,7 @@ async def record_event(
         )
         session.add(row)
         await session.flush()
-        return _event_dict(row)
+        return _with_presentation(_event_dict(row))
 
 
 async def get_event(guild_id: int, event_id: str) -> dict:
@@ -167,7 +214,7 @@ async def get_event(guild_id: int, event_id: str) -> dict:
         row = await session.get(LogEvent, uuid.UUID(event_id))
         if row is None or row.guild_id != guild_id:
             raise LoggingError("missing")
-        return _event_dict(row)
+        return _with_presentation(_event_dict(row))
 
 
 async def list_events(
@@ -177,6 +224,8 @@ async def list_events(
     event_type: str | None = None,
     actor_id: int | None = None,
     target_id: int | None = None,
+    member_id: int | None = None,
+    query: str | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
     cursor: str | None = None,
@@ -193,6 +242,21 @@ async def list_events(
             stmt = stmt.where(LogEvent.actor_id == actor_id)
         if target_id:
             stmt = stmt.where(LogEvent.target_id == target_id)
+        if member_id:
+            stmt = stmt.where(or_(LogEvent.actor_id == member_id, LogEvent.target_id == member_id))
+        if query:
+            needle = query.strip().lower().replace("%", "").replace("_", "")[:80]
+            if needle:
+                blob = func.lower(
+                    func.coalesce(cast(LogEvent.metadata_json, String), "")
+                    + " "
+                    + func.coalesce(cast(LogEvent.before, String), "")
+                    + " "
+                    + func.coalesce(cast(LogEvent.after, String), "")
+                    + " "
+                    + LogEvent.event_type
+                )
+                stmt = stmt.where(blob.contains(needle))
         if since:
             stmt = stmt.where(LogEvent.occurred_at >= since)
         if until:
@@ -214,7 +278,7 @@ async def list_events(
         if len(rows) > limit and page:
             last = page[-1]
             next_cursor = f"{last.occurred_at.isoformat()}|{last.id}"
-        return {"events": [_event_dict(row) for row in page], "next_cursor": next_cursor}
+        return {"events": [_with_presentation(_event_dict(row)) for row in page], "next_cursor": next_cursor}
 
 
 async def overview(guild_id: int) -> dict:
@@ -321,3 +385,44 @@ async def purge_expired(now: datetime | None = None) -> dict:
             delete(LogEvent).where(LogEvent.occurred_at < moment - timedelta(days=EVENT_RETENTION_DAYS))
         )
         return {"messages": messages.rowcount or 0, "events": events.rowcount or 0}
+
+
+def _ignore_public(rows: list[LogIgnore]) -> dict:
+    grouped = {"channels": [], "roles": [], "users": []}
+    kind_map = {"channel": "channels", "role": "roles", "user": "users"}
+    for row in rows:
+        key = kind_map.get(row.kind)
+        if key:
+            grouped[key].append(snowflake_to_str(row.entity_id))
+    return grouped
+
+
+async def ignores(guild_id: int) -> dict:
+    async with session_scope() as session:
+        rows = (await session.execute(select(LogIgnore).where(LogIgnore.guild_id == guild_id))).scalars().all()
+        public = _ignore_public(rows)
+        return {
+            "channels": [int(item) for item in public["channels"]],
+            "roles": [int(item) for item in public["roles"]],
+            "users": [int(item) for item in public["users"]],
+        }
+
+
+async def ignores_public(guild_id: int) -> dict:
+    raw = await ignores(guild_id)
+    return {key: [str(item) for item in values] for key, values in raw.items()}
+
+
+async def set_ignores(*, guild_id: int, channels: list[int], roles: list[int], users: list[int]) -> dict:
+    groups = {"channel": channels, "role": roles, "user": users}
+    async with session_scope() as session:
+        await session.execute(delete(LogIgnore).where(LogIgnore.guild_id == guild_id))
+        for kind, values in groups.items():
+            seen = set()
+            for value in values:
+                if value in seen:
+                    continue
+                seen.add(int(value))
+                session.add(LogIgnore(guild_id=guild_id, kind=kind, entity_id=int(value)))
+        await session.flush()
+    return await ignores_public(guild_id)

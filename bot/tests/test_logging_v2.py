@@ -6,12 +6,17 @@ from sqlalchemy import text
 
 from cls_platform.database import session_scope
 from cls_platform.logging.redact import redact
+from cls_platform.logging.legacy import migrate_legacy_payload
 from cls_platform.logging.store import (
+    EVENT_RETENTION_DAYS,
+    MESSAGE_RETENTION_DAYS,
+    ignores,
     list_events,
     overview,
     purge_expired,
     record_event,
     remember_message,
+    set_ignores,
     set_route,
     stored_message,
 )
@@ -90,3 +95,56 @@ async def test_events_filters_retention_and_empty(db_reset):
     assert purged["events"] >= 3
     assert await overview(GUILD) == {"total": 0, "by_category": {}, "top_types": [], "series": [], "heatmap": None}
     assert await stored_message(GUILD, 100000000000000501) is None
+
+
+SNOW = 1543105121804615999
+
+
+async def test_snapshots_search_ignores_and_legacy_migration(db_reset):
+    assert EVENT_RETENTION_DAYS == 90
+    assert MESSAGE_RETENTION_DAYS == 30
+    saved = await record_event(
+        guild_id=GUILD,
+        category="member_moderation",
+        event_type="member_roles",
+        actor_id=SNOW,
+        actor_confidence="certain",
+        target_id=TARGET,
+        before={"roles": []},
+        after={"roles": [{"id": "9", "name": "VIP", "color": "#c4a15a"}]},
+        metadata={"entities": {"actor": {"id": str(SNOW), "display_name": "Alice", "username": "alice"}, "target": {"id": str(TARGET), "display_name": "Ahmed"}}},
+    )
+    assert saved["actor_id"] == str(SNOW)
+    assert saved["presentation"]["title"] == "Member role updated"
+    assert "Alice" in saved["presentation"]["summary"]
+    assert str(SNOW) not in saved["presentation"]["summary"]
+    found = await list_events(GUILD, query="alice")
+    assert [row["id"] for row in found["events"]] == [saved["id"]]
+    by_member = await list_events(GUILD, member_id=SNOW)
+    assert by_member["events"][0]["actor_id"] == str(SNOW)
+    assert (await list_events(OTHER, query="alice"))["events"] == []
+    saved_ignores = await set_ignores(guild_id=GUILD, channels=[100000000000000401], roles=[100000000000000404], users=[SNOW])
+    assert saved_ignores["users"] == [str(SNOW)]
+    assert SNOW in (await ignores(GUILD))["users"]
+    assert (await ignores(OTHER)) == {"channels": [], "roles": [], "users": []}
+    migrated = await migrate_legacy_payload(
+        OTHER,
+        {
+            "log_enabled": {"message_events": True, "system_events": True, "emoji_events": True},
+            "log_channels": {"message_events": 100000000000000401, "system_events": 100000000000000402},
+            "ignore_channels": [100000000000000403],
+            "ignore_users": [SNOW],
+        },
+    )
+    assert migrated == "migrated"
+    from cls_platform.logging.store import routes
+
+    copied = {row["category"]: row for row in await routes(OTHER)}
+    assert copied["message_events"]["enabled"] is True
+    assert copied["message_events"]["channel_id"] == "100000000000000401"
+    assert copied["guild_events"]["channel_id"] == "100000000000000402"
+    assert copied["role_events"]["enabled"] is False
+    assert SNOW in (await ignores(OTHER))["users"]
+    assert await migrate_legacy_payload(OTHER, {"log_enabled": {"voice_events": True}, "log_channels": {"voice_events": 99}}) == "skipped"
+    voice = {row["category"]: row for row in await routes(OTHER)}["voice_events"]
+    assert voice["enabled"] is False
