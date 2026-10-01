@@ -1,7 +1,7 @@
 # CLS Discord V2 — Final Product & Architecture Specification
 
 **Status:** APPROVED FOR IMPLEMENTATION  
-**Version:** 1.0  
+**Version:** 1.1 (owner amendment 2026-10-01, see §0.1)\
 **Date:** 2026-09-30  
 **Project:** CLS Discord System  
 **Repository base:** ZyroX-CV2-AIO-With-Dashboard fork  
@@ -28,6 +28,19 @@ It incorporates:
 Implementation must follow this specification unless the owner explicitly approves a change.
 
 No major architectural deviation should be implemented silently.
+
+## 0.1 Amendments
+
+### v1.1 — 2026-10-01: Phase 2 split (owner-approved)
+
+The original Phase 2 is split into:
+- **Phase 2A — Early Protection**: Human Antinuke, the Bot Protection foundation, attribution, incidents and evidence, quarantine, and CLS Ops alerts.
+- **Phase 2B — Snapshot Foundation**: structure snapshots, ban and member-role maps, checksums, KNOWN_GOOD/SUSPECT state, the encrypted legacy configuration archive, and Production-Lite semantic adapters.
+- **Phase 2S — Recovery Feasibility Spike** (unchanged).
+
+Antinuke V2 core work (trusted IDs, incidents, quarantine) moves from Phase 7 to Phase 2A. Phase 7 keeps Bot Trap, phishing, Dashboard Lock, and the full Security Center.
+
+The Phase 2A architecture is authoritative in `docs/CLS_OS_PHASE_2_ARCHITECTURE.md`. Owner decisions are in `docs/PHASE_2_OWNER_DECISIONS.md`. The delivery sequence is in `docs/CLS_OS_PHASE_2_IMPLEMENTATION_PLAN.md`.
 
 
 # 1. Product Direction
@@ -392,7 +405,10 @@ Expected members:
 - snapshot failures;
 - bot startup/failure/recovery;
 - disaster recovery activity;
-- required-module health failures.
+- required-module health failures;
+- Security Maintenance Window start, end, and expiry (Phase 2A).
+
+Security alerts go to a dedicated security-alert channel that must belong to the Ops guild. There is never a fallback to a product-guild channel. A missing or invalid destination refuses Antinuke ENFORCE (Phase 2A, OD-14).
 
 ## Ops Guild exclusions
 
@@ -803,7 +819,7 @@ Only use "healthy" when a real validation has occurred.
 
 # 26. Structure Snapshots
 
-Capture begins early, before Tickets V2.
+Capture begins early, in Phase 2B, before Tickets V2 (Phase 4) and before Production-Lite Gate 4.
 
 ## 26.1 Structure data
 
@@ -834,14 +850,14 @@ Allow:
 - SUSPECT snapshots;
 - KNOWN_GOOD / pinned snapshots.
 
-A snapshot taken during an active incident should be marked suspect.
+A snapshot taken during an active incident should be marked suspect. An active incident is an active Phase 2A security incident with severity H or above in that guild. This is unrelated to Incident Mode (§46).
 
 
 # 27. Legacy Config Snapshot Strategy
 
 Do not build semantic remapping adapters for every legacy database immediately.
 
-Phase 2 should capture:
+Phase 2B should capture:
 1. native Discord structure;
 2. a consistent encrypted raw archive of legacy runtime configuration;
 3. semantic adapters only for Production-Lite modules first.
@@ -1180,6 +1196,12 @@ prefer explicit trusted:
 
 Security trust modifications are Root-controlled.
 
+For Antinuke (Phase 2A):
+- trust is guild-scoped and per action class;
+- trust suppresses automatic containment only;
+- trusted actors are still detected and recorded, and threshold violations alert;
+- legacy whitelist and extra-owner trust is not imported.
+
 Automod may support role exemptions.
 
 Staff must not automatically bypass phishing detection.
@@ -1206,6 +1228,39 @@ Default response for suspicious human/staff behavior should favor reversible qua
 Bot Trap is a separate case and may still default to ban.
 
 The bot's own actions must be exempt from its antinuke logic where appropriate.
+
+## 40.1 Phase 2A delivery (binding summary)
+
+Full detail: `docs/CLS_OS_PHASE_2_ARCHITECTURE.md`.
+
+- **Attribution and idempotency**
+  - The Discord audit entry ID is the durable idempotency authority.
+  - Gateway events are temporary corroboration, with only a short, bounded dedupe window.
+  - Policy counts use confirmed, distinct audit entry IDs.
+- **Containment eligibility**
+  - Only CONFIRMED, non-late attribution may contain.
+  - PROBABLE, AMBIGUOUS, UNATTRIBUTED, and late evidence produce alerts and evidence only.
+- **Permission tiers:** CRITICAL_CONTROL, DESTRUCTIVE, ELEVATED, and OBSERVABILITY. View Audit Log is never an escalation containment trigger by itself.
+- **Quarantine**
+  - Removes all removable non-managed roles and records the prior roles. Timeout is not the default.
+  - A member at or above CLS in the hierarchy is `UNCONTAINABLE_HIERARCHY`: evidence plus critical alert, and no stronger fallback.
+  - Outcomes are distinct and never collapsed: `ACTIVE`, `PARTIAL_QUARANTINE`, `UNCONTAINABLE_HIERARCHY`, `FAILED_PERMISSION`, `FAILED_DISCORD`, `RELEASE_PARTIAL`, and related states.
+- **Never contained:** the guild owner and the Root Discord identity. Their H and C actions alert and record.
+- **Bot added:** an untrusted bot being added is record and alert only. Bot containment requires subsequent confirmed destructive or security behaviour. The inviter is never punished merely for adding a bot.
+- **Incidents:** correlation uses a 15-minute inactivity window (configurable) and a maximum lifetime.
+- **Modes:** OFF, OBSERVE, or ENFORCE. OBSERVE is the default, and production ENFORCE is never enabled automatically.
+  - Mode and trust are re-checked before every mutation.
+  - OBSERVE decisions are never replayed after a switch to ENFORCE.
+- **Root only:**
+  - switching to ENFORCE, which requires a valid CLS Ops security-alert destination;
+  - trust changes;
+  - quarantine release;
+  - the Maintenance Window.
+- **Security Maintenance Window**
+  - Root only, maximum 60 minutes, expires automatically, audited, and mirrored to CLS Ops.
+  - ENFORCE drops to OBSERVE, and observation never stops.
+  - It is not Incident Mode (§46).
+- **Out of scope:** in-place rollback or recreation of deleted objects (§30, §62).
 
 
 # 41. Bot Trap
@@ -1344,6 +1399,12 @@ This prevents bypass through:
 - alternate command paths.
 
 A simple Dashboard Lock may separately freeze non-root Dashboard mutations during an incident.
+
+Incident Mode is distinct from:
+- an active Phase 2A security incident, which is a detection record;
+- the Phase 2A Security Maintenance Window, which temporarily drops Antinuke ENFORCE to OBSERVE.
+
+Neither of these enables CRITICAL functionality, and neither may be named or modelled as Incident Mode.
 
 
 # 47. Scheduler
@@ -1700,17 +1761,34 @@ Then:
 
 ---
 
-## Phase 2 — Early Protection
+## Phase 2A — Early Protection
+
+Architecture: `docs/CLS_OS_PHASE_2_ARCHITECTURE.md`. Plan: `docs/CLS_OS_PHASE_2_IMPLEMENTATION_PLAN.md`.
+
+- Human Antinuke (§40, §40.1);
+- Bot Protection foundation;
+- actor attribution via a shared audit-entry feed;
+- incidents and evidence;
+- reversible quarantine;
+- explicit trusted IDs (§39);
+- legacy antinuke retirement (no dual protection path, no SQLite writes);
+- CLS Ops security alert infrastructure and security alerts;
+- Root-only Security Maintenance Window.
+
+---
+
+## Phase 2B — Snapshot Foundation
+
+Must be accepted before Phase 3.25 snapshot validation, Production-Lite Gate 4, and Tickets V2 (Phase 4).
 
 - native Discord structure snapshot capture;
 - ban list;
 - member-role mapping;
 - checksums;
-- known-good/suspect snapshot state;
-- encrypted raw legacy configuration archive;
+- known-good/suspect snapshot state (SUSPECT while a Phase 2A incident with severity H or above is active);
+- encrypted raw legacy configuration archive (including the retired antinuke store);
 - semantic adapters for Production-Lite modules;
-- CLS Ops;
-- critical operational alerts.
+- snapshot and backup failure alerts through the Phase 2A Ops alert infrastructure.
 
 ---
 
@@ -1809,11 +1887,12 @@ Production-ready disaster-recovery claim is allowed only after a real successful
 
 ## Phase 7 — Security Center
 
+Builds on the Phase 2A foundation (trusted IDs, incidents, quarantine, attribution):
 - Bot Trap;
 - phishing protection;
-- trusted IDs;
-- Antinuke improvements;
-- incident history;
+- webhook message activity handling;
+- Antinuke improvements beyond Phase 2A;
+- full incident history and Security Center UI;
 - Dashboard Lock.
 
 ---
@@ -1956,6 +2035,18 @@ These are not assumptions to silently implement.
 - aggregation;
 - message-content retention policy requirements.
 
+## Early Protection (Phase 2A, test guild only)
+- per-class `on_audit_log_entry_create` delivery, actor/target presence, latency;
+- role hierarchy semantics for member edits (equal positions, exact error);
+- kick vs leave; prune entry contents;
+- managed role creation on bot add; booster role behavior;
+- editability of a managed bot role's permissions;
+- audit reason propagation;
+- RESUME replay vs new-session gateway behavior;
+- member-specific overwrite precedence over role denies.
+
+Recorded in `docs/PHASE_2A_DISCORD_VERIFICATION.md`; required before Antinuke ENFORCE.
+
 ## Attachments
 - Discord CDN signed URL behavior / expiry.
 
@@ -2034,6 +2125,16 @@ The main CLS server currently has low activity, so quality/readiness gates take 
 
 A short maintenance period is acceptable when Production-Lite is ready.
 
+## Phase 2 order and Early Protection
+
+These were resolved on 2026-10-01 (OD-1 to OD-17). They are recorded in `docs/PHASE_2_OWNER_DECISIONS.md`.
+
+- Phase order is 2A, then 2B, then 2S.
+- Antinuke is OBSERVE-first. ENFORCE is Root-only and never automatic.
+- Quarantine removes removable non-managed roles, without a timeout.
+- Root and the guild owner are never contained.
+- Bot additions are alert only.
+
 
 # 65. Implementation Discipline
 
@@ -2084,7 +2185,7 @@ CLS Discord V2 is successful when:
 The next implementation phase is:
 
 ```text
-PHASE 0 — SECURITY FOUNDATION + SCOPE CONTROL
+PHASE 2A — EARLY PROTECTION, step 2A.1 (Foundation)
 ```
 
-No Phase 1 implementation should begin until Phase 0 acceptance criteria pass and the Phase 0 diff is reviewed.
+Phases 0, 1, 1.5 and 1.6 are closed. No later Phase 2A step should begin until the previous step's acceptance gate in `docs/CLS_OS_PHASE_2_IMPLEMENTATION_PLAN.md` passes and its diff is reviewed.

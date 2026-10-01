@@ -226,6 +226,7 @@ The bot cannot perform actions above its Discord role or without its own Discord
 
 - Loaded antinuke listeners in `bot/cogs/antinuke/` watch bans, kicks, prune, bot additions, member dangerous-role updates, channel/role create-delete-update, guild updates, integrations, everyone mentions, and webhook changes. When enabled they can ban the audit-log executor and attempt to revert the action. Owner/bot and per-action whitelist checks exist. Audit-log races and broad automatic punishment remain operational risks.
 - Emoji/sticker/unban antinuke listeners in the `extra events (unused)` directory are not loaded.
+- **Status update (2026-10-01):** Phase 2A replaces these legacy listeners. The replacement uses audit-entry-based attribution, an OBSERVE-first posture, and reversible quarantine instead of instant bans. Legacy whitelist and extra-owner trust is retired without import. See `docs/CLS_OS_PHASE_2_ARCHITECTURE.md` and `docs/PHASE_2_OWNER_DECISIONS.md`. The legacy listeners stay loaded until step 2A.5, and ENFORCE is refused while they are loaded.
 - Automod listeners in `bot/cogs/automod/` inspect messages and can delete, warn, timeout, kick, or ban according to stored policy.
 - `Autorole2.on_member_join`, reaction-role listeners, vanity roles, and `Invcrole.on_voice_state_update` grant/remove configured roles automatically.
 - Welcome/greet, join-DM, invite tracking, leveling, AFK, counting, auto-react, autoresponder, sticky message, verification, and ticket listeners act from stored guild configuration.

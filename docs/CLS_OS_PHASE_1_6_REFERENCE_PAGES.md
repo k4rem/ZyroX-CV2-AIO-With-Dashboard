@@ -95,7 +95,7 @@ An **operations deck**: a readout rail on top (the page's single focal instrumen
 | Region | Now (real source) | Future (renders only when the source exists) |
 |---|---|---|
 | **Readout rail** (`cut-md`, signal edge; the only one on the page) | Server identity (icon, name), Bot status + latency (`/bot/status`), Required modules `▰▰▰▰▰▰ 6/6` (`/system/health.modules`), Permissions (ok / "2 modules missing" warn, from `permissions.missing_by_module`), Postgres, Scheduler, "Checked 14:02:31" (fetch time) | Incident posture (Phase 7), Backup health (backup status API) |
-| **Needs attention** (panel) | `deriveAttention` items, ranked critical → warning → info; each row: severity glyph, sentence, module token, action button naming the destination ("Open Antinuke") | Security incidents (Phase 7), ticket SLA breaches (Phase 4) |
+| **Needs attention** (panel) | `deriveAttention` items, ranked critical → warning → info; each row: severity glyph, sentence, module token, action button naming the destination ("Open Antinuke") | Security incidents and active quarantines (Phase 2A), ticket SLA breaches (Phase 4) |
 | **Module matrix** (outline table on canvas, grouped by nav group) | Per module: state glyph + label, factual micro-visual (see 1.3), configure link on row hover/focus (always visible on touch) | "Last change" column (audit read API) |
 | **Coverage** (facts column) | Stacked state bar of the surfaced modules: On / Partial / Off / Unavailable with counts | — |
 | **Server composition** (facts column) | Members, roles, channels (`/guilds/{id}`) + channels-by-type bar (text / voice / category / other) from `/guilds/{id}/channels` | Member growth sparkline (needs member history, Phase 5) |

@@ -338,7 +338,7 @@ The Security Center is where the instrument becomes a console. It is the only su
 4. **Event stream (60 %) | Protection coverage matrix (40 %)**. Stream: 32 px rows, mono time, event glyph, actor → action → target; new rows per §7.2. Matrix: rows = protections, columns = State (glyph), Trusted IDs, Last trigger, Missing permissions (count chip), link. Not cards.
 5. **Timeline band**: 24 h / 7 d severity-stacked histogram on stage with incident markers; brush filters the stream.
 6. **Actor × action matrix**: rows = top actors (24 h), columns = high-risk action types (ban, kick, role change, channel delete, webhook, permission change); cells = counts on the sev heatmap ramp. Click → filtered stream.
-7. **Permission change history**: diff rows — role/channel, `+ Administrator` in danger, `− Manage Webhooks` in ok, actor, time, revert link (when Phase 2 supports it).
+7. **Permission change history**: diff rows — role/channel, `+ Administrator` in danger, `− Manage Webhooks` in ok, actor, time. No revert link: Phase 2A does not roll back changes (deletion recreation and in-place restore are deferred per spec §30/§62).
 8. **Quarantine state**: compact roster of quarantined members with reason, since, releaser.
 
 Banned here too: radar sweeps, threat globes, world maps, fake counters, scrolling hex. If the stream is quiet, it says "No security events in the last 24 h" with the freshness readout — a quiet console is a good console.

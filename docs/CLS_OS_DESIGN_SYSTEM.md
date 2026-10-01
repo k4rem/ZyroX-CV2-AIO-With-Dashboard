@@ -801,12 +801,12 @@ Not a KPI card grid. Hierarchy follows the SOC band order.
 
 | Widget | Arrives with | Requirement |
 |---|---|---|
-| Open incidents / security posture | Phase 7 | Incident store. |
+| Open incidents / active quarantines (attention items) | Phase 2A | Incident store (`docs/CLS_OS_PHASE_2_ARCHITECTURE.md` §24). Full security posture stays in Phase 7. |
 | Recent audit activity feed + "Last change" column | Audit read API (not yet built) | `GET` audit endpoint with guild scope. |
 | Open tickets list, first-response metrics | Phase 4 | Tickets V2. |
 | Verification / recovery coverage | Phase 3 / 2S | Must use spec §25 wording: "grants on file", never "recoverable". |
 | Backup health (last successful off-host backup) | Deployment + backup status API | Real backup job status. |
-| Snapshot status (last known-good) | Phase 2 | Snapshot metadata. |
+| Snapshot status (last known-good) | Phase 2B | Snapshot metadata. |
 | Activity charts | Phase 5 | Event history. |
 
 Implementation agents must not render placeholders, skeleton-forever panels or "coming soon" tiles for future widgets. They simply do not exist yet.
