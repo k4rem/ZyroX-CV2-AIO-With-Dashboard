@@ -100,6 +100,12 @@ export const api = {
     }),
 
   getTickets: (guildId: string) => request<TicketConfig>(`/guilds/${guildId}/tickets`),
+  getTicketsV2: (guildId: string) => request<any>(`/guilds/${guildId}/tickets/v2`),
+  createTicketCategory: (guildId: string, data: any) =>
+    request<any>(`/guilds/${guildId}/tickets/v2/categories`, { method: "POST", body: JSON.stringify(data) }),
+  createTicketPanel: (guildId: string, data: any) =>
+    request<any>(`/guilds/${guildId}/tickets/v2/panels`, { method: "POST", body: JSON.stringify(data) }),
+  getTicketTranscript: (guildId: string, ticketId: string) => request<any>(`/guilds/${guildId}/tickets/v2/${ticketId}`),
   updateTickets: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/tickets`, {
       method: "PATCH",

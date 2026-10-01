@@ -12,11 +12,18 @@ Commit follows this note.
 ## 2B snapshot foundation
 DONE on branch phase-2b-snapshot-foundation. Tests: tests/test_snapshots.py (checksum, large snowflake, guild isolation, SUSPECT). No restore.
 
+## 2S recovery feasibility
+DONE. docs/PHASE_2S_RECOVERY_FEASIBILITY.md. Member rejoin is NO-GO without guilds.join.
+
 ## Phase 3 verification
 DONE on phase-3-verification-v2. Tests: tests/test_verification_v2.py. Gate stays off until enabled. Verified role is not an allow key. Visual QA of the page was not opened in a browser this session.
 
 ## Phase 3.25 readiness
-PARTIAL. No deploy. Head migration is 20261001_0005. `/health` remains the process check. Backup stays the existing Postgres dump path. Rollback is `alembic downgrade 20261001_0004` for the verification tables only. ENFORCE and live restore stay off. VPS, firewall, proxy, and lifeOS were not touched.
+PARTIAL. No deploy. Health stays `/health`. Rollback of verification is alembic downgrade to 20261001_0004. VPS, firewall, proxy, and lifeOS were not touched.
+
+## Phase 4 tickets
+PARTIAL on phase-4-tickets-v2. Postgres categories, panels, open/claim/close/reopen, transcript, dashboard workspace. Tests: tests/test_tickets_v2.py. Deferral: browser QA not run; cooldown and blacklist not built; no legacy ticket.db import.
+
 
 
 

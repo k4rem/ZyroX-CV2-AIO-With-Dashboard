@@ -1,24 +1,20 @@
 import React from "react";
-import { TicketsWorkspace } from "@/components/dashboard/tickets-workspace";
+import { TicketsV2Workspace } from "@/components/dashboard/tickets-v2-workspace";
 import { api } from "@/lib/api";
 
 export default async function TicketsPage({ params }: { params: { guildId: string } }) {
-  const [config, channels, roles, bot] = await Promise.all([
-    api.getTickets(params.guildId),
+  const [workspace, channels] = await Promise.all([
+    api.getTicketsV2(params.guildId),
     api.getChannels(params.guildId).catch(() => []),
-    api.getRoles(params.guildId).catch(() => []),
-    api.getBotStatus().catch(() => null),
   ]);
-  if (!config) return null;
-
+  const categories = (channels ?? []).filter((channel: { type?: string }) => channel.type === "4");
   return (
-    <TicketsWorkspace
+    <TicketsV2Workspace
       guildId={params.guildId}
-      initialConfig={config}
-      channels={channels ?? []}
-      roles={roles ?? []}
-      botName={bot?.user ?? "Bot"}
-      botAvatar={bot?.avatar_url ?? null}
+      initial={
+        workspace ?? { open_now: 0, opened: 0, closed: 0, categories: [], panels: [], tickets: [] }
+      }
+      categories={categories}
     />
   );
 }
