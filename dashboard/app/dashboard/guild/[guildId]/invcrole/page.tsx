@@ -20,7 +20,9 @@ import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { SaveBar } from "@/components/settings/save-bar";
+import { SettingGroup } from "@/components/settings/setting-group";
 import { SettingRow } from "@/components/settings/setting-row";
+import { SettingsInstrument } from "@/components/settings/settings-instrument";
 import { api } from "@/lib/api";
 import { draftsDiffer, roleSwatch } from "@/lib/modulePayloads";
 import { Combobox } from "@/components/ui/combobox";
@@ -90,9 +92,10 @@ export default function InvcRolePage({ params }: { params: { guildId: string } }
   return (
     <div>
       <PageHeader title="Voice role" description="Assign a role while a member is in a voice channel." />
-      <p className="mb-2 max-w-2xl text-small text-fg-3">
-        The role is added on join and removed when they leave every voice channel. Turning this off keeps the selected role.
-      </p>
+      <SettingsInstrument
+        summary={`${config.enabled ? "On" : "Off"} · ${config.role_id ? "role saved" : "no role"}. Turning this off keeps the selected role.`}
+      >
+      <SettingGroup id="voice-role" label="Voice state">
       <SettingRow label="Enabled" description={config.enabled ? "Monitoring voice channels." : "Off. The selected role stays saved."}>
         <Switch
           checked={Boolean(config.enabled)}
@@ -100,7 +103,7 @@ export default function InvcRolePage({ params }: { params: { guildId: string } }
           aria-label="Voice role enabled"
         />
       </SettingRow>
-      <SettingRow label="Role" description="Must sit below the bot role." htmlFor="invc-role">
+      <SettingRow label="Assigned role" description="Must sit below the bot role." htmlFor="invc-role">
         <Combobox
           id="invc-role"
           value={config.role_id ? String(config.role_id) : null}
@@ -117,6 +120,7 @@ export default function InvcRolePage({ params }: { params: { guildId: string } }
           searchLabel="Search roles"
         />
       </SettingRow>
+      </SettingGroup>
       <SaveBar
         dirty={dirty}
         saving={saving}
@@ -127,6 +131,7 @@ export default function InvcRolePage({ params }: { params: { guildId: string } }
           setError(null);
         }}
       />
+      </SettingsInstrument>
     </div>
   );
 }

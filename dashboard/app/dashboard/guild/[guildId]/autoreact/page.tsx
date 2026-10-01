@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { SaveBar } from "@/components/settings/save-bar";
 import { SettingGroup } from "@/components/settings/setting-group";
+import { SettingsInstrument } from "@/components/settings/settings-instrument";
 import { api } from "@/lib/api";
 import { draftsDiffer } from "@/lib/modulePayloads";
 import { Button } from "@/components/ui/button";
@@ -101,12 +102,12 @@ export default function AutoReactPage({ params }: { params: { guildId: string } 
           Add trigger
         </Button>
       </PageHeader>
-      <p className="max-w-2xl text-small text-fg-3">
-        Each trigger is one word. Up to 10 triggers, and custom emoji must belong to this server.
-      </p>
+      <SettingsInstrument summary={`${config.triggers.length} of 10 triggers. Each trigger is one word. Custom emoji must belong to this server.`}>
       <SettingGroup id="autoreact-triggers" label="Triggers" meta={`${config.triggers.length} of 10`}>
         {config.triggers.length === 0 ? (
-          <p className="py-3 text-small text-fg-3">No triggers configured.</p>
+          <p className="py-3 text-small text-fg-3" dir="auto">
+            No triggers yet. Add a word and an emoji, then save.
+          </p>
         ) : (
           <ul className="mt-2 border-t border-line">
             {config.triggers.map((item: { trigger: string; emojis: string }, index: number) => (
@@ -137,6 +138,7 @@ export default function AutoReactPage({ params }: { params: { guildId: string } 
           setError(null);
         }}
       />
+      </SettingsInstrument>
     </div>
   );
 }

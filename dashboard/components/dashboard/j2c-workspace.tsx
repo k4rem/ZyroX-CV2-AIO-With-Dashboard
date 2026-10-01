@@ -169,7 +169,7 @@ export function J2CWorkspace({
         extra={
           controlsOpen ? (
             <div className="mt-3 border-t border-line-subtle pt-3">
-              <p className="text-small text-fg-2">The control panel posts these buttons. They are not edited here.</p>
+              <p className="text-small text-fg-2" dir="auto">The control panel posts these buttons. They are not edited here.</p>
               <ul className="mt-2 flex flex-wrap gap-1">
                 {CONTROLS.map((controlName) => (
                   <li key={controlName} className="border border-line px-1.5 py-0.5 font-mono text-caption text-fg-2">

@@ -90,7 +90,7 @@ export function CustomRolesWorkspace({
 
   return (
     <div>
-      <PageHeader title="Roles" description="Prefix commands that add or remove a preset role.">
+      <PageHeader title="Custom roles" description="Prefix commands that add or remove a preset role.">
         {dirty ? <span className="text-small text-fg-2">Unsaved</span> : null}
         <span className="font-mono text-caption text-fg-3">{assigned} of 5 assigned</span>
       </PageHeader>
@@ -112,7 +112,7 @@ export function CustomRolesWorkspace({
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-y border-line py-2">
               <div className="min-w-0">
                 <p className="text-body text-fg-1">Who can use these commands</p>
-                <p className="text-small text-fg-3">Members without this role cannot run them. Unset: admins only.</p>
+                <p className="text-small text-fg-3" dir="auto">Members without this role cannot run them. Unset: admins only.</p>
               </div>
               <div className="flex items-center gap-3">
                 {gate ? (
@@ -202,7 +202,7 @@ export function CustomRolesWorkspace({
                 );
               })}
             </div>
-            <p className="mt-3 text-small text-fg-3">The bot&apos;s role must be above every assigned role to hand them out.</p>
+            <p className="mt-3 text-small text-fg-3" dir="auto">The bot&apos;s role must be above every assigned role to hand them out.</p>
           </section>
         </div>
 

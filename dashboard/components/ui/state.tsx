@@ -31,9 +31,9 @@ export function EmptyState({ icon: Icon = Info, title, description, actions, ref
     >
       <Icon className="size-6 text-fg-3" strokeWidth={1.5} aria-hidden="true" />
       <h2 className="mt-3 text-section text-fg-1">{title}</h2>
-      {description ? <p className="mt-1 max-w-[52ch] text-body-prose text-fg-2">{description}</p> : null}
+      {description ? <p className="mt-1 max-w-[52ch] text-body-prose text-fg-2" dir="auto">{description}</p> : null}
       {actions ? <div className="mt-4 flex flex-wrap items-center justify-center gap-2">{actions}</div> : null}
-      {reference ? <p className="mt-4 font-mono text-caption text-fg-3">{reference}</p> : null}
+      {reference ? <p className="mt-4 font-mono text-caption text-fg-3" dir="ltr">{reference}</p> : null}
     </div>
   );
 }
@@ -79,7 +79,7 @@ export function InlineBanner({
       <div className="min-w-0 flex-1">
         {title ? <p className="text-body font-medium text-fg-1">{title}</p> : null}
         {children ? <div className="text-body text-fg-2">{children}</div> : null}
-        {reference ? <p className="mt-1 font-mono text-caption text-fg-3">{reference}</p> : null}
+        {reference ? <p className="mt-1 font-mono text-caption text-fg-3" dir="ltr">{reference}</p> : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
     </div>
@@ -102,9 +102,9 @@ export function ErrorState({ title, description, actions, reference, className, 
     >
       <OctagonAlert className="size-6 text-danger" strokeWidth={1.5} aria-hidden="true" />
       <h2 className="mt-3 text-section text-fg-1">{title}</h2>
-      {description ? <p className="mt-1 max-w-[52ch] text-body-prose text-fg-2">{description}</p> : null}
+      {description ? <p className="mt-1 max-w-[52ch] text-body-prose text-fg-2" dir="auto">{description}</p> : null}
       {actions ? <div className="mt-4 flex flex-wrap items-center justify-center gap-2">{actions}</div> : null}
-      {reference ? <p className="mt-4 font-mono text-caption text-fg-3">{reference}</p> : null}
+      {reference ? <p className="mt-4 font-mono text-caption text-fg-3" dir="ltr">{reference}</p> : null}
     </div>
   );
 }

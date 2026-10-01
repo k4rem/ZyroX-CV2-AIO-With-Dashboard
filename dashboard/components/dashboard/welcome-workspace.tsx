@@ -174,7 +174,7 @@ export function WelcomeWorkspace({
   const composer = (
     <div className="min-w-0">
       <div className="border border-line bg-surface-1 px-3 py-2">
-        <p className="text-small text-fg-1">
+        <p className="text-small text-fg-1" dir="auto">
           {channel ? `Sends to #${channel.name} when a member joins` : "Not sending until a channel and a message are set"}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-3">
@@ -331,7 +331,7 @@ export function WelcomeWorkspace({
       </SettingGroup>
 
       {warn.length > 0 ? (
-        <p className="mt-3 text-small text-warn">
+        <p className="mt-3 text-small text-warn" dir="auto">
           {resolved.unknown.length ? `Unknown variable ${resolved.unknown.map((token) => `{${token}}`).join(", ")}. ` : ""}
           {resolved.unresolved.length ? "Some variables have no preview value yet, so they stay as written." : ""}
         </p>

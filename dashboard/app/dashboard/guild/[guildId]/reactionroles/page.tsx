@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { SettingGroup } from "@/components/settings/setting-group";
 import { SettingRow } from "@/components/settings/setting-row";
+import { SettingsInstrument } from "@/components/settings/settings-instrument";
 import { api } from "@/lib/api";
 import { roleSwatch } from "@/lib/modulePayloads";
 import { Button } from "@/components/ui/button";
@@ -115,9 +116,10 @@ export default function ReactionRolesPage({ params }: { params: { guildId: strin
   return (
     <div>
       <PageHeader title="Reaction roles" description="Members take or lose a role by reacting to a message." />
-      <p className="mb-2 max-w-2xl text-small text-fg-3">
-        The bot needs access to the message, and its role must sit above the role it assigns. Adding a listener also adds the reaction.
-      </p>
+      <SettingsInstrument
+        wide
+        summary={`${config.roles.length} listeners. ${config.dm_enabled ? "DM notifications on." : "DM notifications off."} Adding a listener also adds the reaction.`}
+      >
       <SettingRow label="DM notifications" description="Message the member when this role is added or removed.">
         <Switch checked={config.dm_enabled} onCheckedChange={toggleDM} aria-label="DM notifications" />
       </SettingRow>
@@ -168,7 +170,9 @@ export default function ReactionRolesPage({ params }: { params: { guildId: strin
       <SettingGroup id="rr-active" label="Listeners" meta={String(config.roles.length)}>
         <ul className="mt-2 border-t border-line">
           {config.roles.length === 0 ? (
-            <li className="py-3 text-small text-fg-3">No reaction roles configured.</li>
+            <li className="py-3 text-small text-fg-3" dir="auto">
+              No listeners yet. Add a message ID, emoji, and role above.
+            </li>
           ) : (
             config.roles.map((rr: { message_id: string; emoji: string; role_id: string }, index: number) => {
               const role = filteredRoles.find((item) => String(item.id) === String(rr.role_id));
@@ -189,6 +193,7 @@ export default function ReactionRolesPage({ params }: { params: { guildId: strin
           )}
         </ul>
       </SettingGroup>
+      </SettingsInstrument>
     </div>
   );
 }

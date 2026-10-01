@@ -230,7 +230,7 @@ export function DiscordPreview({
           </div>
         </div>
       </div>
-      {note ? <p className="mx-auto mt-3 max-w-[520px] text-small text-fg-3">{note}</p> : null}
+      {note ? <p className="mx-auto mt-3 max-w-[520px] text-small text-fg-3" dir="auto">{note}</p> : null}
     </div>
   );
 }

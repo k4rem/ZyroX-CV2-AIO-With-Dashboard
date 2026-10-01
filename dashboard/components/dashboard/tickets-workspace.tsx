@@ -225,7 +225,7 @@ export function TicketsWorkspace({
       <SettingGroup id="ticket-categories" label="Categories" meta={String(config.categories.length)}>
         <div className="mt-2 border-t border-line">
           {config.categories.length === 0 ? (
-            <p className="py-3 text-small text-fg-3">No categories yet.</p>
+            <p className="py-3 text-small text-fg-3" dir="auto">No categories yet.</p>
           ) : (
             config.categories.map((category, index) => (
               <div key={`${category.name}-${index}`} className="grid items-center gap-2 border-b border-line-subtle py-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">

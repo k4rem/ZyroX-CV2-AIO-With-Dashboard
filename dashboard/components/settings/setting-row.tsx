@@ -29,7 +29,11 @@ export function SettingRow({
         <label htmlFor={htmlFor} className="text-body font-medium text-fg-1">
           {label}
         </label>
-        {description ? <p className="mt-0.5 text-small text-fg-3">{description}</p> : null}
+        {description ? (
+          <p className="mt-0.5 text-small text-fg-3" dir="auto">
+            {description}
+          </p>
+        ) : null}
       </div>
       <div className="min-w-0 ps-3 sm:ps-0">{children}</div>
     </div>

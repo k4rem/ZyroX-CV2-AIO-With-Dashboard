@@ -206,3 +206,26 @@ Version and bundle sizes must be measured at install time (`next build` output) 
 | Welcome default template writes a colour without `#`, which the bot ignores | `components/dashboard/welcome-form.tsx` | B |
 | J2C "off" silently clears all three channels | `components/dashboard/j2c-form.tsx` | B (confirmation + copy) |
 | Duplicate document title "CLS OS · CLS OS" | route metadata | A (page header work) |
+
+## 8. Final refinement (Phase 1.6 closed)
+
+The authenticated visual QA verdict on Task C was **REFINEMENT REQUIRED**. This pass closed that gap. Phase 2 was not started. Overview, Welcome, and Join to Create were not redesigned.
+
+Pages changed:
+
+- Logging is an event routing table: category, enabled, destination, routing. The readout is the real routed count (`0 of 6` on the preview guild). Enabled with no destination is incomplete. Disabled is off. Toggles and channel changes still save immediately.
+- Antinuke is a protection status strip, the existing master switch, and a whitelist table. No score, incidents, or coverage percentage. Save uses the shared dirty bar and stays hidden while the switch is clean. Whitelist add and remove still apply immediately and send the saved switch, not an unsaved draft.
+- Bot settings, auto roles, reaction roles, vanity roles, voice role, and auto react sit in a compact settings instrument. Empty lists name the real add action. Voice role still saves `role_id` and `enabled` together.
+- Custom roles heading is "Custom roles".
+- English help copy uses `dir="auto"`. Technical tokens stay `dir="ltr"`. The page direction is unchanged.
+
+Safe deferrals:
+
+- Welcome and Join to Create keep their approved layouts. The unused area under a short form at wide resolutions is the real content height, not missing panels.
+- Antinuke still has no per-action coverage in the API.
+- Hidden Verification and Leveling, and unused legacy components, stay outside the strict surfaced-page gate.
+- No reduced-motion screenshot: this pass added no motion.
+
+Screenshots: `C:\Users\aero\Desktop\CLS-OS-PHASE-1-6-QA\refinement`.
+
+Phase 1.6 status: **CLOSED**.

@@ -3,7 +3,9 @@
 import React, { useState } from "react";
 import { toast } from "sonner";
 import { SaveBar } from "@/components/settings/save-bar";
+import { SettingGroup } from "@/components/settings/setting-group";
 import { SettingRow } from "@/components/settings/setting-row";
+import { SettingsInstrument } from "@/components/settings/settings-instrument";
 import { api } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 
@@ -35,6 +37,8 @@ export function SettingsForm({ initialPrefix, guildId }: SettingsFormProps) {
     }
   };
 
+  const shown = (prefix || ">").trim();
+
   return (
     <form
       onSubmit={(event) => {
@@ -42,20 +46,24 @@ export function SettingsForm({ initialPrefix, guildId }: SettingsFormProps) {
         if (prefix !== saved) void handleSave();
       }}
     >
-      <p className="max-w-xl text-small text-fg-3">
-        This prefix starts bot commands in this server. Example: {(prefix || ">").trim()}help
-      </p>
-      <SettingRow label="Command prefix" description="1 to 10 characters. Applies after save." htmlFor="command-prefix">
-        <Input
-          id="command-prefix"
-          value={prefix}
-          onChange={(e) => setPrefix(e.target.value)}
-          placeholder=">"
-          maxLength={10}
-          className="font-mono"
-          dir="ltr"
-        />
-      </SettingRow>
+      <SettingsInstrument summary={`Current prefix ${saved || ">"}. Commands start with that character.`}>
+        <SettingGroup id="bot-commands" label="Bot commands" meta={<span dir="ltr">{saved || ">"}</span>}>
+          <SettingRow label="Command prefix" description="1 to 10 characters. Applies after save." htmlFor="command-prefix">
+            <Input
+              id="command-prefix"
+              value={prefix}
+              onChange={(e) => setPrefix(e.target.value)}
+              placeholder=">"
+              maxLength={10}
+              className="font-mono"
+              dir="ltr"
+            />
+          </SettingRow>
+          <p className="pt-2 font-mono text-small text-fg-3" dir="ltr">
+            {shown}help
+          </p>
+        </SettingGroup>
+      </SettingsInstrument>
       <SaveBar
         dirty={prefix !== saved}
         saving={saving}

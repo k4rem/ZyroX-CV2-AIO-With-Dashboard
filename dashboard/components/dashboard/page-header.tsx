@@ -40,7 +40,11 @@ export const PageHeader = ({ title, description, children, icon: Icon, className
             {Icon && <Icon className="size-5 shrink-0 text-fg-2" strokeWidth={1.5} aria-hidden="true" />}
             <span className="truncate">{title}</span>
           </h1>
-          {description && <p className="mt-0.5 max-w-[80ch] text-body text-fg-2">{description}</p>}
+          {description && (
+            <p className="mt-0.5 max-w-[80ch] text-body text-fg-2" dir="auto">
+              {description}
+            </p>
+          )}
         </div>
         {children && <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div>}
       </div>

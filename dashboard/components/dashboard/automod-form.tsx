@@ -72,13 +72,13 @@ export function AutomodForm({ initialConfig, guildId }: AutomodFormProps) {
       <div className="flex items-center justify-between rounded-md border border-line bg-surface-1 px-4 py-3">
         <div>
           <p className="text-body font-medium text-fg-1">Automod enabled</p>
-          <p className="text-caption text-fg-2">Master switch for all rules below.</p>
+          <p className="text-caption text-fg-2" dir="auto">Master switch for all rules below.</p>
         </div>
         <Switch checked={config.enabled} onCheckedChange={handleToggleMaster} aria-label="Automod enabled" />
       </div>
 
       {!config.enabled && (
-        <p className="text-caption text-fg-2">Turn on the master control to change rule settings.</p>
+        <p className="text-caption text-fg-2" dir="auto">Turn on the master control to change rule settings.</p>
       )}
 
       {config.logging_channel && (
@@ -107,7 +107,7 @@ export function AutomodForm({ initialConfig, guildId }: AutomodFormProps) {
                   <rule.icon className={cn("size-5 shrink-0", isEnabled ? "text-brand" : "text-fg-3")} aria-hidden="true" />
                   <div>
                     <h3 className="text-body font-medium text-fg-1">{rule.name}</h3>
-                    <p className="text-caption text-fg-2">{rule.desc}</p>
+                    <p className="text-caption text-fg-2" dir="auto">{rule.desc}</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">

@@ -93,7 +93,7 @@ export function FlowLane({
         </ol>
       </div>
       {extra}
-      {caption ? <p className="mt-3 text-small text-fg-2">{caption}</p> : null}
+      {caption ? <p className="mt-3 text-small text-fg-2" dir="auto">{caption}</p> : null}
     </div>
   );
 }

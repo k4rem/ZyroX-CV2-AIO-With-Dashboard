@@ -60,7 +60,7 @@ export function JoinDmWorkspace({
             onChange={(event) => setDraft(event.target.value)}
             className="mt-2 min-h-40 w-full rounded-sm border border-line-input bg-surface-well p-2 text-body text-fg-1 outline-none focus-visible:border-brand-400"
           />
-          <p className="mt-2 text-small text-fg-3">
+          <p className="mt-2 text-small text-fg-3" dir="auto">
             Placeholders are not replaced in direct messages. The bot adds the Sent from line itself.
           </p>
         </label>

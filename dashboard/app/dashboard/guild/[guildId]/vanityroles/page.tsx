@@ -20,6 +20,7 @@ import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { SettingGroup } from "@/components/settings/setting-group";
+import { SettingsInstrument } from "@/components/settings/settings-instrument";
 import { api } from "@/lib/api";
 import { roleSwatch } from "@/lib/modulePayloads";
 import { Button } from "@/components/ui/button";
@@ -97,9 +98,7 @@ export default function VanityRolesPage({ params }: { params: { guildId: string 
   return (
     <div>
       <PageHeader title="Vanity roles" description="Assign a role when a member's status contains the vanity text." />
-      <p className="max-w-2xl text-small text-fg-3">
-        The bot watches custom statuses. Matching text adds the role; removing the text removes it. Logs go to the chosen channel.
-      </p>
+      <SettingsInstrument wide summary={`${setups.length} setups. Matching status text adds the role. Removing the text removes it.`}>
       <SettingGroup id="vanity-add" label="Add setup">
         <div className="mt-3 grid gap-3 md:grid-cols-3">
           <label className="text-small text-fg-2">
@@ -153,7 +152,9 @@ export default function VanityRolesPage({ params }: { params: { guildId: string 
       <SettingGroup id="vanity-active" label="Active setups" meta={String(setups.length)}>
         <ul className="mt-2 border-t border-line">
           {setups.length === 0 ? (
-            <li className="py-3 text-small text-fg-3">No vanity setups.</li>
+            <li className="py-3 text-small text-fg-3" dir="auto">
+              No setups yet. Add vanity text, a role, and a log channel above.
+            </li>
           ) : (
             setups.map((setup, index) => {
               const role = filteredRoles.find((item) => String(item.id) === String(setup.role_id));
@@ -175,6 +176,7 @@ export default function VanityRolesPage({ params }: { params: { guildId: string 
           )}
         </ul>
       </SettingGroup>
+      </SettingsInstrument>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SaveBar } from "@/components/settings/save-bar";
 import { SettingGroup } from "@/components/settings/setting-group";
+import { SettingsInstrument } from "@/components/settings/settings-instrument";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { api } from "@/lib/api";
@@ -61,7 +62,7 @@ export function AutoRoleForm({
 
   const renderList = (type: "humans" | "bots", label: string, description: string) => (
     <SettingGroup id={`autorole-${type}`} label={label} meta={`${draft[type].length} of ${LIMIT}`}>
-      <p className="mt-1 text-small text-fg-3">{description}</p>
+      <p className="mt-1 text-small text-fg-3" dir="auto">{description}</p>
       <ul className="mt-2 border-t border-line">
         {draft[type].length === 0 ? (
           <li className="py-3 text-small text-fg-3">None assigned.</li>
@@ -105,10 +106,9 @@ export function AutoRoleForm({
   );
 
   return (
-    <div>
-      <p className="mb-4 max-w-2xl text-small text-fg-3">
-        The bot role must sit above these roles in Discord. Members and bots are assigned separately, up to {LIMIT} each.
-      </p>
+    <SettingsInstrument
+      summary={`${draft.humans.length} member roles · ${draft.bots.length} bot roles. Up to ${LIMIT} each. The bot role must sit above them.`}
+    >
       {renderList("humans", "Members", "Roles given when a person joins.")}
       {renderList("bots", "Bots", "Roles given when a bot joins.")}
       <SaveBar
@@ -121,6 +121,6 @@ export function AutoRoleForm({
           setError(null);
         }}
       />
-    </div>
+    </SettingsInstrument>
   );
 }
