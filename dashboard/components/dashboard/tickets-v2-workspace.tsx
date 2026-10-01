@@ -15,6 +15,9 @@ type Workspace = {
   open_now: number;
   opened: number;
   closed: number;
+  cooldown_seconds: number;
+  max_open: number;
+  blacklist: string[];
   categories: Array<{ id: string; name: string; discord_category_id: string | null }>;
   panels: Array<{ id: string; title: string; message: string; button_label: string; preview: { message: string; components: Array<{ label: string }> } }>;
   tickets: Array<{ id: string; number: number; status: string; opener_id: string; assignee_id: string | null; close_reason: string | null }>;
@@ -38,6 +41,8 @@ export function TicketsV2Workspace({
   const [question, setQuestion] = useState("What happened?");
   const [selected, setSelected] = useState<string | null>(null);
   const [lines, setLines] = useState<Array<{ author_id: string; body: string }>>([]);
+  const [cooldown, setCooldown] = useState(String(initial.cooldown_seconds ?? 60));
+  const [blockedUser, setBlockedUser] = useState("");
 
   const refresh = async () => {
     const next = await api.getTicketsV2(guildId);
@@ -142,6 +147,41 @@ export function TicketsV2Workspace({
           )}
         </SettingGroup>
       </div>
+
+      <SettingGroup id="ticket-limits" label="Limits" meta={`${data.blacklist?.length ?? 0} blocked`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input value={cooldown} onChange={(event) => setCooldown(event.target.value)} placeholder="Cooldown seconds" />
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void api.updateTicketLimits(guildId, { cooldown_seconds: Number(cooldown) || 0, max_open: data.max_open || 1 }).then(refresh)}
+          >
+            Save cooldown
+          </Button>
+          <Input value={blockedUser} onChange={(event) => setBlockedUser(event.target.value)} placeholder="User ID to block" />
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              if (!/^\d{17,20}$/.test(blockedUser)) {
+                toast.error("Enter a Discord user ID");
+                return;
+              }
+              void api.blacklistTicketUser(guildId, blockedUser).then(() => {
+                setBlockedUser("");
+                return refresh();
+              });
+            }}
+          >
+            Blacklist
+          </Button>
+        </div>
+        {data.blacklist?.length ? (
+          <p className="font-mono text-small text-fg-3">{data.blacklist.join(", ")}</p>
+        ) : (
+          <p className="text-small text-fg-3">No blacklisted users.</p>
+        )}
+      </SettingGroup>
 
       <SettingGroup id="ticket-transcript" label="Transcript">
         {selected === null ? (

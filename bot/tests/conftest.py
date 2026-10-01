@@ -122,6 +122,8 @@ async def db_reset(postgres_ready):
             "verification_overwrite_backups",
             "verification_members",
             "verification_configs",
+            "ticket_blacklist_v2",
+            "ticket_settings_v2",
             "ticket_transcript_v2",
             "ticket_events_v2",
             "tickets_v2",

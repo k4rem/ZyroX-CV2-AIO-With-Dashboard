@@ -40,8 +40,14 @@ class TicketsV2(commands.Cog):
                 opener_id=interaction.user.id,
                 answers=answers,
             )
-        except TicketError:
-            await interaction.response.send_message("You already have an open ticket in this category.", ephemeral=True)
+        except TicketError as exc:
+            message = {
+                "blacklisted": "You cannot open tickets in this server.",
+                "cooldown": "Wait before opening another ticket.",
+                "max_open": "You already have the maximum number of open tickets.",
+                "duplicate_open": "You already have an open ticket in this category.",
+            }.get(str(exc), "This ticket could not be opened.")
+            await interaction.response.send_message(message, ephemeral=True)
             return
         channel = None
         if parent is not None:

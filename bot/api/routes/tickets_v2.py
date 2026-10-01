@@ -7,13 +7,16 @@ from pydantic import BaseModel, Field
 
 from cls_platform.tickets.store import (
     TicketError,
+    blacklist_user,
     claim_ticket,
     close_ticket,
     create_category,
     create_panel,
     open_ticket,
     reopen_ticket,
+    set_limits,
     transcript,
+    unblacklist_user,
     workspace,
 )
 
@@ -46,6 +49,15 @@ class CloseBody(BaseModel):
     reason: str
 
 
+class LimitsBody(BaseModel):
+    cooldown_seconds: int = 60
+    max_open: int = 1
+
+
+class BlacklistBody(BaseModel):
+    user_id: str
+
+
 def _int(value: str | None) -> int | None:
     return int(value) if value else None
 
@@ -76,6 +88,25 @@ async def tickets_panel(guild_id: int, body: PanelBody):
         button_label=body.button_label,
         questions=body.questions,
     )
+
+
+@router.patch("/{guild_id}/tickets/v2/settings")
+async def tickets_settings(guild_id: int, body: LimitsBody):
+    try:
+        return await set_limits(guild_id=guild_id, cooldown_seconds=body.cooldown_seconds, max_open=body.max_open)
+    except TicketError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/{guild_id}/tickets/v2/blacklist")
+async def tickets_blacklist(guild_id: int, body: BlacklistBody):
+    return await blacklist_user(guild_id=guild_id, user_id=int(body.user_id))
+
+
+@router.delete("/{guild_id}/tickets/v2/blacklist/{user_id}")
+async def tickets_unblacklist(guild_id: int, user_id: int):
+    await unblacklist_user(guild_id=guild_id, user_id=user_id)
+    return {"removed": str(user_id)}
 
 
 @router.post("/{guild_id}/tickets/v2/open")

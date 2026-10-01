@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, func, select
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
@@ -87,6 +87,22 @@ class TicketTranscript(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class TicketSettings(Base):
+    __tablename__ = "ticket_settings_v2"
+
+    guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    cooldown_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    max_open: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class TicketBlacklist(Base):
+    __tablename__ = "ticket_blacklist_v2"
+
+    guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class TicketError(ValueError):
     pass
 
@@ -165,12 +181,46 @@ async def create_panel(*, guild_id: int, category_id: str, channel_id: int | Non
         return {"id": str(panel.id), "preview": preview}
 
 
+async def set_limits(*, guild_id: int, cooldown_seconds: int, max_open: int) -> dict:
+    if cooldown_seconds < 0 or cooldown_seconds > 86400 or max_open < 1 or max_open > 10:
+        raise TicketError("invalid_limits")
+    async with session_scope() as session:
+        row = await session.get(TicketSettings, guild_id)
+        if row is None:
+            row = TicketSettings(guild_id=guild_id)
+            session.add(row)
+        row.cooldown_seconds = cooldown_seconds
+        row.max_open = max_open
+        return {"cooldown_seconds": cooldown_seconds, "max_open": max_open}
+
+
+async def blacklist_user(*, guild_id: int, user_id: int) -> dict:
+    async with session_scope() as session:
+        existing = await session.get(TicketBlacklist, (guild_id, user_id))
+        if existing is None:
+            session.add(TicketBlacklist(guild_id=guild_id, user_id=user_id))
+        return {"user_id": snowflake_to_str(user_id)}
+
+
+async def unblacklist_user(*, guild_id: int, user_id: int) -> None:
+    async with session_scope() as session:
+        row = await session.get(TicketBlacklist, (guild_id, user_id))
+        if row is not None:
+            await session.delete(row)
+
+
 async def open_ticket(*, guild_id: int, category_id: str, opener_id: int, answers: dict | None = None, channel_id: int | None = None) -> dict:
     answers = answers or {}
     async with session_scope() as session:
         category = await session.get(TicketCategory, uuid.UUID(category_id))
         if category is None or category.guild_id != guild_id:
             raise TicketError("category_missing")
+        blocked = await session.get(TicketBlacklist, (guild_id, opener_id))
+        if blocked is not None:
+            raise TicketError("blacklisted")
+        settings = await session.get(TicketSettings, guild_id)
+        cooldown_seconds = settings.cooldown_seconds if settings else 60
+        max_open = settings.max_open if settings else 1
         existing = (
             await session.execute(
                 select(Ticket).where(
@@ -183,6 +233,25 @@ async def open_ticket(*, guild_id: int, category_id: str, opener_id: int, answer
         ).scalar_one_or_none()
         if existing is not None:
             raise TicketError("duplicate_open")
+        open_count = (
+            await session.execute(
+                select(func.count()).select_from(Ticket).where(
+                    Ticket.guild_id == guild_id,
+                    Ticket.opener_id == opener_id,
+                    Ticket.status == "open",
+                )
+            )
+        ).scalar_one()
+        if int(open_count) >= max_open:
+            raise TicketError("max_open")
+        if cooldown_seconds > 0:
+            last_opened = (
+                await session.execute(
+                    select(func.max(Ticket.opened_at)).where(Ticket.guild_id == guild_id, Ticket.opener_id == opener_id)
+                )
+            ).scalar_one()
+            if last_opened is not None and datetime.now(timezone.utc) - last_opened < timedelta(seconds=cooldown_seconds):
+                raise TicketError("cooldown")
         number = (
             await session.execute(select(func.coalesce(func.max(Ticket.number), 0)).where(Ticket.guild_id == guild_id))
         ).scalar_one() + 1
@@ -271,6 +340,8 @@ async def workspace(guild_id: int) -> dict:
                 select(func.count()).select_from(Ticket).where(Ticket.guild_id == guild_id, Ticket.status == "open")
             )
         ).scalar_one()
+        settings = await session.get(TicketSettings, guild_id)
+        blocked = (await session.execute(select(TicketBlacklist.user_id).where(TicketBlacklist.guild_id == guild_id))).scalars().all()
         opened = (await session.execute(select(func.count()).select_from(Ticket).where(Ticket.guild_id == guild_id))).scalar_one()
         closed_count = (
             await session.execute(
@@ -281,6 +352,9 @@ async def workspace(guild_id: int) -> dict:
             "open_now": int(open_count),
             "opened": int(opened),
             "closed": int(closed_count),
+            "cooldown_seconds": settings.cooldown_seconds if settings else 60,
+            "max_open": settings.max_open if settings else 1,
+            "blacklist": [snowflake_to_str(user_id) for user_id in blocked],
             "categories": [
                 {"id": str(row.id), "name": row.name, "discord_category_id": _sid(row.discord_category_id)}
                 for row in categories

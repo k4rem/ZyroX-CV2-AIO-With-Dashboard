@@ -12,6 +12,8 @@ from cls_platform.tickets.store import (
     transcript,
     workspace,
     add_transcript,
+    blacklist_user,
+    set_limits,
 )
 
 GUILD = 100000000000000100
@@ -67,3 +69,25 @@ async def test_ticket_flow_and_isolation(db_reset):
         assert False, "cross guild"
     except TicketError:
         pass
+    await close_ticket(guild_id=GUILD, ticket_id=opened["id"], actor_id=USER + 5, reason="done")
+    await set_limits(guild_id=GUILD, cooldown_seconds=3600, max_open=1)
+    try:
+        await open_ticket(guild_id=GUILD, category_id=category["id"], opener_id=USER)
+        assert False, "cooldown"
+    except TicketError as exc:
+        assert str(exc) == "cooldown"
+    await set_limits(guild_id=GUILD, cooldown_seconds=0, max_open=1)
+    second = await create_category(guild_id=GUILD, name="Billing", discord_category_id=None, staff_role_ids=[])
+    again = await open_ticket(guild_id=GUILD, category_id=second["id"], opener_id=USER + 9)
+    try:
+        await open_ticket(guild_id=GUILD, category_id=category["id"], opener_id=USER + 9)
+        assert False, "max open"
+    except TicketError as exc:
+        assert str(exc) == "max_open"
+    await blacklist_user(guild_id=GUILD, user_id=USER + 8)
+    try:
+        await open_ticket(guild_id=GUILD, category_id=category["id"], opener_id=USER + 8)
+        assert False, "blacklist"
+    except TicketError as exc:
+        assert str(exc) == "blacklisted"
+    assert again["status"] == "open"
