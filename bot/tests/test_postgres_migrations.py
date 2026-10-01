@@ -81,8 +81,38 @@ def test_security_migration_downgrade_and_upgrade():
         capture_output=True,
         text=True,
     )
+    assert down.returncode == 0, down.stderr
     try:
-        assert down.returncode == 0, down.stderr
+        import asyncio
+        import asyncpg
+
+        async def gone():
+            conn = await asyncpg.connect(
+                host="127.0.0.1",
+                port=5433,
+                user="postgres",
+                password="cls",
+                database="cls_discord_test",
+            )
+            tables = await conn.fetch(
+                "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename LIKE 'security_%'"
+            )
+            triggers = await conn.fetch(
+                "SELECT tgname FROM pg_trigger WHERE tgname LIKE 'security_%'"
+            )
+            indexes = await conn.fetch(
+                """
+                SELECT indexname FROM pg_indexes
+                WHERE schemaname='public'
+                  AND (indexname LIKE 'ix_security_%' OR indexname LIKE 'uq_security_%')
+                """
+            )
+            await conn.close()
+            assert tables == []
+            assert triggers == []
+            assert indexes == []
+
+        asyncio.run(gone())
     finally:
         up = subprocess.run(
             [sys.executable, "-m", "alembic", "upgrade", "head"],

@@ -75,22 +75,69 @@ async def purge_expired(now: datetime | None = None) -> dict[str, int]:
             )
         ).scalars().all()
         if old_ids:
+            referenced = set(
+                (
+                    await session.execute(
+                        select(SecurityIncident.previous_incident_id).where(
+                            SecurityIncident.previous_incident_id.in_(old_ids),
+                            SecurityIncident.id.notin_(old_ids),
+                        )
+                    )
+                ).scalars().all()
+            )
+            live_outbox = set(
+                (
+                    await session.execute(
+                        select(SecurityAlertOutbox.incident_id).where(
+                            SecurityAlertOutbox.incident_id.in_(old_ids),
+                            SecurityAlertOutbox.status != "DELIVERED",
+                        )
+                    )
+                ).scalars().all()
+            )
+            delete_ids = [item for item in old_ids if item not in referenced and item not in live_outbox]
+            if not delete_ids:
+                return counts
             await session.execute(text("SELECT set_config('app.allow_security_purge', 'on', true)"))
+            obs_ids = (
+                await session.execute(
+                    select(SecurityObservation.id).where(SecurityObservation.incident_id.in_(delete_ids))
+                )
+            ).scalars().all()
+            if obs_ids:
+                await session.execute(
+                    SecurityObservation.__table__.update()
+                    .where(SecurityObservation.superseded_by_observation_id.in_(obs_ids))
+                    .values(superseded_by_observation_id=None)
+                )
+                await session.execute(
+                    SecurityGatewaySignal.__table__.update()
+                    .where(SecurityGatewaySignal.linked_observation_id.in_(obs_ids))
+                    .values(linked_observation_id=None)
+                )
             await session.execute(
-                delete(SecurityObservation).where(SecurityObservation.incident_id.in_(old_ids))
+                SecurityIncident.__table__.update()
+                .where(SecurityIncident.previous_incident_id.in_(delete_ids))
+                .values(previous_incident_id=None)
             )
             await session.execute(
-                delete(SecurityIncidentEvent).where(SecurityIncidentEvent.incident_id.in_(old_ids))
+                delete(SecurityAlertOutbox).where(SecurityAlertOutbox.incident_id.in_(delete_ids))
             )
             await session.execute(
-                delete(SecurityResponseAction).where(SecurityResponseAction.incident_id.in_(old_ids))
+                delete(SecurityObservation).where(SecurityObservation.incident_id.in_(delete_ids))
+            )
+            await session.execute(
+                delete(SecurityIncidentEvent).where(SecurityIncidentEvent.incident_id.in_(delete_ids))
+            )
+            await session.execute(
+                delete(SecurityResponseAction).where(SecurityResponseAction.incident_id.in_(delete_ids))
             )
             await session.execute(
                 delete(SecurityQuarantine).where(
-                    SecurityQuarantine.incident_id.in_(old_ids),
+                    SecurityQuarantine.incident_id.in_(delete_ids),
                     SecurityQuarantine.status.notin_(_OPEN_QUARANTINE),
                 )
             )
-            removed = await session.execute(delete(SecurityIncident).where(SecurityIncident.id.in_(old_ids)))
+            removed = await session.execute(delete(SecurityIncident).where(SecurityIncident.id.in_(delete_ids)))
             counts["incidents"] = removed.rowcount or 0
     return counts

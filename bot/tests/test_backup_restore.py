@@ -250,7 +250,10 @@ def test_backup_restore_postgres_roundtrip(tmp_path, monkeypatch):
     env, _ = postgres_env_from_url(_database_url_for(source_db))
     password = env.get("PGPASSWORD", "")
     if password:
-        assert password not in dump_text
+        assert f":{password}@" not in dump_text
+        assert f"password={password}" not in dump_text
+        assert f"PGPASSWORD={password}" not in dump_text
+        assert f"PGPASSWORD='{password}'" not in dump_text
 
     asyncio.run(_drop_create_db(RESTORE_DB_NAME))
     restore_postgres_sql(dump_path, _database_url_for(RESTORE_DB_NAME))

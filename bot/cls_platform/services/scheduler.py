@@ -58,8 +58,15 @@ async def enqueue_job(
                 raise
     async with factory() as session:
         existing = (
-            await session.execute(select(SchedulerJob.id).where(SchedulerJob.dedupe_key == dedupe_key))
-        ).scalar_one()
+            await session.execute(
+                select(SchedulerJob.id).where(
+                    SchedulerJob.dedupe_key == dedupe_key,
+                    SchedulerJob.status.in_(("pending", "running")),
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            raise
         return existing
 
 
@@ -139,8 +146,19 @@ async def run_scheduler_tick(limit: int = 5) -> int:
                     job.run_at = datetime.now(timezone.utc) + backoff_delay(job.attempt_count)
                 else:
                     job.status = "failed"
+            follow_type = job.job_type
+            follow_payload = dict(job.payload or {})
+            follow_status = job.status
             await session.commit()
             processed += 1
+            interval = int(follow_payload.get("interval_s") or 0)
+            if follow_status == "completed" and interval > 0:
+                await enqueue_job(
+                    follow_type,
+                    datetime.now(timezone.utc) + timedelta(seconds=interval),
+                    follow_payload,
+                    dedupe_key=f"recurring:{follow_type}",
+                )
     return processed
 
 

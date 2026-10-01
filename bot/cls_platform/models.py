@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -75,10 +75,18 @@ class AuditEvent(Base):
 
 class SchedulerJob(Base):
     __tablename__ = "scheduler_jobs"
+    __table_args__ = (
+        Index(
+            "uq_scheduler_jobs_dedupe_active",
+            "dedupe_key",
+            unique=True,
+            postgresql_where=text("dedupe_key IS NOT NULL AND status IN ('pending', 'running')"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     job_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    dedupe_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
+    dedupe_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)

@@ -115,3 +115,70 @@ async def test_scheduler_survives_worker_restart(db_reset):
         row = (await session.execute(select(SchedulerJob).where(SchedulerJob.id == jid))).scalar_one()
         assert row.status == "completed"
     assert await run_scheduler_tick() == 0
+
+
+@pytest.mark.asyncio
+async def test_repeated_temprole_and_failed_history_can_schedule_again(db_reset):
+    from sqlalchemy import select
+
+    from cls_platform.database import get_session_factory
+    from cls_platform.models import SchedulerJob
+    from cls_platform.services.scheduler import enqueue_job, register_job_handler, run_scheduler_tick
+
+    async def handler(job):
+        return None
+
+    register_job_handler("role_temp_remove", handler)
+    key = f"role_temp:{TEST_GUILD_A}:{TEST_USER}:{TEST_ROLE_A}"
+    payload = {"guild_id": TEST_GUILD_A, "user_id": TEST_USER, "role_id": TEST_ROLE_A}
+    past = datetime.now(timezone.utc) - timedelta(seconds=1)
+    first = await enqueue_job("role_temp_remove", past, payload, dedupe_key=key)
+    assert await run_scheduler_tick() >= 1
+    second = await enqueue_job(
+        "role_temp_remove",
+        datetime.now(timezone.utc) + timedelta(seconds=30),
+        payload,
+        dedupe_key=key,
+    )
+    assert second != first
+    duplicate = await enqueue_job("role_temp_remove", past, payload, dedupe_key=key)
+    assert duplicate == second
+    factory = get_session_factory()
+    async with factory() as session:
+        row = (await session.execute(select(SchedulerJob).where(SchedulerJob.id == second))).scalar_one()
+        row.status = "failed"
+        await session.commit()
+    third = await enqueue_job("role_temp_remove", past, payload, dedupe_key=key)
+    assert third not in {first, second}
+
+
+@pytest.mark.asyncio
+async def test_stale_running_lease_is_reclaimed(db_reset):
+    from sqlalchemy import select
+
+    from cls_platform.database import get_session_factory
+    from cls_platform.models import SchedulerJob
+    from cls_platform.services.scheduler import enqueue_job, register_job_handler, run_scheduler_tick
+
+    calls = {"n": 0}
+
+    async def handler(job):
+        calls["n"] += 1
+
+    register_job_handler("role_temp_remove", handler)
+    key = f"role_temp:stale:{TEST_USER}"
+    job_id = await enqueue_job(
+        "role_temp_remove",
+        datetime.now(timezone.utc) + timedelta(hours=1),
+        {"guild_id": TEST_GUILD_A, "user_id": TEST_USER, "role_id": TEST_ROLE_A},
+        dedupe_key=key,
+    )
+    factory = get_session_factory()
+    async with factory() as session:
+        row = (await session.execute(select(SchedulerJob).where(SchedulerJob.id == job_id))).scalar_one()
+        row.status = "running"
+        row.lease_until = datetime.now(timezone.utc) - timedelta(seconds=5)
+        row.attempt_count = 1
+        await session.commit()
+    assert await run_scheduler_tick() >= 1
+    assert calls["n"] == 1

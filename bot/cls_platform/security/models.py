@@ -92,6 +92,7 @@ class SecurityGuildState(Base):
         DateTime(timezone=True), nullable=True
     )
     ops_destination_ok: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    guild_owner_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -105,6 +106,13 @@ class SecurityIncident(Base):
             "engine",
             unique=True,
             postgresql_where=text("status = 'ACTIVE' AND subject_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_security_incidents_unattributed_active",
+            "guild_id",
+            "engine",
+            unique=True,
+            postgresql_where=text("status = 'ACTIVE' AND subject_id IS NULL"),
         ),
     )
 
@@ -138,6 +146,14 @@ class SecurityObservation(Base):
             postgresql_where=text("audit_entry_id IS NOT NULL"),
         ),
         Index("ix_security_observations_actor_time", "guild_id", "actor_id", "entry_created_at"),
+        Index(
+            "ix_security_observations_action_target_time",
+            "guild_id",
+            "action_class",
+            "target_id",
+            "entry_created_at",
+        ),
+        Index("ix_security_observations_incident", "incident_id"),
         CheckConstraint(
             "counts_for_containment = false OR (attribution_state = 'CONFIRMED' AND late = false)",
             name="ck_security_observations_containment_count",
@@ -162,6 +178,7 @@ class SecurityObservation(Base):
     source: Mapped[str] = mapped_column(String(32), nullable=False)
     severity: Mapped[str] = mapped_column(String(8), nullable=False)
     permission_tier: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    actor_is_bot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     change_digest: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     attribution_method: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     attribution_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -182,6 +199,12 @@ class SecurityGatewaySignal(Base):
             "guild_id",
             "correlation_key",
             "first_seen_at",
+        ),
+        Index(
+            "ix_security_gateway_signals_state_action",
+            "guild_id",
+            "state",
+            "discord_action",
         ),
     )
 
@@ -244,6 +267,8 @@ class SecurityResponseAction(Base):
     effective_mode: Mapped[str] = mapped_column(String(16), nullable=False)
     discord_mutation: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rule_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    ledger_action_class: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    reason_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     discord_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
