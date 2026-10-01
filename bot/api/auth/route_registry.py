@@ -29,6 +29,7 @@ _GUILD_SUBROUTES = frozenset(
         "/welcome",
         "/antinuke",
         "/security",
+        "/snapshots",
         "/verification",
         "/vanityroles",
         "/autorole",
@@ -49,6 +50,7 @@ _GUILD_SUBROUTES = frozenset(
 _GUILD_SUBROUTE_PREFIXES = (
     "/vanityroles/",
     "/security/",
+    "/snapshots/",
 )
 
 _GUILDS_LIST = re.compile(r"^/api/v1/guilds/?$")

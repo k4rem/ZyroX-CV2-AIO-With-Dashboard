@@ -9,5 +9,10 @@ MANUAL PENDING. No disposable guild mutation was run from this environment. Do n
 ## 2A.5–2A.8
 DONE for runtime and dashboard data. Tests: 146 passed, 12 subtests.
 Commit follows this note.
-Deferral: live Discord V-1/V-3/V-4/V-6/V-7 remain MANUAL PENDING. Visual QA of the protection page at 1440 and 390 was not run in a browser this session. ENFORCE stays locked; the release control returns 409.
+## 2B snapshot foundation
+DONE on branch phase-2b-snapshot-foundation. Tests: tests/test_snapshots.py (checksum, large snowflake, guild isolation, SUSPECT). No restore.
+
+## 2S recovery feasibility
+DONE as a short matrix in docs/PHASE_2S_RECOVERY_FEASIBILITY.md. Member recovery is NO-GO. No production restore.
+
 
