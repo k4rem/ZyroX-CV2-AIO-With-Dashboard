@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { Save, RefreshCcw, Command } from "lucide-react";
 import { toast } from "sonner";
+import { SaveBar } from "@/components/settings/save-bar";
+import { SettingRow } from "@/components/settings/setting-row";
 import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 interface SettingsFormProps {
@@ -13,11 +13,11 @@ interface SettingsFormProps {
 }
 
 export function SettingsForm({ initialPrefix, guildId }: SettingsFormProps) {
+  const [saved, setSaved] = useState(initialPrefix);
   const [prefix, setPrefix] = useState(initialPrefix);
   const [saving, setSaving] = useState(false);
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async () => {
     if (!prefix || prefix.length > 10) {
       toast.error("Prefix must be between 1 and 10 characters.");
       return;
@@ -25,6 +25,7 @@ export function SettingsForm({ initialPrefix, guildId }: SettingsFormProps) {
     setSaving(true);
     try {
       await api.updatePrefix(guildId, prefix);
+      setSaved(prefix);
       toast.success("Prefix updated");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to update prefix";
@@ -35,30 +36,33 @@ export function SettingsForm({ initialPrefix, guildId }: SettingsFormProps) {
   };
 
   return (
-    <form onSubmit={handleSave} className="space-y-4 rounded-md border border-line bg-surface-1 p-4">
-      <div className="space-y-2">
-        <label htmlFor="command-prefix" className="text-body font-medium text-fg-1 flex items-center gap-2">
-          <Command className="size-4 text-fg-2" aria-hidden="true" />
-          Command prefix
-        </label>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (prefix !== saved) void handleSave();
+      }}
+    >
+      <p className="max-w-xl text-small text-fg-3">
+        This prefix starts bot commands in this server. Example: {(prefix || ">").trim()}help
+      </p>
+      <SettingRow label="Command prefix" description="1 to 10 characters. Applies after save." htmlFor="command-prefix">
         <Input
           id="command-prefix"
           value={prefix}
           onChange={(e) => setPrefix(e.target.value)}
-          placeholder="e.g. !, ?, >>"
+          placeholder=">"
           maxLength={10}
-          className="max-w-xs text-lg font-semibold"
+          className="font-mono"
+          dir="ltr"
         />
-        <p className="text-caption text-fg-2">
-          Triggers bot commands in this server (example: {prefix || ">"}help).
-        </p>
-      </div>
-      <div className="flex justify-end pt-2">
-        <Button type="submit" disabled={saving || !prefix}>
-          {saving ? <RefreshCcw className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
-          Save changes
-        </Button>
-      </div>
+      </SettingRow>
+      <SaveBar
+        dirty={prefix !== saved}
+        saving={saving}
+        error={null}
+        onSave={() => void handleSave()}
+        onDiscard={() => setPrefix(saved)}
+      />
     </form>
   );
 }

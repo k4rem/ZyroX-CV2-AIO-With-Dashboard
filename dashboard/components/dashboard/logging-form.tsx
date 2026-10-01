@@ -75,10 +75,14 @@ export function LoggingForm({ initialConfig, channels, guildId }: LoggingFormPro
     label: `#${c.name}`,
   }));
 
+  const routed = LOG_CATEGORIES.filter(
+    (category) => config.log_enabled[category.id] && config.log_channels[category.id],
+  ).length;
+
   return (
     <div className="space-y-4">
       <p className="text-caption text-fg-2">
-        Enable event categories and assign a destination channel for each. Ignored roles and channels:{" "}
+        {routed} of {LOG_CATEGORIES.length} categories are on and have a destination. Ignored:{" "}
         {config.ignore_roles.length} roles, {config.ignore_channels.length} channels.
       </p>
       {LOG_CATEGORIES.map((cat) => (

@@ -16,11 +16,32 @@ const TOKENS = [
   ["shadow-xl", /\bshadow-xl\b/g],
 ];
 
+// Hidden or unused. Not part of the surfaced CLS product, so --strict does not
+// fail the build on them. Verification and leveling stay deferred. The form
+// files below are not imported by any surfaced route.
+const DEFERRED = [
+  "app/dashboard/guild/[guildId]/verification/",
+  "app/dashboard/guild/[guildId]/leveling/",
+  "components/dashboard/verification-form.tsx",
+  "components/dashboard/leveling-form.tsx",
+  "components/dashboard/reactionroles-form.tsx",
+  "components/dashboard/vanityrole-form.tsx",
+  "components/dashboard/form-elements.tsx",
+  "components/dashboard/metric-card.tsx",
+  "components/dashboard/server-card.tsx",
+  "components/guild-tabs.tsx",
+];
+
 const args = process.argv.slice(2);
 const strict = args.includes("--strict");
 const roots = args.filter((a) => !a.startsWith("--"));
 const cwd = process.cwd();
 const targets = roots.length > 0 ? roots : ["app", "components"];
+
+function deferred(file) {
+  const rel = relative(cwd, file).replaceAll("\\", "/");
+  return DEFERRED.some((entry) => rel === entry || rel.startsWith(entry));
+}
 
 function* walk(path) {
   const st = statSync(path);
@@ -38,6 +59,7 @@ const totals = Object.fromEntries(TOKENS.map(([k]) => [k, 0]));
 const rows = [];
 for (const root of targets) {
   for (const file of walk(root)) {
+    if (strict && deferred(file)) continue;
     const text = readFileSync(file, "utf8");
     const counts = {};
     let sum = 0;

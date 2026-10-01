@@ -1,23 +1,24 @@
 import React from "react";
-import dynamic from "next/dynamic";
+import { TicketsWorkspace } from "@/components/dashboard/tickets-workspace";
 import { api } from "@/lib/api";
-import { PageHeader } from "@/components/dashboard/page-header";
-
-const TicketsForm = dynamic(() => import("@/components/dashboard/tickets-form").then((mod) => mod.TicketsForm), {
-  loading: () => <div className="h-24 w-full animate-pulse rounded-md bg-surface-2" />,
-});
 
 export default async function TicketsPage({ params }: { params: { guildId: string } }) {
-  const config = await api.getTickets(params.guildId);
+  const [config, channels, roles, bot] = await Promise.all([
+    api.getTickets(params.guildId),
+    api.getChannels(params.guildId).catch(() => []),
+    api.getRoles(params.guildId).catch(() => []),
+    api.getBotStatus().catch(() => null),
+  ]);
   if (!config) return null;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Tickets"
-        description="Configure support categories, channels, and staff roles for this server."
-      />
-      <TicketsForm initialConfig={config} guildId={params.guildId} />
-    </div>
+    <TicketsWorkspace
+      guildId={params.guildId}
+      initialConfig={config}
+      channels={channels ?? []}
+      roles={roles ?? []}
+      botName={bot?.user ?? "Bot"}
+      botAvatar={bot?.avatar_url ?? null}
+    />
   );
 }

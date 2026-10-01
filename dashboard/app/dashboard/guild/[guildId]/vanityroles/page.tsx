@@ -17,13 +17,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Link2, RefreshCcw, Plus, Trash2, Info, Save } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { SettingGroup } from "@/components/settings/setting-group";
 import { api } from "@/lib/api";
+import { roleSwatch } from "@/lib/modulePayloads";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 
 export default function VanityRolesPage({ params }: { params: { guildId: string } }) {
   const [loading, setLoading] = useState(true);
@@ -89,151 +90,91 @@ export default function VanityRolesPage({ params }: { params: { guildId: string 
     }
   };
 
-  const formatColor = (decimal: number) => {
-    if (!decimal || decimal === 0) return "#94a3b8";
-    return `#${decimal.toString(16).padStart(6, '0')}`;
-  };
-
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <RefreshCcw className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <div className="h-24 w-full animate-pulse rounded-md bg-surface-2" />;
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Link2 className="h-6 w-6 text-primary" />
-            Vanity Roles
-          </h2>
-          <p className="text-slate-400 mt-1">Give special roles to members with your vanity/invite link in their status.</p>
+    <div>
+      <PageHeader title="Vanity roles" description="Assign a role when a member's status contains the vanity text." />
+      <p className="max-w-2xl text-small text-fg-3">
+        The bot watches custom statuses. Matching text adds the role; removing the text removes it. Logs go to the chosen channel.
+      </p>
+      <SettingGroup id="vanity-add" label="Add setup">
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <label className="text-small text-fg-2">
+            Vanity text
+            <Input
+              value={newSetup.vanity}
+              onChange={(event) => setNewSetup({ ...newSetup, vanity: event.target.value })}
+              placeholder=".gg/example"
+              className="mt-1"
+            />
+          </label>
+          <label className="text-small text-fg-2">
+            Role
+            <span className="mt-1 block">
+              <Combobox
+                value={newSetup.role_id || null}
+                onValueChange={(value) => setNewSetup({ ...newSetup, role_id: value ?? "" })}
+                options={filteredRoles.map((role) => ({
+                  value: String(role.id),
+                  label: role.name,
+                  swatch: roleSwatch(role.color),
+                }))}
+                placeholder="Select a role"
+                searchLabel="Search roles"
+              />
+            </span>
+          </label>
+          <label className="text-small text-fg-2">
+            Log channel
+            <span className="mt-1 block">
+              <Combobox
+                value={newSetup.log_channel_id || null}
+                onValueChange={(value) => setNewSetup({ ...newSetup, log_channel_id: value ?? "" })}
+                options={textChannels.map((channel) => ({
+                  value: String(channel.id),
+                  label: channel.name,
+                  glyph: "text" as const,
+                }))}
+                placeholder="Select a channel"
+                searchLabel="Search channels"
+              />
+            </span>
+          </label>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        <div className="lg:col-span-3 space-y-6">
-          <div className="bg-[#141B2D] border border-slate-800 rounded-3xl overflow-hidden shadow-xl p-8 space-y-8">
-            
-            {/* Add New Setup */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-primary/10 text-primary"><Plus className="h-5 w-5" /></div>
-                <h4 className="font-bold text-white text-base">Add New Vanity Setup</h4>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400">Vanity Text / URL</label>
-                  <Input
-                    placeholder="e.g. .gg/my-server"
-                    value={newSetup.vanity}
-                    onChange={(e) => setNewSetup({ ...newSetup, vanity: e.target.value })}
-                    className="bg-slate-900/50 border-slate-800 h-12"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400">Role to Give</label>
-                  <Select value={newSetup.role_id} onValueChange={(val) => setNewSetup({ ...newSetup, role_id: val })}>
-                    <SelectTrigger className="w-full h-12 bg-slate-900/50 border-slate-800">
-                      <SelectValue placeholder="Select a role..." />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-800 max-h-[300px]">
-                      {filteredRoles.map((r) => (
-                        <SelectItem key={r.id} value={r.id} className="focus:bg-slate-800">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: formatColor(r.color) }} />
-                            {r.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400">Log Channel</label>
-                  <Select value={newSetup.log_channel_id} onValueChange={(val) => setNewSetup({ ...newSetup, log_channel_id: val })}>
-                    <SelectTrigger className="w-full h-12 bg-slate-900/50 border-slate-800">
-                      <SelectValue placeholder="Select a channel..." />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-800 max-h-[300px]">
-                      {textChannels.map((c) => (
-                        <SelectItem key={c.id} value={c.id} className="focus:bg-slate-800">#{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <Button onClick={handleAdd} disabled={saving} className="w-full gap-2" variant="secondary">
-                {saving ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Add Vanity Setup
-              </Button>
-            </div>
-
-            {/* Active Setups */}
-            <div className="pt-6 border-t border-slate-800 space-y-4">
-              <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                <Link2 className="h-5 w-5 text-primary" /> Active Setups
-              </h4>
-              {setups.length === 0 ? (
-                <div className="text-center p-8 bg-slate-900/20 rounded-2xl border border-dashed border-slate-700">
-                  <Link2 className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                  <p className="text-sm text-slate-500">No vanity role setups configured yet.</p>
-                </div>
-              ) : (
-                setups.map((setup, index) => {
-                  const role = filteredRoles.find(r => r.id === String(setup.role_id));
-                  const channel = channels.find(c => c.id === String(setup.log_channel_id));
-                  return (
-                    <div key={index} className="flex items-center justify-between p-4 bg-slate-900/40 rounded-xl border border-slate-800">
-                      <div className="flex items-center gap-8">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] uppercase font-bold text-slate-500">Vanity Text</span>
-                          <span className="font-medium text-primary">{setup.vanity}</span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] uppercase font-bold text-slate-500">Role</span>
-                          <span className="font-medium text-slate-200">{role?.name || "Unknown"}</span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] uppercase font-bold text-slate-500">Log Channel</span>
-                          <span className="font-medium text-slate-200">#{channel?.name || "Unknown"}</span>
-                        </div>
-                      </div>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(setup.vanity)} className="text-red-400 hover:text-red-300 hover:bg-red-400/10 h-8 w-8 p-0">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
+        <div className="mt-3">
+          <Button type="button" variant="secondary" onClick={() => void handleAdd()} disabled={saving}>
+            Add setup
+          </Button>
         </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          <div className="bg-gradient-to-br from-primary/10 to-transparent border border-primary/20 rounded-3xl p-6 relative overflow-hidden group">
-            <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:scale-110 transition-transform">
-              <Link2 className="h-32 w-32 text-primary" />
-            </div>
-            <div className="flex items-center gap-2 mb-4">
-              <Info className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-bold text-white">How It Works</h3>
-            </div>
-            <ul className="text-xs text-slate-500 space-y-2">
-              <li>• The bot monitors member custom statuses.</li>
-              <li>• If a member adds the vanity text, the role is auto-assigned.</li>
-              <li>• Removing the text will remove the role.</li>
-              <li>• Logs are sent to the configured channel.</li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      </SettingGroup>
+      <SettingGroup id="vanity-active" label="Active setups" meta={String(setups.length)}>
+        <ul className="mt-2 border-t border-line">
+          {setups.length === 0 ? (
+            <li className="py-3 text-small text-fg-3">No vanity setups.</li>
+          ) : (
+            setups.map((setup, index) => {
+              const role = filteredRoles.find((item) => String(item.id) === String(setup.role_id));
+              const channel = channels.find((item) => String(item.id) === String(setup.log_channel_id));
+              return (
+                <li key={`${setup.vanity}-${index}`} className="grid items-center gap-2 border-b border-line-subtle py-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                  <span className="truncate text-body text-fg-1">{setup.vanity}</span>
+                  <span className="inline-flex min-w-0 items-center gap-2 text-small text-fg-2">
+                    <span className="size-2.5 shrink-0 rounded-full border border-line" style={{ background: roleSwatch(role?.color) ?? "transparent" }} />
+                    <span className="truncate">{role?.name ?? "Unknown role"}</span>
+                  </span>
+                  <span className="truncate text-small text-fg-3">#{channel?.name ?? "Unknown channel"}</span>
+                  <Button type="button" variant="danger-secondary" size="sm" onClick={() => void handleDelete(setup.vanity)}>
+                    Remove
+                  </Button>
+                </li>
+              );
+            })
+          )}
+        </ul>
+      </SettingGroup>
     </div>
   );
 }

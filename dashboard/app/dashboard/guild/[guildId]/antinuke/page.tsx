@@ -15,7 +15,7 @@ export default async function AntiNukePage({ params }: { params: { guildId: stri
     <div className="space-y-6">
       <PageHeader
         title="Antinuke"
-        description="Legacy protections against destructive admin actions; manage whitelist and master toggle."
+        description="Master switch and whitelist. This is the current protection configuration, not a security score."
       />
       <AntiNukeForm initialConfig={config} guildId={params.guildId} />
     </div>

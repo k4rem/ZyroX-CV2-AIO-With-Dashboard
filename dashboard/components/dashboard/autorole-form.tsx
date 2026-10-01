@@ -1,220 +1,126 @@
-/**
- * ╔══════════════════════════════════════════════════════════════════╗
- * ║                                                                  ║
- * ║   ░█▀▀░█▀█░█▀▄░█▀▀░█░█   ░█▀▄░█▀▀░█░█░█▀▀                     ║
- * ║   ░█░░░█░█░█░█░█▀▀░▄▀▄   ░█░█░█▀▀░▀▄▀░▀▀█                     ║
- * ║   ░▀▀▀░▀▀▀░▀▀░░▀▀▀░▀░▀   ░▀▀░░▀▀▀░░▀░░▀▀▀                     ║
- * ║                                                                  ║
- * ║           © 2026 CodeX Devs — All Rights Reserved               ║
- * ║                                                                  ║
- * ║   discord  ──  https://discord.gg/codexdev                      ║
- * ║   youtube  ──  https://youtube.com/@CodeXDevs                   ║
- * ║   github   ──  https://github.com/RayExo                        ║
- * ║                                                                  ║
- * ╚══════════════════════════════════════════════════════════════════╝
- */
-
 "use client";
 
-import React, { useState } from "react";
-import { UserPlus, Save, RefreshCcw, User, Bot, Trash2, ShieldCheck, Info } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { SaveBar } from "@/components/settings/save-bar";
+import { SettingGroup } from "@/components/settings/setting-group";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AutoRoleConfig, DiscordRole } from "@/types/api";
-import { cn } from "@/lib/utils";
+import { Combobox } from "@/components/ui/combobox";
+import { api } from "@/lib/api";
+import { draftsDiffer, roleSwatch } from "@/lib/modulePayloads";
+import type { AutoRoleConfig, DiscordRole } from "@/types/api";
 
-interface AutoRoleFormProps {
+const LIMIT = 10;
+
+export function AutoRoleForm({
+  initialConfig,
+  roles,
+  guildId,
+}: {
   initialConfig: AutoRoleConfig;
   roles: DiscordRole[];
   guildId: string;
-}
-
-export function AutoRoleForm({ initialConfig, roles, guildId }: AutoRoleFormProps) {
-  const [config, setConfig] = useState<AutoRoleConfig>(initialConfig);
+}) {
+  const [saved, setSaved] = useState({ humans: initialConfig.humans, bots: initialConfig.bots });
+  const [draft, setDraft] = useState({ humans: initialConfig.humans, bots: initialConfig.bots });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dirty = draftsDiffer(saved, draft);
 
-  const handleSave = async () => {
+  const assignable = useMemo(
+    () =>
+      roles
+        .filter((role) => role.name !== "@everyone" && !role.managed)
+        .sort((a, b) => (b.position ?? 0) - (a.position ?? 0)),
+    [roles],
+  );
+
+  const addRole = (type: "humans" | "bots", roleId: string | null) => {
+    if (!roleId || draft[type].includes(roleId)) return;
+    if (draft[type].length >= LIMIT) {
+      toast.error(`Up to ${LIMIT} roles for ${type === "humans" ? "members" : "bots"}.`);
+      return;
+    }
+    setDraft({ ...draft, [type]: [...draft[type], roleId] });
+  };
+
+  const save = async () => {
     setSaving(true);
-    // Be explicit about fields to send to match AutoRoleUpdate schema
-    const data = {
-      bots: config.bots,
-      humans: config.humans
-    };
-    const promise = api.updateAutoRole(guildId, data);
-
-    toast.promise(promise, {
-      loading: 'Saving AutoRole configuration...',
-      success: 'Settings saved successfully!',
-      error: 'Failed to update AutoRole config',
-    });
-
+    setError(null);
     try {
-      await promise;
-    } catch (err: any) {
-      console.error(err);
+      await api.updateAutoRole(guildId, { humans: draft.humans, bots: draft.bots });
+      setSaved(draft);
+      toast.success("Auto roles saved");
+    } catch {
+      setError("Could not save auto roles.");
+      toast.error("Could not save auto roles");
     } finally {
       setSaving(false);
     }
   };
 
-  const addRole = (type: "humans" | "bots", roleId: string) => {
-    if (config[type].includes(roleId)) return;
-    if (config[type].length >= 10) {
-      toast.error(`You can only add up to 10 roles for ${type === "humans" ? "Members" : "Bots"}.`);
-      return;
-    }
-    setConfig({ ...config, [type]: [...config[type], roleId] });
-  };
-
-  const removeRole = (type: "humans" | "bots", roleId: string) => {
-    setConfig({ ...config, [type]: config[type].filter(r => r !== roleId) });
-  };
-
-  const formatColor = (decimal: number) => {
-    if (!decimal || decimal === 0) return "#94a3b8";
-    return `#${decimal.toString(16).padStart(6, '0')}`;
-  };
-
-  const renderRoleList = (type: "humans" | "bots") => {
-    const title = type === "humans" ? "Member Roles" : "Bot Roles";
-    const Icon = type === "humans" ? User : Bot;
-    const accentColor = type === "humans" ? "text-primary" : "text-blue-400";
-    const bgColor = type === "humans" ? "bg-primary/10" : "bg-blue-400/10";
-
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <div className={cn("p-2.5 rounded-xl", bgColor, accentColor)}>
-            <Icon className="h-5 w-5" />
-          </div>
-          <div>
-            <h4 className="font-bold text-white text-base">{title}</h4>
-            <p className="text-xs text-slate-400">Roles given to newly joined {type}.</p>
-          </div>
-        </div>
-        
-        <Select value="" onValueChange={(val) => addRole(type, val)}>
-          <SelectTrigger className="w-full h-12 bg-slate-900/50 border-slate-800 hover:border-slate-700 transition-all">
-            <SelectValue placeholder={`Add a ${type === "humans" ? "member" : "bot"} role...`} />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-800 max-h-[300px]">
-            {roles
-              .filter(r => !config[type].includes(r.id))
-              .sort((a, b) => (b.position || 0) - (a.position || 0))
-              .map((r) => (
-                <SelectItem key={r.id} value={r.id} className="focus:bg-slate-800 group">
-                  <div className="flex items-center gap-2">
-                    <div 
-                      className="w-2 h-2 rounded-full" 
-                      style={{ backgroundColor: formatColor(r.color) }}
-                    />
-                    <span>{r.name}</span>
-                  </div>
-                </SelectItem>
-              ))}
-          </SelectContent>
-        </Select>
-
-        <div className="grid grid-cols-1 gap-2 min-h-[100px] p-4 bg-slate-900/40 rounded-2xl border border-slate-800/50 relative overflow-hidden">
-          {config[type].length === 0 ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20">
-              <ShieldCheck className="h-8 w-8 mb-2" />
-              <span className="text-xs font-medium">No roles selected</span>
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-2 relative z-10">
-              {config[type].map((roleId) => {
-                const role = roles.find(r => r.id === roleId);
-                const color = role ? formatColor(role.color) : "#94a3b8";
-                return (
-                  <div 
-                    key={roleId} 
-                    className="flex items-center gap-2 bg-slate-800/80 border border-slate-700/50 px-3 py-1.5 rounded-lg text-sm group"
-                  >
-                    <div 
-                      className="w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" 
-                      style={{ backgroundColor: color }}
-                    />
-                    <span className="text-slate-200 font-medium">{role ? role.name : `Unknown (${roleId})`}</span>
-                    <button 
-                      onClick={() => removeRole(type, roleId)}
-                      className="ml-1 text-slate-500 hover:text-red-400 transition-colors p-0.5 rounded-md hover:bg-red-400/10"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+  const renderList = (type: "humans" | "bots", label: string, description: string) => (
+    <SettingGroup id={`autorole-${type}`} label={label} meta={`${draft[type].length} of ${LIMIT}`}>
+      <p className="mt-1 text-small text-fg-3">{description}</p>
+      <ul className="mt-2 border-t border-line">
+        {draft[type].length === 0 ? (
+          <li className="py-3 text-small text-fg-3">None assigned.</li>
+        ) : (
+          draft[type].map((roleId) => {
+            const role = roles.find((item) => item.id === roleId);
+            return (
+              <li key={roleId} className="flex items-center justify-between gap-3 border-b border-line-subtle py-2">
+                <span className="inline-flex min-w-0 items-center gap-2 text-body text-fg-1">
+                  <span
+                    className="size-2.5 shrink-0 rounded-full border border-line"
+                    style={{ background: roleSwatch(role?.color) ?? "transparent" }}
+                  />
+                  <span className="truncate">{role?.name ?? roleId}</span>
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDraft({ ...draft, [type]: draft[type].filter((id) => id !== roleId) })}
+                >
+                  Remove
+                </Button>
+              </li>
+            );
+          })
+        )}
+      </ul>
+      <div className="mt-3 max-w-sm">
+        <Combobox
+          value={null}
+          onValueChange={(value) => addRole(type, value)}
+          options={assignable
+            .filter((role) => !draft[type].includes(role.id))
+            .map((role) => ({ value: role.id, label: role.name, swatch: roleSwatch(role.color) }))}
+          placeholder={type === "humans" ? "Add a member role" : "Add a bot role"}
+          searchLabel="Search roles"
+        />
       </div>
-    );
-  };
+    </SettingGroup>
+  );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-      <div className="lg:col-span-3 space-y-6">
-        <div className="bg-[#141B2D] border border-slate-800 rounded-[32px] shadow-2xl p-8 space-y-10 relative">
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-            {renderRoleList("humans")}
-            {renderRoleList("bots")}
-          </div>
-
-          <div className="pt-6 border-t border-slate-800">
-            <Button 
-              onClick={handleSave}
-              disabled={saving}
-              className="w-full h-14 text-base font-bold gap-3 shadow-lg shadow-primary/20 hover:shadow-primary/30 active:scale-[0.98] transition-all"
-            >
-              {saving ? <RefreshCcw className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-              Save AutoRole Settings
-            </Button>
-          </div>
-
-        </div>
-      </div>
-
-      <div className="space-y-6">
-        <div className="bg-gradient-to-br from-[#141B2D] to-slate-900 border border-slate-800 rounded-3xl p-6 relative overflow-hidden group">
-          <div className="absolute -right-6 -top-6 opacity-[0.05] group-hover:scale-110 transition-transform duration-500">
-            <UserPlus className="h-40 w-40 text-primary" />
-          </div>
-          
-          <div className="flex items-center gap-2 mb-4">
-            <Info className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-bold text-white">Guidelines</h3>
-          </div>
-          
-          <p className="text-xs text-slate-400 leading-relaxed mb-6">
-            AutoRole ensures every new member is welcomed with the right sets of roles immediately upon joining.
-          </p>
-          
-          <div className="space-y-4">
-            <div className="flex gap-3">
-              <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                <span className="text-slate-200 font-bold">Role hierarchy:</span> The bot&apos;s highest role must be above any role assigned here.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                <span className="text-slate-200 font-bold">Bot Detection:</span> We automatically separate bots from human members for precise role assignment.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                <span className="text-slate-200 font-bold">Limits:</span> We has limits on roles. We support up to 10 roles per category for stability.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div>
+      <p className="mb-4 max-w-2xl text-small text-fg-3">
+        The bot role must sit above these roles in Discord. Members and bots are assigned separately, up to {LIMIT} each.
+      </p>
+      {renderList("humans", "Members", "Roles given when a person joins.")}
+      {renderList("bots", "Bots", "Roles given when a bot joins.")}
+      <SaveBar
+        dirty={dirty}
+        saving={saving}
+        error={error}
+        onSave={() => void save()}
+        onDiscard={() => {
+          setDraft(saved);
+          setError(null);
+        }}
+      />
     </div>
   );
 }
