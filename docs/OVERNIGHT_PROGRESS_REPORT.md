@@ -22,7 +22,7 @@ Authenticated layout check on the local preview guild at 1440 and, after the wid
 
 ### Task C
 
-Code is in the working tree and is ready to commit. Not closed.
+Local commit `54d489e` — `migrate remaining surfaced modules onto the graphite instrument`. Not pushed. Not closed.
 
 Surfaced pages that still used the navy panel were moved onto the same graphite setting rows:
 
@@ -87,7 +87,7 @@ Not retained. Task B was measured in an authenticated browser. Task C was not, b
 ## 11. Commits
 
 - `3f99a7f` implement CLS OS premium module workspaces
-- Task C commit follows this report update, if the commit succeeds.
+- `54d489e` migrate remaining surfaced modules onto the graphite instrument
 
 ## 12. Processes
 
