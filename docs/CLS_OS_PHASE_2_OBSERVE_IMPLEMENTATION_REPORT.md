@@ -15,7 +15,7 @@ Foundation migration creates the security tables through response and quarantine
 
 Attribution requires both the architecture §7.4 and §8.2 windows, so the implemented match is their intersection.
 
-The architecture sequence `cls.impairment` is stored as `sequence.platform_impairment`. The local test database password is the token `cls`, and the backup test rejects that token anywhere in `pg_dump` output. The rule behavior is unchanged: a platform-impairment action followed by a destructive action inside the window.
+The sequence rule name is the architecture name `sequence.cls_impairment`. The backup test looks for DSN and `PGPASSWORD` leakage instead of rejecting the substring `cls`.
 
 ## Tests actually run
 
@@ -26,10 +26,25 @@ Disposable database `postgresql+asyncpg://postgres:cls@127.0.0.1:5433/cls_discor
 - After 2A.3: full `bot/tests` — 117 passed, 12 subtests.
 - 2A.4 focused: `tests/test_security_policy.py` and `tests/test_security_attribution.py` — 25 passed.
 - Final full `bot/tests` after 2A.4: 127 passed, 12 subtests passed.
+- Full `bot/tests` after 2A.4.1: 139 passed, 12 subtests passed.
 
 ## Manual Discord verification still pending
 
-`docs/PHASE_2A_DISCORD_VERIFICATION.md` marks V-1 through V-8 as **IMPLEMENTED — MANUAL TEST-GUILD VERIFICATION PENDING**. No real channel, role, or member was deleted to satisfy those checks. Mocked audit objects do not count as passing V-1–V-8.
+`docs/PHASE_2A_DISCORD_VERIFICATION.md` separates code readiness, mock coverage, and live Discord. V-1 through V-8 are still live-pending. No real channel, role, or member was deleted.
+
+## 2A.4.1 stabilization
+
+An independent audit required fixes before any test-guild run. This pass addresses them in the OBSERVE pipeline only.
+
+- Ops delivery is a periodic scheduler job. Due rows are claimed with `FOR UPDATE SKIP LOCKED`, the transaction commits, and only then does Discord I/O happen. A missing Ops channel stays `DEGRADED` and retries. Coalescing appends events instead of dropping them. `allowed_mentions` is `none` on the real sender, which resolves only `OPS_SECURITY_ALERT_CHANNEL_ID` inside `OPS_GUILD_ID`.
+- Incident sweep and retention purge use the same recurring scheduler. Restart finds the pending job.
+- A completed or failed scheduler dedupe key no longer blocks the next temporary-role removal.
+- Role changes are classified from the permission diff. Renames are ignored. View Audit Log stays observability.
+- Pushed targetless audit entries keep the actor Discord supplied. `PROBABLE` stays the fallback path. Pending signals expire on their own age. Fallback `after` is the earliest pending signal minus skew, not a newer watermark.
+- Unknown guild owner suppresses containment eligibility. Trust scopes are action classes. `[]` is rejected. `*` is the only wildcard.
+- Bot-add incidents use the bot as the subject. `SELF` matches only a real mutation ledger row. `WOULD_CONTAIN` does not.
+- The allowlist sweep runs once per process and refuses to leave guilds when the allowlist cannot be parsed.
+- Live Discord checks V-1 through V-8 remain pending. See `docs/PHASE_2A_DISCORD_VERIFICATION.md`.
 
 ## Safe deferrals
 
@@ -38,9 +53,8 @@ Disposable database `postgresql+asyncpg://postgres:cls@127.0.0.1:5433/cls_discor
 - 2A.7 bot kick / managed-role strip / inviter punishment.
 - 2A.8 dashboard and public security API.
 - 2A.9 ENFORCE rollout, Phase 2B, Phase 2S.
-- Repeating scheduler rows for alert delivery, incident sweep, and retention are registered as handlers and are not auto-enqueued on a timer in this pass. Tests call the functions directly.
-- The Ops sender is injected. `configure_alert_sender` is not attached to a live Discord channel in this pass, so an unconfigured destination stays undeliverable. There is no product-guild fallback.
-- Live owner suppression uses the guild owner id observed by the security cog. A decision made before any event has seen that guild does not yet know the owner.
+- Watermark catch-up does not reclassify role or member-role audit entries. Those wait for the live push, which has the permission diff.
+- Whether the first `on_ready` in a process is a Discord new session or a RESUME is unverified (V-7).
 
 ## Risks
 

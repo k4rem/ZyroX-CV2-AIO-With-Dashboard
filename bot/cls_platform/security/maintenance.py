@@ -78,10 +78,82 @@ async def start_window(
         ).scalar_one()
 
 
-async def active_window(guild_id: int, now: datetime | None = None) -> SecurityMaintenanceWindow | None:
+async def end_window(
+    *,
+    guild_id: int,
+    actor_user_id: int,
+    reason: str,
+    now: datetime | None = None,
+) -> None:
+    if not is_root_user(actor_user_id):
+        raise MaintenanceRejected("security.maintenance.manage is Root only")
+    if not reason.strip():
+        raise MaintenanceRejected("a reason is required")
     moment = _now(now)
     async with session_scope() as session:
-        return await _active(session, guild_id, moment)
+        row = await _active(session, guild_id, moment)
+        if row is None:
+            raise MaintenanceRejected("no active maintenance window")
+        row.ended_at = moment
+        row.end_reason = "manual"
+        window_id = row.id
+    await record_audit(
+        action="security.maintenance.end",
+        actor_user_id=actor_user_id,
+        guild_id=guild_id,
+        target=str(window_id),
+        after_state={"reason": reason.strip(), "end": "manual"},
+    )
+    await enqueue_alert(
+        guild_id=guild_id,
+        incident_id=None,
+        kind="maintenance",
+        payload={"maintenance_window": False, "reason": reason.strip(), "end": "manual"},
+        now=moment,
+        coalesce=False,
+    )
+
+
+async def active_window(guild_id: int, now: datetime | None = None) -> SecurityMaintenanceWindow | None:
+    moment = _now(now)
+    expired: tuple | None = None
+    found: SecurityMaintenanceWindow | None = None
+    async with session_scope() as session:
+        row = (
+            await session.execute(
+                select(SecurityMaintenanceWindow).where(
+                    SecurityMaintenanceWindow.guild_id == guild_id,
+                    SecurityMaintenanceWindow.ended_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        if row.expires_at <= moment:
+            row.ended_at = row.expires_at
+            row.end_reason = "expired"
+            expired = (row.id, row.started_by, row.reason)
+        else:
+            found = row
+    if expired is not None:
+        window_id, actor_id, reason = expired
+        await record_audit(
+            action="security.maintenance.expire",
+            actor_user_id=int(actor_id),
+            guild_id=guild_id,
+            target=str(window_id),
+            after_state={"reason": reason, "end": "expired"},
+        )
+        await enqueue_alert(
+            guild_id=guild_id,
+            incident_id=None,
+            kind="maintenance",
+            payload={"maintenance_window": False, "end": "expired", "reason": reason},
+            now=moment,
+            coalesce=False,
+        )
+        return None
+    return found
 
 
 async def _active(session, guild_id: int, moment: datetime) -> SecurityMaintenanceWindow | None:

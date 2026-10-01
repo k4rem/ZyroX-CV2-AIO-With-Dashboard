@@ -26,6 +26,9 @@ class AuditCandidate:
     entry_created_at: datetime
     change_digest: str = ""
     permission_diff: dict | None = None
+    permission_tier: str | None = None
+    actor_is_bot: bool = False
+    reason_token: str | None = None
 
 
 def snowflake_from_time(moment: datetime) -> int:

@@ -1,6 +1,6 @@
 # CLS OS — Phase 2 Implementation Plan
 
-**Status:** 2A.1–2A.4 implemented in OBSERVE. Steps 2A.5–2A.9, Phase 2B, and Phase 2S are not started. ENFORCE is not operational. Legacy antinuke remains loaded.
+**Status:** 2A.1–2A.4 and the 2A.4.1 OBSERVE stabilization are implemented locally. Steps 2A.5–2A.9, Phase 2B, and Phase 2S are not started. ENFORCE is not operational. Legacy antinuke remains loaded. Live Discord verification has not been run.
 **Architecture:** `docs/CLS_OS_PHASE_2_ARCHITECTURE.md`\
 **Decisions:** `docs/PHASE_2_OWNER_DECISIONS.md`\
 **Spec:** `docs/CLS_DISCORD_V2_SPEC.md` v1.1, §59

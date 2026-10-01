@@ -239,8 +239,12 @@ async def test_live_path_records_would_contain_without_mutation(db_reset, monkey
     import cls_platform.security.feed as feed_mod
 
     monkeypatch.setattr(feed_mod, "security_guild_eligible", lambda guild_id: int(guild_id) == GUILD)
+    from cls_platform.security.owners import remember_guild_owner
+
+    await remember_guild_owner(GUILD, 800000000000000099)
     clock = Clock()
     feed = ObservationFeed(clock=clock, sleep=clock.sleep, monotonic=clock.monotonic)
+    feed.guild_owners[GUILD] = 800000000000000099
     for index, target in enumerate((700000000000000001, 700000000000000002, 700000000000000003), start=1):
         clock.now += timedelta(seconds=1)
         await feed.ingest_audit(

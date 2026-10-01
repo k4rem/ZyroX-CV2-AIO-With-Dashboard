@@ -24,6 +24,7 @@ class Subject:
     is_bot: bool = False
     is_guild_owner: bool = False
     is_root: bool = False
+    owner_known: bool = True
 
 
 @dataclass(frozen=True)
@@ -83,8 +84,6 @@ def evaluate(
 ) -> list[Decision]:
     """Return explainable decisions. Late evidence never produces would_contain."""
     mode = effective_mode(configured_mode, maintenance_active=maintenance_active)
-    if mode == SecurityMode.OFF.value:
-        return []
     policies = {row["action_class"]: row for row in DEFAULT_POLICIES}
     if config:
         policies.update(config)
@@ -170,16 +169,57 @@ def _finish(
     )
 
 
+def rule_action_classes(rule_id: str) -> frozenset[str]:
+    if rule_id == "member.ban_or_kick":
+        return frozenset({"member.ban", "member.kick"})
+    if rule_id == "aggregate.destructive":
+        return DESTRUCTIVE_CLASSES
+    if rule_id == "sequence.self_escalation":
+        return frozenset({"role.permission_escalation", "member.privileged_role_grant"}) | DESTRUCTIVE_CLASSES
+    if rule_id == "sequence.cls_impairment":
+        return frozenset({"cls.impairment"}) | DESTRUCTIVE_CLASSES
+    if rule_id in {
+        "single.everyone_critical_control",
+        "single.critical_control_grant",
+        "tier.elevated",
+        "tier.observability",
+    }:
+        return frozenset({"role.permission_escalation", "member.privileged_role_grant"})
+    if rule_id == "bot.add":
+        return frozenset({"bot.add"})
+    if rule_id == "bot.privilege_change":
+        return frozenset({"bot.privilege_change"})
+    if rule_id == "member.prune":
+        return frozenset({"member.prune"})
+    return frozenset({rule_id})
+
+
+def trust_covers(scopes: tuple[str, ...] | list[str], rule_id: str) -> bool:
+    """Scopes are action classes. Empty is not a wildcard. '*' is the only wildcard."""
+    if "*" in scopes:
+        return True
+    if not scopes:
+        return False
+    return rule_action_classes(rule_id).issubset(set(scopes))
+
+
 def _suppression(subject: Subject, trust_snapshot: TrustSnapshot, rule_id: str) -> str | None:
     if subject.is_root:
         return "root"
     if subject.is_guild_owner:
         return "guild_owner"
-    if not trust_snapshot.trusted:
-        return None
-    if not trust_snapshot.scopes or rule_id in trust_snapshot.scopes:
+    if not subject.owner_known:
+        return "owner_unknown"
+    if trust_snapshot.trusted and trust_covers(trust_snapshot.scopes, rule_id):
         return "trusted"
     return None
+
+
+def _policy_active(policies: dict, rule_id: str) -> dict | None:
+    policy = policies.get(rule_id)
+    if not policy or not policy.get("enabled", True):
+        return None
+    return policy
 
 
 def _rate_rules(subject, observations, policies, trust_snapshot, now, mode) -> list[Decision]:
@@ -192,7 +232,9 @@ def _rate_rules(subject, observations, policies, trust_snapshot, now, mode) -> l
         ("aggregate.destructive", "H"),
     ]
     for rule_id, severity in specs:
-        policy = policies[rule_id]
+        policy = _policy_active(policies, rule_id)
+        if policy is None:
+            continue
         pool = observations
         if rule_id == "member.ban_or_kick":
             pool = [item for item in observations if item.action_class in {"member.ban", "member.kick"}]
@@ -249,7 +291,7 @@ def _single_rules(subject, observations, policies, trust_snapshot, mode) -> list
         for item in observations
         if item.everyone_grant and item.permission_tier == "CRITICAL_CONTROL" and _eligible(item, subject)
     ]
-    if everyone:
+    if everyone and _policy_active(policies, "single.everyone_critical_control"):
         policy = policies["single.everyone_critical_control"]
         found.append(
             _finish(
@@ -286,7 +328,14 @@ def _single_rules(subject, observations, policies, trust_snapshot, mode) -> list
                 late_present=False,
             )
         )
-    prunes = [item for item in observations if item.action_class == "member.prune" and item.attribution_state == "CONFIRMED" and not item.late]
+    prunes = [
+        item
+        for item in observations
+        if item.action_class == "member.prune"
+        and item.actor_id is not None
+        and item.attribution_state in {"CONFIRMED", "PROBABLE"}
+        and not item.late
+    ]
     if prunes:
         found.append(
             _finish(
@@ -309,6 +358,25 @@ def _single_rules(subject, observations, policies, trust_snapshot, mode) -> list
                 explanation="ELEVATED permission changes are alert-only and never containment-eligible.",
                 matched_observation_ids=[item.id for item in elevated],
                 severity="M",
+                containment_eligible=False,
+                effective_mode=mode,
+                would_contain=False,
+                late_excluded=False,
+                replayable=False,
+            )
+        )
+    impaired = [
+        item
+        for item in observations
+        if item.action_class == "cls.impairment" and item.actor_id is not None and not item.late
+    ]
+    if impaired:
+        found.append(
+            Decision(
+                rule_id="cls.impairment",
+                explanation="CLS permissions or position were reduced. Critical alert only until a later destructive action.",
+                matched_observation_ids=[item.id for item in impaired[:1]],
+                severity="C",
                 containment_eligible=False,
                 effective_mode=mode,
                 would_contain=False,
@@ -367,13 +435,14 @@ def _sequence_rules(subject, observations, policies, trust_snapshot, now, mode) 
             )
             break
     impair = [item for item in observations if item.action_class == "cls.impairment" and _eligible(item, subject)]
-    impair_window = int(policies["sequence.platform_impairment"]["window_s"])
+    impair_policy = _policy_active(policies, "sequence.cls_impairment")
+    impair_window = int(impair_policy["window_s"]) if impair_policy else 0
     for item in impair:
         follow = [hit for hit in destructive if item.at <= hit.at <= item.at + timedelta(seconds=impair_window)]
-        if follow:
+        if follow and impair_policy:
             found.append(
                 _finish(
-                    rule_id="sequence.platform_impairment",
+                    rule_id="sequence.cls_impairment",
                     explanation="CLS was impaired and the same actor then took a destructive action.",
                     matched=[item, *follow[:1]],
                     severity="C",
@@ -400,6 +469,22 @@ def _bot_rules(subject, observations, trust_snapshot, mode) -> list[Decision]:
                 rule_id="bot.add",
                 explanation="An untrusted bot was added. Record and alert only; the inviter is not punished.",
                 matched_observation_ids=[item.id for item in adds],
+                severity=severity,
+                containment_eligible=False,
+                effective_mode=mode,
+                would_contain=False,
+                late_excluded=False,
+                replayable=False,
+            )
+        )
+    changes = [item for item in observations if item.action_class == "bot.privilege_change" and not item.late]
+    if changes:
+        severity = "C" if any(item.permission_tier == "CRITICAL_CONTROL" for item in changes) else "H"
+        decisions.append(
+            Decision(
+                rule_id="bot.privilege_change",
+                explanation="A bot gained tiered permissions. Record and alert only.",
+                matched_observation_ids=[item.id for item in changes[:1]],
                 severity=severity,
                 containment_eligible=False,
                 effective_mode=mode,

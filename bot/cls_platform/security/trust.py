@@ -47,7 +47,9 @@ async def grant_trust(
         raise TrustRejected("kind must be human or bot", status_code=422)
     subject = _parse_subject(subject_id)
     guild = _parse_subject(guild_id)
-    unknown = [scope for scope in scopes if scope not in ACTION_SPECS]
+    if not scopes:
+        raise TrustRejected("trust scopes cannot be empty; use * for an explicit wildcard", status_code=422)
+    unknown = [scope for scope in scopes if scope != "*" and scope not in ACTION_SPECS]
     if unknown:
         raise TrustRejected(f"Unknown trust scope: {unknown[0]}", status_code=422)
     async with session_scope() as session:

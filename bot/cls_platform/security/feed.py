@@ -18,7 +18,6 @@ from cls_platform.security.attribution import (
     AuditCandidate,
     AttributionState,
     classify_targetless_candidates,
-    confirmed_prerequisites,
     correlation_key,
     counts_for_containment,
     is_late,
@@ -114,6 +113,8 @@ class TokenBucket:
                 return
             wait = (1 - self.tokens) / self.rate
             self.waits.append(wait)
+            if len(self.waits) > 32:
+                del self.waits[:-32]
             await sleep(wait)
 
 
@@ -297,11 +298,9 @@ class ObservationFeed:
             source=source,
         )
         state, actor_id, reason, candidates = await self._classify(guild_id, candidate, source)
-        if state is AttributionState.CONFIRMED and not confirmed_prerequisites(candidate):
-            state = AttributionState.UNATTRIBUTED
-            actor_id = None
-            reason = "missing actor or comparable target"
-        eligible = counts_for_containment(state=state, late=late)
+        eligible = counts_for_containment(state=state, late=late) and targets_comparable(
+            candidate.action_class
+        )
         audit_id = None if state in {AttributionState.AMBIGUOUS, AttributionState.UNATTRIBUTED} else candidate.audit_entry_id
         if state is AttributionState.PROBABLE:
             audit_id = candidate.audit_entry_id
@@ -339,25 +338,39 @@ class ObservationFeed:
             if matched:
                 return AttributionState.SELF, actor, "response ledger match", ids
             return AttributionState.CLS_PROXIED, actor, "cls actor without security ledger match", ids
-        if not confirmed_prerequisites(candidate):
-            return AttributionState.UNATTRIBUTED, None, "audit entry missing actor or target", ids
+        if actor is None:
+            return AttributionState.UNATTRIBUTED, None, "audit entry has no user", ids
         if targets_comparable(candidate.action_class):
+            if candidate.target_id is None:
+                return AttributionState.UNATTRIBUTED, None, "missing comparable target", ids
             return AttributionState.CONFIRMED, actor, source, ids
-        return AttributionState.PROBABLE, actor, "no comparable target", ids
+        if source == "audit_fetch":
+            return AttributionState.PROBABLE, actor, "fallback targetless candidate", ids
+        return AttributionState.CONFIRMED, actor, "authoritative audit push without comparable target", ids
 
     async def _ledger_match(self, guild_id: int, candidate: AuditCandidate) -> bool:
+        """SELF requires a real mutation row. WOULD_CONTAIN is evidence and never matches."""
+        token = (candidate.reason_token or "").strip()
+        if not token.startswith("CLS-SEC ") or candidate.target_id is None:
+            return False
+        window_start = candidate.entry_created_at - timedelta(seconds=120)
+        window_end = candidate.entry_created_at + timedelta(seconds=120)
         async with session_scope() as session:
-            rows = (
+            row = (
                 await session.execute(
-                    select(SecurityResponseAction).where(SecurityResponseAction.guild_id == guild_id)
+                    select(SecurityResponseAction.id).where(
+                        SecurityResponseAction.guild_id == guild_id,
+                        SecurityResponseAction.discord_mutation.is_(True),
+                        SecurityResponseAction.outcome != "WOULD_CONTAIN",
+                        SecurityResponseAction.reason_token == token,
+                        SecurityResponseAction.ledger_action_class == candidate.action_class,
+                        SecurityResponseAction.subject_id == candidate.target_id,
+                        SecurityResponseAction.created_at >= window_start,
+                        SecurityResponseAction.created_at <= window_end,
+                    )
                 )
-            ).scalars().all()
-        for row in rows:
-            if candidate.target_id is not None and row.subject_id == candidate.target_id:
-                return True
-            if row.subject_id == candidate.actor_id:
-                return True
-        return False
+            ).first()
+        return row is not None
 
     async def _insert_observation(self, **kwargs) -> Optional[uuid.UUID]:
         candidate: AuditCandidate = kwargs["candidate"]
@@ -381,6 +394,8 @@ class ObservationFeed:
             attribution_reason=kwargs["reason"],
             candidate_actor_ids=kwargs["candidate_ids"] or None,
             permission_diff=_redact(candidate.permission_diff) if candidate.permission_diff else None,
+            permission_tier=candidate.permission_tier,
+            actor_is_bot=bool(candidate.actor_is_bot),
             counts_for_containment=kwargs["counts"],
         )
         async with session_scope() as session:
@@ -484,6 +499,37 @@ class ObservationFeed:
             if audit_entry_id > current:
                 state.last_audit_entry_id = audit_entry_id
 
+    def cancel_tasks(self) -> None:
+        for task in list(self._tasks.values()):
+            if not task.done():
+                task.cancel()
+        self._tasks.clear()
+
+    async def resume_pending_after_restart(self) -> int:
+        """Resume PENDING signals. Older than T_attr expire. Does not reconcile."""
+        scheduled = 0
+        async with session_scope() as session:
+            rows = (
+                await session.execute(
+                    select(SecurityGatewaySignal).where(SecurityGatewaySignal.state == "PENDING")
+                )
+            ).scalars().all()
+            keys = {(int(row.guild_id), row.discord_action, row.first_seen_at) for row in rows}
+        now = self.clock()
+        seen: set[tuple[int, str]] = set()
+        for guild_id, discord_action, first_seen in keys:
+            if discord_action is None:
+                continue
+            if (now - first_seen).total_seconds() >= PROPOSED_T_ATTR_S:
+                await self.expire_pending(guild_id, discord_action, respect_age=True)
+                continue
+            if (guild_id, discord_action) in seen:
+                continue
+            seen.add((guild_id, discord_action))
+            self.schedule_fallback(guild_id, discord_action)
+            scheduled += 1
+        return scheduled
+
     def schedule_fallback(self, guild_id: int, discord_action: str) -> None:
         key = (guild_id, discord_action)
         task = self._tasks.get(key)
@@ -521,7 +567,7 @@ class ObservationFeed:
                 if entry.discord_action != discord_action and entry.action_class:
                     pass
                 await self.ingest_audit(entry, guild_id=guild_id, source="audit_fetch", received_at=self.clock())
-        await self.expire_pending(guild_id, discord_action)
+        await self.expire_pending(guild_id, discord_action, respect_age=True)
 
     async def _signal_is_pending(self, signal_id: uuid.UUID) -> bool:
         async with session_scope() as session:
@@ -563,10 +609,9 @@ class ObservationFeed:
                     .order_by(SecurityGatewaySignal.first_seen_at.asc())
                 )
             ).scalars().first()
-        skewed = 0
         if earliest is not None:
-            skewed = snowflake_from_time(earliest - timedelta(seconds=PROPOSED_SKEW_S))
-        return max(watermark, skewed)
+            return snowflake_from_time(earliest - timedelta(seconds=PROPOSED_SKEW_S))
+        return watermark
 
     async def _forbid(self, guild_id: int, discord_action: str) -> None:
         await self.expire_pending(guild_id, discord_action, reason="audit log forbidden")
@@ -604,7 +649,14 @@ class ObservationFeed:
         except Exception:
             logger.exception("security incident attach failed observation=%s", observation_id)
 
-    async def expire_pending(self, guild_id: int, discord_action: str, reason: str = "no audit entry by T_attr") -> None:
+    async def expire_pending(
+        self,
+        guild_id: int,
+        discord_action: str,
+        reason: str = "no audit entry by T_attr",
+        *,
+        respect_age: bool = False,
+    ) -> None:
         created_ids: list[uuid.UUID] = []
         async with guild_lock(guild_id):
             async with session_scope() as session:
@@ -618,6 +670,8 @@ class ObservationFeed:
                     )
                 ).scalars().all()
                 for row in rows:
+                    if respect_age and (self.clock() - row.first_seen_at).total_seconds() < PROPOSED_T_ATTR_S:
+                        continue
                     row.state = "EXPIRED_UNATTRIBUTED"
                     obs = SecurityObservation(
                         guild_id=guild_id,
@@ -689,6 +743,27 @@ class ObservationFeed:
         async with session_scope() as session:
             session.add(obs)
         return state
+
+    async def reconcile_watermark(self, guild_id: int) -> int:
+        """Bounded new-session catch-up from the persisted watermark. Entries are late."""
+        fetch_recent = getattr(self.source, "fetch_recent", None)
+        if fetch_recent is None or not security_guild_eligible(guild_id):
+            return 0
+        async with session_scope() as session:
+            watermark = (
+                await session.execute(
+                    select(SecurityGuildState.last_audit_entry_id).where(
+                        SecurityGuildState.guild_id == guild_id
+                    )
+                )
+            ).scalar_one_or_none()
+        page = await fetch_recent(guild_id, after_id=int(watermark or 0), limit=FETCH_LIMIT)
+        written = 0
+        for entry in getattr(page, "entries", []) or []:
+            obs = await self.ingest_audit(entry, guild_id=guild_id, source="reconciliation")
+            if obs is not None:
+                written += 1
+        return written
 
     async def reconcile_new_session(self, *, resumed: bool, entries: list[tuple[int, AuditCandidate]]) -> int:
         if resumed:

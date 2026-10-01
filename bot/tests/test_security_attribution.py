@@ -277,6 +277,11 @@ async def test_fallback_fetch_is_coalesced(db_reset, monkeypatch):
     assert len(source.calls) == 3
     assert len({call[1] for call in source.calls}) == 1
     assert all(call[3] <= 25 for call in source.calls)
+    assert all(row.state == "PENDING" for row in await _signals())
+    from cls_platform.security.constants import PROPOSED_T_ATTR_S
+
+    clock.now += timedelta(seconds=PROPOSED_T_ATTR_S)
+    await feed.expire_pending(TEST_GUILD_A, "channel_delete", respect_age=True)
     assert all(row.state == "EXPIRED_UNATTRIBUTED" for row in await _signals())
     assert all(row.attribution_state == "UNATTRIBUTED" and row.actor_id is None for row in await _obs())
 
@@ -401,10 +406,15 @@ async def test_forbidden_and_rate_limit(db_reset, monkeypatch):
     factory = get_session_factory()
     async with factory() as session:
         alerts = (await session.execute(select(SecurityAlertOutbox))).scalars().all()
-    assert len(alerts) == 1
+    health = [row for row in alerts if row.kind == "permission_health"]
+    assert len(health) == 1
     await feed.run_fallback(TEST_GUILD_A, "channel_delete")
     async with factory() as session:
-        again = (await session.execute(select(func.count()).select_from(SecurityAlertOutbox))).scalar_one()
+        again = (
+            await session.execute(
+                select(func.count()).select_from(SecurityAlertOutbox).where(SecurityAlertOutbox.kind == "permission_health")
+            )
+        ).scalar_one()
     assert again == 1
 
     feed2, clock2 = _feed(monkeypatch, None)
