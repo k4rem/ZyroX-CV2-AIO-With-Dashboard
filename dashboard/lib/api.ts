@@ -48,7 +48,7 @@ async function request<T>(
   const url = `${BASE_URL}${endpoint}`;
 
   const headers = new Headers(options.headers);
-  if (!headers.has("Content-Type") && options.body) {
+  if (!(options.body instanceof FormData) && !headers.has("Content-Type") && options.body) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -298,6 +298,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  listMessageTemplates: (guildId: string) =>
+    request<{ templates: any[] }>(`/guilds/${guildId}/messages/templates`),
+  createMessageTemplate: (guildId: string, data: { name: string; payload: unknown }) =>
+    request<any>(`/guilds/${guildId}/messages/templates`, { method: "POST", body: JSON.stringify(data) }),
+  updateMessageTemplate: (guildId: string, templateId: string, data: { name?: string; payload?: unknown }) =>
+    request<any>(`/guilds/${guildId}/messages/templates/${templateId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteMessageTemplate: (guildId: string, templateId: string) =>
+    request<{ status: string }>(`/guilds/${guildId}/messages/templates/${templateId}`, { method: "DELETE" }),
+  messageContext: (guildId: string) =>
+    request<{ variables: { id: string; value: string }[] }>(`/guilds/${guildId}/messages/context`),
+  listGuildEmojis: (guildId: string) =>
+    request<{ emojis: { id: string; name: string; url: string; animated: boolean }[] }>(`/guilds/${guildId}/emojis`),
+  uploadMessageMedia: (guildId: string, body: FormData) =>
+    request<{ key: string }>(`/guilds/${guildId}/media`, { method: "POST", body }),
+  sendGuildMessage: (guildId: string, data: { channel_id: string; template_id?: string | null; payload: unknown }) =>
+    request<any>(`/guilds/${guildId}/messages/send`, { method: "POST", body: JSON.stringify(data) }),
+  listSentMessages: (guildId: string) => request<{ sent: any[] }>(`/guilds/${guildId}/messages/sent`),
+  editSentMessage: (guildId: string, sentId: string, payload: unknown) =>
+    request<any>(`/guilds/${guildId}/messages/sent/${sentId}`, { method: "PATCH", body: JSON.stringify({ payload }) }),
+  resendSentMessage: (guildId: string, sentId: string) =>
+    request<any>(`/guilds/${guildId}/messages/sent/${sentId}/resend`, { method: "POST" }),
+  removeSentMessage: (guildId: string, sentId: string) =>
+    request<any>(`/guilds/${guildId}/messages/sent/${sentId}/remove`, { method: "POST" }),
+  deleteSentRecord: (guildId: string, sentId: string) =>
+    request<{ status: string }>(`/guilds/${guildId}/messages/sent/${sentId}`, { method: "DELETE" }),
+
   revokeAccessGrant: (grantId: string) =>
     request<{ revoked: boolean }>(`/access/grants/${grantId}`, { method: "DELETE" }),
   listAccessRoles: () => request<unknown[]>("/access/roles"),

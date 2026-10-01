@@ -135,6 +135,8 @@ async def db_reset(postgres_ready):
             "log_migrations",
             "log_event_routes",
             "log_appearance",
+            "message_templates",
+            "sent_messages",
             "ticket_blacklist_v2",
             "ticket_settings_v2",
             "ticket_transcript_v2",

@@ -35,6 +35,7 @@ build/
 # Ignore temporary files
 *.tmp
 *.temp
+bot/storage/
 
 # Ignore Python packaging
 *.egg-info/

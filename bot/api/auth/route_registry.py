@@ -49,6 +49,9 @@ _GUILD_SUBROUTES = frozenset(
         "/invites/v2",
         "/giveaways",
         "/reactionroles",
+        "/messages",
+        "/media",
+        "/emojis",
     }
 )
 
@@ -60,10 +63,13 @@ _GUILD_SUBROUTE_PREFIXES = (
     "/logging/v2/",
     "/invites/v2/",
     "/giveaways/",
+    "/messages/",
+    "/media/",
+    "/emojis/",
 )
 
 _GUILDS_LIST = re.compile(r"^/api/v1/guilds/?$")
-_GUILD_DETAIL = re.compile(r"^/api/v1/guilds/(?P<guild_id>\d+)(?P<suffix>/.*)?$")
+_GUILD_DETAIL = re.compile(r"^/api/v1/guilds/(?P<guild_id>\d+|\{guild_id\})(?P<suffix>/.*)?$")
 
 
 def classify_http_route(method: str, path: str) -> RouteClass:

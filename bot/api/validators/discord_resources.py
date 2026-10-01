@@ -76,7 +76,7 @@ async def validate_mutation_payload(request: Request, guild_id: int, bot) -> Non
         return
     try:
         payload = json.loads(body)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         return
     if isinstance(payload, dict):
         body_gid = _parse_snowflake(payload.get("guild_id"))

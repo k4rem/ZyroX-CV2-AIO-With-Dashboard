@@ -24,6 +24,7 @@ export type NavIconKey =
   | "j2c"
   | "automod"
   | "logging"
+  | "messages"
   | "antinuke"
   | "settings"
   | "access"
@@ -129,6 +130,14 @@ export const NAV_ITEMS: NavItemDef[] = [
       { path: "/welcome", label: "Channel message" },
       { path: "/joindm", label: "Direct message" },
     ],
+  },
+  {
+    id: "messages",
+    label: "Messages",
+    icon: "messages",
+    group: "engagement",
+    scope: "guild",
+    routes: [{ path: "/messages", label: "Messages" }],
   },
   {
     id: "autorole",
