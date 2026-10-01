@@ -167,6 +167,11 @@ async def apply_request_auth(request: Request, auth: DashboardAuthContext, bot) 
         suffix = match.group("suffix") or ""
         cap = resolve_capability(request.method, suffix)
         await authorize_guild_request(auth, guild_id, cap, bot)
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and not auth.is_root:
+            from cls_platform.security.center import dashboard_is_locked
+
+            if await dashboard_is_locked(guild_id):
+                raise HTTPException(status_code=423, detail="Dashboard is locked")
         request.state.guild_id = guild_id
         await validate_mutation_payload(request, guild_id, bot)
         return

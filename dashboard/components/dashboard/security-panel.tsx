@@ -6,6 +6,8 @@ import { SaveBar } from "@/components/settings/save-bar";
 import { SettingGroup } from "@/components/settings/setting-group";
 import { SettingRow } from "@/components/settings/setting-row";
 import { SettingsInstrument } from "@/components/settings/settings-instrument";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { StatusLabel } from "@/components/ui/status";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
@@ -32,21 +34,37 @@ export type SecuritySummary = {
   incidents: Array<{ id: string; status: string; engine: string; severity: string; subject_id: string | null }>;
   quarantines: Array<{ user_id: string; status: string; prior_role_ids: string[] }>;
   ops: { pending_alerts: number };
+  analytics?: {
+    total: number;
+    by_severity: Record<string, number>;
+    by_engine: Record<string, number>;
+    by_action_class: Record<string, number>;
+    by_outcome: Record<string, number>;
+    series: Array<{ day: string; count: number }>;
+    heatmap: Array<{ weekday: number; hour: number; count: number }> | null;
+    event_stream: Array<{ id: string; event_type: string; actor_id: string | null; occurred_at: string }>;
+  };
+  center?: { dashboard_locked: boolean; phishing_action: string; trap_channel_ids: string[] };
 };
 
 export function SecurityPanel({
   initial,
   guildId,
   isRoot,
+  channels = [],
 }: {
   initial: SecuritySummary;
   guildId: string;
   isRoot: boolean;
+  channels?: Array<{ id: string; name: string }>;
 }) {
   const [data, setData] = useState(initial);
   const [humanOn, setHumanOn] = useState(initial.human_mode !== "OFF");
   const [botOn, setBotOn] = useState(initial.bot_mode !== "OFF");
   const [saving, setSaving] = useState(false);
+  const [timeline, setTimeline] = useState<Array<{ kind: string; created_at: string; payload: Record<string, unknown> }>>([]);
+  const [phishing, setPhishing] = useState(initial.center?.phishing_action ?? "delete_timeout");
+  const [trapChannel, setTrapChannel] = useState(initial.center?.trap_channel_ids?.[0] ?? "");
   const dirty = humanOn !== (data.human_mode !== "OFF") || botOn !== (data.bot_mode !== "OFF");
 
   const save = async () => {
@@ -103,6 +121,51 @@ export function SecurityPanel({
         </SettingRow>
       </SettingGroup>
 
+      <SettingGroup id="security-analytics" label="Stored incidents">
+        {!data.analytics || data.analytics.total === 0 ? (
+          <p className="text-small text-fg-3">No incidents stored yet. Charts use saved incidents only.</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            <ul className="text-small text-fg-2">
+              {data.analytics.series.map((point) => (
+                <li key={point.day} className="flex justify-between font-mono">
+                  <span>{point.day}</span>
+                  <span>{point.count}</span>
+                </li>
+              ))}
+            </ul>
+            <ul className="text-small text-fg-2">
+              {Object.entries(data.analytics.by_severity).map(([name, count]) => (
+                <li key={name}>Severity {name}: {count}</li>
+              ))}
+              {Object.entries(data.analytics.by_engine).map(([name, count]) => (
+                <li key={name}>{name}: {count}</li>
+              ))}
+              {Object.entries(data.analytics.by_outcome).map(([name, count]) => (
+                <li key={name}>Outcome {name}: {count}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {data.analytics?.heatmap ? (
+          <p className="text-small text-fg-3">{data.analytics.heatmap.length} occupied hour cells.</p>
+        ) : data.analytics && data.analytics.total > 0 ? (
+          <p className="text-small text-fg-3">Not enough incident history for a heatmap.</p>
+        ) : null}
+      </SettingGroup>
+
+      <SettingGroup id="security-stream" label="Security event stream">
+        {(data.analytics?.event_stream ?? []).length === 0 ? (
+          <p className="text-small text-fg-3">No stored moderation or bot events for this server.</p>
+        ) : (
+          <ul className="font-mono text-small text-fg-2">
+            {data.analytics?.event_stream.map((row) => (
+              <li key={row.id}>{row.occurred_at.slice(0, 16)} · {row.event_type} · {row.actor_id ?? "unknown"}</li>
+            ))}
+          </ul>
+        )}
+      </SettingGroup>
+
       <SettingGroup id="security-health" label="Health">
         <p className="text-small text-fg-2">Permission health: {data.permission_health}. View Audit Log is observability only.</p>
         <p className="text-small text-fg-2">
@@ -142,11 +205,83 @@ export function SecurityPanel({
           <ul className="space-y-1 font-mono text-small text-fg-2">
             {data.incidents.map((row) => (
               <li key={row.id}>
-                {row.severity} · {row.engine} · {row.status} · {row.subject_id ?? "unattributed"}
+                <button
+                  type="button"
+                  className="text-left"
+                  onClick={() =>
+                    void api.getSecurityIncident(guildId, row.id).then((body) => setTimeline(body?.events ?? []))
+                  }
+                >
+                  {row.severity} · {row.engine} · {row.status} · {row.subject_id ?? "unattributed"}
+                </button>
               </li>
             ))}
           </ul>
         )}
+      </SettingGroup>
+
+      <SettingGroup id="security-timeline" label="Evidence timeline">
+        {timeline.length === 0 ? (
+          <p className="text-small text-fg-3">Select an incident to read its stored evidence.</p>
+        ) : (
+          <ul className="space-y-1 font-mono text-small text-fg-2">
+            {timeline.map((row, index) => (
+              <li key={`${row.created_at}-${index}`}>{row.created_at} · {row.kind}</li>
+            ))}
+          </ul>
+        )}
+      </SettingGroup>
+
+      <SettingGroup id="security-config" label="Configuration">
+        <SettingRow label="Phishing action" description="Recorded now. Punishment runs only if ENFORCE is later unlocked.">
+          <Select
+            value={phishing}
+            options={[
+              { value: "delete_only", label: "Delete only" },
+              { value: "delete_timeout", label: "Delete and timeout" },
+              { value: "kick", label: "Kick" },
+              { value: "ban", label: "Ban" },
+            ]}
+            onValueChange={setPhishing}
+          />
+        </SettingRow>
+        <SettingRow label="Bot trap channel" description="Untrusted bots that post here are recorded. Bans stay locked.">
+          <Select
+            value={trapChannel}
+            options={channels.map((channel) => ({ value: channel.id, label: channel.name }))}
+            placeholder="Select channel"
+            onValueChange={setTrapChannel}
+          />
+        </SettingRow>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() =>
+            void api
+              .updateSecurityCenter(guildId, {
+                phishing_action: phishing,
+                trap_channel_ids: trapChannel ? [trapChannel] : [],
+              })
+              .then(() => toast.success("Security configuration saved"))
+              .catch(() => toast.error("Could not save security configuration"))
+          }
+        >
+          Save configuration
+        </Button>
+        <SettingRow label="Dashboard lock" description="Non-root dashboard changes stop while this is on.">
+          <Switch
+            checked={!!data.center?.dashboard_locked}
+            disabled={!isRoot}
+            aria-label="Dashboard lock"
+            onCheckedChange={(locked) =>
+              void api
+                .setDashboardLock(guildId, locked)
+                .then(() => api.getSecurity(guildId))
+                .then((next) => next && setData(next))
+                .catch(() => toast.error("Only Root can change the dashboard lock"))
+            }
+          />
+        </SettingRow>
       </SettingGroup>
 
       <SettingGroup id="security-quarantine" label="Quarantine" meta={String(data.quarantines.length)}>

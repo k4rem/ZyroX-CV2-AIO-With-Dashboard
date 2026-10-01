@@ -122,6 +122,7 @@ async def db_reset(postgres_ready):
             "verification_overwrite_backups",
             "verification_members",
             "verification_configs",
+            "security_center_settings",
             "log_events",
             "log_message_content",
             "log_routes",

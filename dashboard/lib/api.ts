@@ -161,6 +161,12 @@ export const api = {
     }),
   releaseQuarantine: (guildId: string, userId: string) =>
     request<{ status: string }>(`/guilds/${guildId}/security/quarantine/${userId}/release`, { method: "POST" }),
+  getSecurityIncident: (guildId: string, incidentId: string) =>
+    request<any>(`/guilds/${guildId}/security/incidents/${incidentId}`),
+  updateSecurityCenter: (guildId: string, data: { phishing_action?: string; trap_channel_ids?: string[] }) =>
+    request<any>(`/guilds/${guildId}/security/center`, { method: "PUT", body: JSON.stringify(data) }),
+  setDashboardLock: (guildId: string, locked: boolean) =>
+    request<any>(`/guilds/${guildId}/security/lock`, { method: "POST", body: JSON.stringify({ locked }) }),
 
   getVerification: (guildId: string) => request<any>(`/guilds/${guildId}/verification`),
   updateVerification: (guildId: string, data: any) =>

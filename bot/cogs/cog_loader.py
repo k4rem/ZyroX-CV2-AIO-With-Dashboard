@@ -146,6 +146,7 @@ def _cog_specs() -> list[CogSpec]:
         CogSpec("cogs.events.ai", "AIResponses", O),
         # The 17 legacy antinuke listeners are unloaded. SecurityProtection is the runtime.
         CogSpec("cogs.security.protection", "SecurityProtection", O),
+        CogSpec("cogs.security.center_runtime", "SecurityCenterRuntime", O),
         CogSpec("cogs.verification_v2", "VerificationV2", O),
         CogSpec("cogs.tickets_v2", "TicketsV2", O),
         CogSpec("cogs.logging_v2", "LoggingV2", O),

@@ -12,17 +12,21 @@ const SecurityPanel = dynamic(
 );
 
 export default async function AntiNukePage({ params }: { params: { guildId: string } }) {
-  const [summary, session] = await Promise.all([api.getSecurity(params.guildId), getServerSession(authOptions)]);
+  const [summary, session, channels] = await Promise.all([
+    api.getSecurity(params.guildId),
+    getServerSession(authOptions),
+    api.getChannels(params.guildId).catch(() => []),
+  ]);
   const isRoot = isRootOwner(session?.user?.id);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Protection"
-        description="Observation status, rules, incidents, and quarantine for this server. Enforcement stays locked."
+        title="Security Center"
+        description="Protection, incidents, quarantine, and alert health. Enforcement stays locked."
       />
       {summary ? (
-        <SecurityPanel initial={summary} guildId={params.guildId} isRoot={isRoot} />
+        <SecurityPanel initial={summary} guildId={params.guildId} isRoot={isRoot} channels={channels ?? []} />
       ) : (
         <p className="text-small text-fg-3">Security state is unavailable for this server.</p>
       )}

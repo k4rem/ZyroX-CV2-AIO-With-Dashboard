@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 
 from cls_platform.database import session_scope
 from cls_platform.discord_types import snowflake_to_str
+from cls_platform.security.center import analytics, get_settings, incident_timeline, save_settings
 from cls_platform.security.config import ensure_guild_config, set_subsystem_mode
 from cls_platform.security.models import (
     SecurityActionPolicy,
@@ -137,7 +138,44 @@ async def security_summary(guild_id: int):
             for row in quarantines
         ],
         "ops": {"pending_alerts": int(pending)},
+        "analytics": await analytics(guild_id),
+        "center": await get_settings(guild_id),
     }
+
+
+class CenterBody(BaseModel):
+    phishing_action: str | None = None
+    trap_channel_ids: list[str] | None = None
+
+
+class LockBody(BaseModel):
+    locked: bool
+
+
+@router.get("/{guild_id}/security/incidents/{incident_id}")
+async def security_incident(guild_id: int, incident_id: str):
+    try:
+        return await incident_timeline(guild_id, incident_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.put("/{guild_id}/security/center")
+async def security_center(guild_id: int, body: CenterBody):
+    try:
+        return await save_settings(
+            guild_id=guild_id,
+            phishing_action=body.phishing_action,
+            trap_channel_ids=[int(item) for item in body.trap_channel_ids] if body.trap_channel_ids is not None else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/{guild_id}/security/lock")
+async def security_lock(guild_id: int, body: LockBody, request: Request):
+    _root(request)
+    return await save_settings(guild_id=guild_id, dashboard_locked=body.locked)
 
 
 @router.post("/{guild_id}/security/mode")

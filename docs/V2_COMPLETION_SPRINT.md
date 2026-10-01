@@ -27,6 +27,9 @@ DONE WITH SAFE DEFERRALS on phase-4-tickets-v2. Commit f8f73cf. Cooldown and bla
 ## Phase 5 logging
 DONE on phase-5-logging-v2. Commit 79d1571. Postgres events, 30-day message content, 90-day event retention, routing, dashboard stream. Tests: tests/test_logging_v2.py, tests/test_postgres_migrations.py, tests/test_route_coverage.py. Deferral: authenticated visual QA (session ended).
 
+## Phase 7 security center
+DONE on phase-7-security-center. Real incident analytics, timeline, bot trap, phishing record, dashboard lock. ENFORCE stays locked. Tests: tests/test_security_center.py. Deferral: authenticated visual QA (session ended).
+
 
 
 
