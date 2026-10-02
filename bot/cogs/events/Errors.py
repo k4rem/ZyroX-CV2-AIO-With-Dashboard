@@ -33,6 +33,11 @@ class Errors(Cog):
     if isinstance(error, commands.CommandNotFound):
       return
 
+    closed = getattr(error, "cls_message", None)
+    if closed:
+      await ctx.reply(str(closed), mention_author=False, delete_after=8)
+      return
+
     if isinstance(error, commands.MissingRequiredArgument):
       await ctx.send_help(ctx.command)
       ctx.command.reset_cooldown(ctx)

@@ -147,8 +147,17 @@ export const api = {
     }),
 
   getCommands: (guildId: string) => request<{ commands: any[] }>(`/guilds/${guildId}/commands`),
-  updateCommand: (guildId: string, data: { command_name: string; enabled: boolean; allowed_role_ids: string[] }) =>
-    request<any>(`/guilds/${guildId}/commands`, { method: "PUT", body: JSON.stringify(data) }),
+  updateCommand: (
+    guildId: string,
+    data: {
+      command_name: string;
+      enabled: boolean;
+      allowed_role_ids: string[];
+      blocked_role_ids: string[];
+      allowed_channel_ids: string[];
+      blocked_channel_ids: string[];
+    },
+  ) => request<any>(`/guilds/${guildId}/commands`, { method: "PUT", body: JSON.stringify(data) }),
   getLoggingV2: (guildId: string, query = "") => request<any>(`/guilds/${guildId}/logging/v2${query}`),
   getLoggingEvent: (guildId: string, eventId: string) => request<any>(`/guilds/${guildId}/logging/v2/events/${eventId}`),
   searchLoggingMembers: (guildId: string, query: string) =>

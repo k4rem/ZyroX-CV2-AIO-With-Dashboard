@@ -205,7 +205,14 @@ async def export_commands(guild_id: int, lookup) -> dict:
     policies = await policies_for(guild_id)
     return {
         "policies": [
-            {"command": name, "enabled": row["enabled"], "allowed_roles": _roles(lookup, row["allowed_role_ids"])}
+            {
+                "command": name,
+                "enabled": row["enabled"],
+                "allowed_roles": _roles(lookup, row.get("allowed_role_ids")),
+                "blocked_roles": _roles(lookup, row.get("blocked_role_ids")),
+                "allowed_channels": [_channel(lookup, item) for item in (row.get("allowed_channel_ids") or [])],
+                "blocked_channels": [_channel(lookup, item) for item in (row.get("blocked_channel_ids") or [])],
+            }
             for name, row in policies.items()
         ]
     }
@@ -484,7 +491,16 @@ async def apply_commands(guild_id, body, *, strategy: str, **_):
     incoming = body.get("policies") or []
     names = {row["command"] for row in incoming}
     for row in incoming:
-        await set_policy(guild_id=guild_id, command_name=row["command"], enabled=bool(row.get("enabled")), allowed_role_ids=_id_list(row.get("allowed_roles")), actor_id=None)
+        await set_policy(
+            guild_id=guild_id,
+            command_name=row["command"],
+            enabled=bool(row.get("enabled", True)),
+            allowed_role_ids=_id_list(row.get("allowed_roles")),
+            blocked_role_ids=_id_list(row.get("blocked_roles")),
+            allowed_channel_ids=_id_list(row.get("allowed_channels")),
+            blocked_channel_ids=_id_list(row.get("blocked_channels")),
+            actor_id=None,
+        )
     if strategy == "replace":
         async with session_scope() as session:
             await session.execute(delete(CommandPolicy).where(CommandPolicy.guild_id == guild_id, CommandPolicy.command_name.notin_(names or {"__none__"})))
