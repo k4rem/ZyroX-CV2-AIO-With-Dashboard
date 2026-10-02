@@ -53,7 +53,7 @@ test("active detection: exact for overview, prefix for modules, grouped routes s
     flat(buildNav({ pathname, guildId: "7", isRoot: false })).filter((i) => i.active).map((i) => i.id);
   assert.deepEqual(at("/dashboard/guild/7"), ["overview"]);
   assert.deepEqual(at("/dashboard/guild/7/antinuke"), ["antinuke"]);
-  assert.deepEqual(at("/dashboard/guild/7/joindm"), ["welcome"]);
+  assert.deepEqual(at("/dashboard/guild/7/welcome"), ["welcome"]);
   assert.deepEqual(at("/dashboard/guild/7/invcrole"), ["roles"]);
   assert.deepEqual(at("/dashboard/guild/7/tracking"), ["invites"]);
   assert.deepEqual(at("/dashboard/guild/7/verification"), []);
@@ -71,8 +71,8 @@ test("breadcrumbs: guild / group / page, with tab label for grouped routes", () 
   assert.deepEqual(crumbs.map((c) => c.label), ["CLS Main", "Security", "Protection"]);
   assert.equal(crumbs[0].userContent, true);
 
-  const grouped = resolveBreadcrumbs({ pathname: "/dashboard/guild/5/joindm", guildId: "5", guildName: "CLS Main" });
-  assert.deepEqual(grouped.map((c) => c.label), ["CLS Main", "Engagement", "Welcome", "Direct message"]);
+  const grouped = resolveBreadcrumbs({ pathname: "/dashboard/guild/5/welcome", guildId: "5", guildName: "CLS Main" });
+  assert.deepEqual(grouped.map((c) => c.label), ["CLS Main", "Engagement", "Welcome"]);
 
   const access = resolveBreadcrumbs({ pathname: "/dashboard/access", guildId: null });
   assert.deepEqual(access.map((c) => c.label), ["CLS OS", "System", "Access"]);

@@ -126,10 +126,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     icon: "welcome",
     group: "engagement",
     scope: "guild",
-    routes: [
-      { path: "/welcome", label: "Channel message" },
-      { path: "/joindm", label: "Direct message" },
-    ],
+    routes: [{ path: "/welcome", label: "Welcome" }],
   },
   {
     id: "messages",

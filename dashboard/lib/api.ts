@@ -163,6 +163,15 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  getWelcomeHome: (guildId: string) => request<any>(`/guilds/${guildId}/welcome/home`),
+  saveWelcomeChannel: (guildId: string, data: any) =>
+    request<any>(`/guilds/${guildId}/welcome/channel`, { method: "PUT", body: JSON.stringify(data) }),
+  saveWelcomeDm: (guildId: string, data: any) =>
+    request<any>(`/guilds/${guildId}/welcome/dm`, { method: "PUT", body: JSON.stringify(data) }),
+  saveWelcomeGoodbye: (guildId: string, data: any) =>
+    request<any>(`/guilds/${guildId}/welcome/goodbye`, { method: "PUT", body: JSON.stringify(data) }),
+  sendWelcomeTest: (guildId: string, data: any) =>
+    request<{ status: string }>(`/guilds/${guildId}/welcome/test`, { method: "POST", body: JSON.stringify(data) }),
 
   getAntiNuke: (guildId: string) => request<any>(`/guilds/${guildId}/antinuke`),
   updateAntiNuke: (guildId: string, data: any) =>

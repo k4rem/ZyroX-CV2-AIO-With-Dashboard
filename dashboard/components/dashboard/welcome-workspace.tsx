@@ -1,457 +1,300 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
+import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/dashboard/page-header";
-import { DiscordPreview } from "@/components/discord/discord-preview";
-import { ModuleLinks } from "@/components/settings/module-links";
-import { SaveBar } from "@/components/settings/save-bar";
-import { SettingGroup } from "@/components/settings/setting-group";
-import { SettingRow } from "@/components/settings/setting-row";
-import { useDraft } from "@/components/settings/use-draft";
-import { StatusLabel } from "@/components/ui/status";
 import { Button } from "@/components/ui/button";
-import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
-import { Segmented } from "@/components/ui/segmented";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { api } from "@/lib/api";
-import {
-  WELCOME_VARIABLES,
-  defaultWelcomeEmbed,
-  interpretWelcomeColor,
-  previewClock,
-  safeHttpUrl,
-  substituteWelcome,
-  welcomeDraftFromApi,
-  welcomeUpdatePayload,
-  welcomeValueMap,
-  type WelcomeDraft,
-  type WelcomePreviewContext,
-} from "@/lib/welcomeFormat";
-import type { DiscordChannel } from "@/types/api";
+import { Switch } from "@/components/ui/switch";
+import { ChannelPicker, type ChannelOption } from "@/components/discord/channel-picker";
+import { type GuildEmoji } from "@/components/discord/emoji-picker";
+import { MessageComposer, type ComposerSelection } from "@/components/discord/message-composer";
+import { DiscordMessagePreview } from "@/components/discord/message-preview";
+import { ApiError, api } from "@/lib/api";
+import { emptyMessage, validateMessage, type MessageDraft } from "@/lib/messagePayload";
+import { cn } from "@/lib/utils";
+import { GOODBYE_MESSAGE_VARIABLES, WELCOME_MESSAGE_VARIABLES, asMessageDraft, sameWelcomeState } from "@/lib/welcomeState";
 
-function channelGlyph(type: string): ComboboxOption["glyph"] {
-  if (type === "2") return "voice";
-  if (type === "4") return "category";
-  if (type === "5") return "announce";
-  if (type === "13") return "stage";
-  return "text";
+type Mode = "welcome" | "dm" | "goodbye";
+
+type ChannelDraft = {
+  enabled: boolean;
+  skipBots: boolean;
+  channelId: string;
+  autoDelete: string;
+  payload: MessageDraft;
+  channelOk: boolean;
+};
+
+type DirectDraft = { enabled: boolean; payload: MessageDraft };
+
+function explain(err: unknown) {
+  if (err instanceof ApiError) return err.message;
+  return "Something went wrong";
+}
+
+function channelDraft(raw: any): ChannelDraft {
+  return {
+    enabled: Boolean(raw?.enabled),
+    skipBots: Boolean(raw?.skip_bots),
+    channelId: raw?.channel_id ? String(raw.channel_id) : "",
+    autoDelete: raw?.auto_delete_duration ? String(raw.auto_delete_duration) : "",
+    payload: asMessageDraft(raw?.payload),
+    channelOk: raw?.channel_ok !== false,
+  };
+}
+
+function directDraft(raw: any): DirectDraft {
+  return { enabled: Boolean(raw?.enabled), payload: asMessageDraft(raw?.payload) };
 }
 
 export function WelcomeWorkspace({
   guildId,
-  initialConfig,
-  channels,
-  guildName,
-  guildIcon,
-  memberCount,
-  serverId,
-  botName,
-  botAvatar,
-  viewer,
+  home,
+  emojis,
+  initialMode,
 }: {
   guildId: string;
-  initialConfig: Parameters<typeof welcomeDraftFromApi>[0];
-  channels: DiscordChannel[];
-  guildName: string | null;
-  guildIcon: string | null;
-  memberCount: number | null;
-  serverId: string | null;
-  botName: string;
-  botAvatar: string | null;
-  viewer: { id: string | null; name: string | null; image: string | null };
+  home: any;
+  emojis: GuildEmoji[];
+  initialMode: Mode;
 }) {
-  const { draft, setDraft, dirty, reset, commit } = useDraft<WelcomeDraft>(welcomeDraftFromApi(initialConfig));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pane, setPane] = useState<"edit" | "preview">("edit");
-  const [frame, setFrame] = useState<"desktop" | "mobile">("desktop");
-  const [width, setWidth] = useState(0);
-  const [clock, setClock] = useState<string | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const fieldRef = useRef<{ get: () => string; set: (value: string) => void; el: HTMLTextAreaElement | HTMLInputElement | null } | null>(null);
-
-  useEffect(() => {
-    const node = rootRef.current?.parentElement ?? rootRef.current;
-    if (!node) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-  useEffect(() => {
-    setClock(`today at ${previewClock()}`);
-  }, []);
-
-  const stacked = width < 1024;
-  const textChannels = channels.filter((channel) => channel.type === "0" || channel.type === "5");
-  const channelOptions: ComboboxOption[] = textChannels.map((channel) => ({
-    value: channel.id,
-    label: channel.name,
-    glyph: channelGlyph(channel.type),
+  const [mode, setMode] = useState<Mode>(initialMode);
+  const [welcome, setWelcome] = useState<ChannelDraft>(() => channelDraft(home?.welcome));
+  const [dm, setDm] = useState<DirectDraft>(() => directDraft(home?.dm));
+  const [goodbye, setGoodbye] = useState<ChannelDraft>(() => channelDraft(home?.goodbye));
+  const [saved, setSaved] = useState(() => ({
+    welcome: channelDraft(home?.welcome),
+    dm: directDraft(home?.dm),
+    goodbye: channelDraft(home?.goodbye),
   }));
-  const channel = textChannels.find((item) => item.id === draft.channel_id);
-  const color = interpretWelcomeColor(draft.embed.color);
-  const hasBody =
-    draft.welcome_type === "simple"
-      ? draft.welcome_message.trim().length > 0
-      : Boolean(draft.embed.message.trim() || draft.embed.title.trim() || draft.embed.description.trim());
-  const active = Boolean(draft.channel_id) && hasBody;
+  const [selection, setSelection] = useState<ComposerSelection>({ kind: "embed", index: 0 });
+  const [pane, setPane] = useState<"edit" | "preview">("edit");
+  const [density, setDensity] = useState<"desktop" | "mobile">("desktop");
+  const [testChannelId, setTestChannelId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+  const preview = (home?.preview || {}) as Record<string, string>;
+  const destinations: ChannelOption[] = (home?.destinations || []).map((channel: any) => ({
+    id: String(channel.id),
+    name: channel.name,
+    type: "0",
+    parent_name: channel.parent_name || null,
+  }));
 
-  const context: WelcomePreviewContext = {
-    userId: viewer.id,
-    userName: viewer.name,
-    userAvatar: viewer.image,
-    userNick: viewer.name,
-    userJoinDate: null,
-    userCreateDate: null,
-    serverName: guildName,
-    serverId,
-    serverMemberCount: memberCount,
-    serverIcon: guildIcon,
-    timestamp: clock,
-  };
-  const values = welcomeValueMap(context);
-  const source =
-    draft.welcome_type === "simple"
-      ? draft.welcome_message
-      : [draft.embed.message, draft.embed.title, draft.embed.description, draft.embed.author_name, draft.embed.footer_text]
-          .filter(Boolean)
-          .join("\n");
-  const resolved = substituteWelcome(source, values);
-  const warn = [...resolved.unknown, ...resolved.unresolved];
-  const content = substituteWelcome(draft.welcome_type === "embed" ? draft.embed.message : draft.welcome_message, values);
-  const title = substituteWelcome(draft.embed.title, values);
-  const description = substituteWelcome(draft.embed.description, values);
-  const author = substituteWelcome(draft.embed.author_name, values);
-  const footer = substituteWelcome(draft.embed.footer_text, values);
-  const media = (raw: string) => safeHttpUrl(substituteWelcome(raw, values).text);
+  const current = mode === "welcome" ? welcome : mode === "goodbye" ? goodbye : dm;
+  const dirty = useMemo(() => {
+    if (mode === "dm") return !sameWelcomeState(dm, saved.dm);
+    if (mode === "goodbye") return !sameWelcomeState(goodbye, saved.goodbye);
+    return !sameWelcomeState(welcome, saved.welcome);
+  }, [mode, welcome, dm, goodbye, saved]);
 
-  const bind = (set: (value: string) => void) => ({
-    onFocus: (event: FocusEvent<HTMLTextAreaElement | HTMLInputElement>) => {
-      const el = event.currentTarget;
-      fieldRef.current = { el, get: () => el.value, set };
-    },
-  });
+  function setPayload(next: MessageDraft) {
+    if (mode === "dm") setDm({ ...dm, payload: next });
+    else if (mode === "goodbye") setGoodbye({ ...goodbye, payload: next });
+    else setWelcome({ ...welcome, payload: next });
+  }
 
-  const insert = (key: string) => {
-    const token = `{${key}}`;
-    const field = fieldRef.current;
-    if (!field?.el) {
-      setDraft((current) => ({ ...current, welcome_message: `${current.welcome_message}${token}` }));
-      return;
+  function discard() {
+    setWelcome(saved.welcome);
+    setDm(saved.dm);
+    setGoodbye(saved.goodbye);
+    setErrors([]);
+  }
+
+  async function save() {
+    const payload = current.payload;
+    const enabled = current.enabled;
+    const problems = enabled ? validateMessage(payload) : [];
+    if (enabled && (mode === "welcome" || mode === "goodbye") && !(current as ChannelDraft).channelId) {
+      problems.push("Choose a channel.");
     }
-    const el = field.el;
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? start;
-    field.set(`${el.value.slice(0, start)}${token}${el.value.slice(end)}`);
-  };
-
-  const save = async () => {
-    if (!color.valid) {
-      setError(color.error);
-      return;
+    if (mode === "welcome" && welcome.autoDelete.trim()) {
+      const seconds = Number(welcome.autoDelete);
+      if (!Number.isInteger(seconds) || seconds < 0 || seconds > 86400) problems.push("Auto-delete must be between 0 and 86400 seconds.");
     }
-    setSaving(true);
-    setError(null);
+    setErrors(problems);
+    if (problems.length) return;
+    setBusy(true);
     try {
-      await api.updateWelcome(guildId, welcomeUpdatePayload(draft));
-      commit(draft);
-      toast.success("Welcome settings saved");
-    } catch {
-      setError("Could not save welcome settings.");
-      toast.error("Could not save welcome settings");
+      if (mode === "dm") {
+        const next = await api.saveWelcomeDm(guildId, { enabled: dm.enabled, payload: dm.payload });
+        const draft = directDraft(next);
+        setDm(draft);
+        setSaved((value) => ({ ...value, dm: draft }));
+      } else if (mode === "goodbye") {
+        const next = await api.saveWelcomeGoodbye(guildId, {
+          enabled: goodbye.enabled,
+          skip_bots: goodbye.skipBots,
+          channel_id: goodbye.channelId || null,
+          payload: goodbye.payload,
+        });
+        const draft = channelDraft(next);
+        setGoodbye(draft);
+        setSaved((value) => ({ ...value, goodbye: draft }));
+      } else {
+        const next = await api.saveWelcomeChannel(guildId, {
+          enabled: welcome.enabled,
+          skip_bots: welcome.skipBots,
+          channel_id: welcome.channelId || null,
+          auto_delete_duration: welcome.autoDelete.trim() ? Number(welcome.autoDelete) : null,
+          payload: welcome.payload,
+        });
+        const draft = channelDraft(next);
+        setWelcome(draft);
+        setSaved((value) => ({ ...value, welcome: draft }));
+      }
+      toast.success("Saved");
+    } catch (err) {
+      toast.error(explain(err));
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
-  };
+  }
 
-  const composer = (
-    <div className="min-w-0">
-      <div className="border border-line bg-surface-1 px-3 py-2">
-        <p className="text-small text-fg-1" dir="auto">
-          {channel ? `Sends to #${channel.name} when a member joins` : "Not sending until a channel and a message are set"}
-        </p>
-        <div className="mt-1 flex flex-wrap items-center gap-3">
-          <StatusLabel status={active ? "online" : "disabled"}>{active ? "Active" : "Not sending"}</StatusLabel>
-          {draft.auto_delete_duration ? (
-            <span className="font-mono text-caption text-fg-3">Deletes after {draft.auto_delete_duration}s</span>
-          ) : null}
+  async function sendTest(target: "me" | "channel") {
+    const problems = validateMessage(current.payload);
+    const channelId = mode === "dm" ? testChannelId : (current as ChannelDraft).channelId;
+    if (target === "channel" && !channelId) problems.push("Choose a channel.");
+    setErrors(problems);
+    if (problems.length) return;
+    setBusy(true);
+    try {
+      await api.sendWelcomeTest(guildId, {
+        mode,
+        target,
+        channel_id: target === "channel" ? channelId : null,
+        payload: current.payload,
+      });
+      toast.success(target === "me" ? "Test sent to you" : "Test sent to the channel");
+    } catch (err) {
+      toast.error(explain(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const channel = mode === "dm" ? null : (current as ChannelDraft);
+  const variables = mode === "goodbye" ? GOODBYE_MESSAGE_VARIABLES : WELCOME_MESSAGE_VARIABLES;
+
+  return (
+    <div className="space-y-4 pb-8">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-title text-fg-1">Welcome</h1>
+          <p className="text-caption text-fg-3">Channel greeting, direct message, and goodbye.</p>
+        </div>
+        <div className="flex gap-1 rounded-sm border border-line bg-surface-2 p-1">
+          {(["welcome", "dm", "goodbye"] as Mode[]).map((item) => (
+            <button
+              key={item}
+              type="button"
+              className={cn("h-8 rounded-sm px-3 text-caption", mode === item ? "bg-surface-3 text-fg-1" : "text-fg-3")}
+              onClick={() => {
+                setMode(item);
+                setSelection({ kind: "embed", index: 0 });
+                setErrors([]);
+              }}
+            >
+              {item === "welcome" ? "Welcome" : item === "dm" ? "Direct message" : "Goodbye"}
+            </button>
+          ))}
         </div>
       </div>
 
-      <SettingGroup id="welcome-delivery" label="Delivery">
-        <SettingRow label="Channel" description="Text or announcement channel." htmlFor="welcome-channel">
-          <Combobox
-            id="welcome-channel"
-            value={draft.channel_id}
-            onValueChange={(value) => setDraft({ ...draft, channel_id: value })}
-            options={channelOptions}
-            placeholder="Select a channel"
-            searchLabel="Search channels"
-          />
-        </SettingRow>
-        <SettingRow label="Format" description="Plain text, or a Discord embed.">
-          <Segmented
-            label="Message format"
-            value={draft.welcome_type}
-            onChange={(value) => setDraft({ ...draft, welcome_type: value })}
-            options={[
-              { value: "simple", label: "Text" },
-              { value: "embed", label: "Embed" },
-            ]}
-          />
-        </SettingRow>
-      </SettingGroup>
-
-      {draft.welcome_type === "simple" ? (
-        <SettingGroup id="welcome-message" label="Message" meta={`${draft.welcome_message.length}/2000`}>
-          <div className="px-3 pt-3">
-            <textarea
-              value={draft.welcome_message}
-              maxLength={2000}
-              onChange={(event) => setDraft({ ...draft, welcome_message: event.target.value })}
-              {...bind((value) => setDraft((current) => ({ ...current, welcome_message: value })))}
-              placeholder="Welcome {user} to {server_name}!"
-              className="min-h-32 w-full rounded-sm border border-line-input bg-surface-well p-2 text-body text-fg-1 outline-none focus-visible:border-brand-400"
-            />
+      <div className="space-y-3 rounded-sm border border-line bg-surface-1 p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-caption text-fg-2">
+            <Switch checked={current.enabled} onCheckedChange={(enabled) => {
+              if (mode === "dm") setDm({ ...dm, enabled });
+              else if (mode === "goodbye") setGoodbye({ ...goodbye, enabled });
+              else setWelcome({ ...welcome, enabled });
+            }} />
+            {current.enabled ? "Enabled" : "Disabled"}
+          </label>
+          {channel && (
+            <div className="min-w-[220px] flex-1">
+              <ChannelPicker channels={destinations} value={channel.channelId} onChange={(channelId) => {
+                if (mode === "goodbye") setGoodbye({ ...goodbye, channelId, channelOk: true });
+                else setWelcome({ ...welcome, channelId, channelOk: true });
+              }} />
+            </div>
+          )}
+          {mode === "welcome" && (
+            <label className="flex items-center gap-2 text-caption text-fg-3">
+              Auto-delete
+              <Input
+                value={welcome.autoDelete}
+                onChange={(event) => setWelcome({ ...welcome, autoDelete: event.target.value })}
+                inputMode="numeric"
+                aria-label="Auto-delete seconds"
+                placeholder="seconds"
+                className="w-24"
+              />
+            </label>
+          )}
+          {channel && (
+            <label className="flex items-center gap-2 text-caption text-fg-2">
+              <Switch checked={channel.skipBots} onCheckedChange={(skipBots) => {
+                if (mode === "goodbye") setGoodbye({ ...goodbye, skipBots });
+                else setWelcome({ ...welcome, skipBots });
+              }} />
+              Skip bots
+            </label>
+          )}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {dirty && <span className="text-caption text-amber-300">Unsaved changes</span>}
+            <Button type="button" variant="ghost" disabled={!dirty || busy} onClick={discard}>Discard</Button>
+            <Button type="button" variant="primary" disabled={busy} onClick={() => void save()}>Save</Button>
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => void sendTest("me")}>Send test to me</Button>
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => void sendTest("channel")}>Send test to channel</Button>
           </div>
-        </SettingGroup>
-      ) : (
-        <>
-          <SettingGroup id="welcome-content" label="Content" meta={`${draft.embed.description.length}/4096`}>
-            <div className="space-y-3 px-3 pt-3">
-              <label className="block text-small text-fg-2">
-                Message above the embed
-                <textarea
-                  value={draft.embed.message}
-                  maxLength={2000}
-                  onChange={(event) => setDraft({ ...draft, embed: { ...draft.embed, message: event.target.value } })}
-                  {...bind((value) => setDraft((current) => ({ ...current, embed: { ...current.embed, message: value } })))}
-                  className="mt-1 min-h-16 w-full rounded-sm border border-line-input bg-surface-well p-2 text-body text-fg-1 outline-none focus-visible:border-brand-400"
-                />
-              </label>
-              <label className="block text-small text-fg-2">
-                Title
-                <Input
-                  value={draft.embed.title}
-                  onChange={(event) => setDraft({ ...draft, embed: { ...draft.embed, title: event.target.value } })}
-                  {...bind((value) => setDraft((current) => ({ ...current, embed: { ...current.embed, title: value } })))}
-                  className="mt-1"
-                />
-              </label>
-              <label className="block text-small text-fg-2">
-                Description
-                <textarea
-                  value={draft.embed.description}
-                  maxLength={4096}
-                  onChange={(event) => setDraft({ ...draft, embed: { ...draft.embed, description: event.target.value } })}
-                  {...bind((value) => setDraft((current) => ({ ...current, embed: { ...current.embed, description: value } })))}
-                  className="mt-1 min-h-24 w-full rounded-sm border border-line-input bg-surface-well p-2 text-body text-fg-1 outline-none focus-visible:border-brand-400"
-                />
-              </label>
-            </div>
-          </SettingGroup>
-          <details className="mt-4">
-            <summary className="cursor-pointer text-small text-fg-2">Appearance, author, media, footer</summary>
-            <div className="mt-3 space-y-3 px-3">
-              <label className="block text-small text-fg-2">
-                Colour
-                <span className="mt-1 flex items-center gap-2">
-                  <span className="size-4 shrink-0 border border-line" style={{ background: color.preview }} />
-                  <Input
-                    value={draft.embed.color}
-                    aria-invalid={!color.valid}
-                    placeholder="#2F3136"
-                    onChange={(event) => setDraft({ ...draft, embed: { ...draft.embed, color: event.target.value } })}
-                  />
-                </span>
-              </label>
-              {!color.valid ? <p className="text-small text-warn">{color.error}</p> : null}
-              <Pair
-                label="Author name"
-                value={draft.embed.author_name}
-                onChange={(value) => setDraft({ ...draft, embed: { ...draft.embed, author_name: value } })}
-              />
-              <Pair
-                label="Author icon URL"
-                value={draft.embed.author_icon}
-                onChange={(value) => setDraft({ ...draft, embed: { ...draft.embed, author_icon: value } })}
-              />
-              <Pair
-                label="Thumbnail"
-                value={draft.embed.thumbnail}
-                onChange={(value) => setDraft({ ...draft, embed: { ...draft.embed, thumbnail: value } })}
-              />
-              <Pair
-                label="Image"
-                value={draft.embed.image}
-                onChange={(value) => setDraft({ ...draft, embed: { ...draft.embed, image: value } })}
-              />
-              <Pair
-                label="Footer"
-                value={draft.embed.footer_text}
-                onChange={(value) => setDraft({ ...draft, embed: { ...draft.embed, footer_text: value } })}
-              />
-              <Pair
-                label="Footer icon URL"
-                value={draft.embed.footer_icon}
-                onChange={(value) => setDraft({ ...draft, embed: { ...draft.embed, footer_icon: value } })}
-              />
-            </div>
-          </details>
-        </>
+        </div>
+        {mode === "dm" && (
+          <div className="max-w-sm">
+            <div className="mb-1 text-caption text-fg-3">Channel for “Send test to channel”</div>
+            <ChannelPicker channels={destinations} value={testChannelId} onChange={setTestChannelId} />
+          </div>
+        )}
+        {channel && channel.channelId && !channel.channelOk && (
+          <p className="text-caption text-amber-300">CLS cannot send embeds in the saved channel. Choose another destination.</p>
+        )}
+        {destinations.length === 0 && <p className="text-caption text-fg-3">No text channels where CLS can send embeds.</p>}
+      </div>
+
+      {errors.length > 0 && (
+        <ul className="rounded-sm border border-red-400/40 bg-red-400/10 px-3 py-2 text-caption text-red-300">
+          {errors.map((error) => <li key={error}>{error}</li>)}
+        </ul>
       )}
 
-      <SettingGroup id="welcome-delete" label="Auto-delete">
-        <SettingRow label="Remove after" description="Leave empty to keep the message." htmlFor="welcome-delete-seconds">
-          <span className="flex items-center gap-2">
-            <Input
-              id="welcome-delete-seconds"
-              inputMode="numeric"
-              value={draft.auto_delete_duration ?? ""}
-              onChange={(event) => {
-                const raw = event.target.value.trim();
-                if (!raw) {
-                  setDraft({ ...draft, auto_delete_duration: null });
-                  return;
-                }
-                const next = Number(raw);
-                if (Number.isInteger(next) && next >= 0) setDraft({ ...draft, auto_delete_duration: next || null });
-              }}
-            />
-            <span className="text-small text-fg-3">seconds</span>
-          </span>
-        </SettingRow>
-      </SettingGroup>
-
-      {warn.length > 0 ? (
-        <p className="mt-3 text-small text-warn" dir="auto">
-          {resolved.unknown.length ? `Unknown variable ${resolved.unknown.map((token) => `{${token}}`).join(", ")}. ` : ""}
-          {resolved.unresolved.length ? "Some variables have no preview value yet, so they stay as written." : ""}
-        </p>
-      ) : null}
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="secondary">
-              Insert variable
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="max-h-80 overflow-y-auto">
-            {WELCOME_VARIABLES.map((variable) => (
-              <DropdownMenuItem key={variable.key} onSelect={() => insert(variable.key)}>
-                <span className="font-mono text-fg-1">{`{${variable.key}}`}</span>
-                <span className="ms-auto max-w-[10rem] truncate font-mono text-caption text-fg-3">
-                  {values[variable.key] ?? "not available"}
-                </span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => setDraft({ ...draft, welcome_type: "embed", embed: defaultWelcomeEmbed() })}
-        >
-          Start from default
-        </Button>
-      </div>
-    </div>
-  );
-
-  const stage = (
-    <DiscordPreview
-      mode="channel"
-      channelName={channel?.name}
-      botName={botName}
-      botAvatar={botAvatar}
-      content={content.text}
-      warnTokens={[...content.unknown, ...content.unresolved, ...title.unknown, ...description.unknown]}
-      width={stacked ? "mobile" : frame}
-      note="Previewing as you. Join date and account age are not available in this session, so those tokens stay written out."
-      embed={
-        draft.welcome_type === "embed"
-          ? {
-              title: title.text,
-              description: description.text,
-              color: color.preview,
-              authorName: author.text,
-              authorIcon: media(draft.embed.author_icon),
-              footerText: footer.text,
-              footerIcon: media(draft.embed.footer_icon),
-              thumbnail: media(draft.embed.thumbnail),
-              image: media(draft.embed.image),
-            }
-          : null
-      }
-    />
-  );
-
-  const frameToggle = useMemo(
-    () => (
-      <Segmented
-        label="Preview width"
-        value={frame}
-        onChange={setFrame}
-        options={[
-          { value: "desktop", label: "Desktop" },
-          { value: "mobile", label: "Mobile" },
-        ]}
-      />
-    ),
-    [frame],
-  );
-
-  return (
-    <div ref={rootRef} className="w-full min-w-0">
-      <PageHeader
-        title="Welcome"
-        description="The message this server sends when a member joins."
-      >
-        {dirty ? <span className="text-small text-fg-2">Unsaved</span> : null}
-        {!stacked ? frameToggle : null}
-      </PageHeader>
-      <ModuleLinks
-        label="Welcome"
-        links={[
-          { href: `/dashboard/guild/${guildId}/welcome`, label: "Channel message", current: true },
-          { href: `/dashboard/guild/${guildId}/joindm`, label: "Direct message" },
-        ]}
-      />
-      {stacked ? (
-        <div className="mb-4">
-          <Segmented
-            label="Editor pane"
-            value={pane}
-            onChange={setPane}
-            options={[
-              { value: "edit", label: "Edit" },
-              { value: "preview", label: "Preview" },
-            ]}
-          />
+      <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+        <div className="flex gap-1 lg:hidden">
+          <button type="button" className={cn("h-8 rounded-sm px-2 text-caption", pane === "edit" ? "bg-surface-3 text-fg-1" : "text-fg-3")} onClick={() => setPane("edit")}>Edit</button>
+          <button type="button" className={cn("h-8 rounded-sm px-2 text-caption", pane === "preview" ? "bg-surface-3 text-fg-1" : "text-fg-3")} onClick={() => setPane("preview")}>Preview</button>
         </div>
-      ) : null}
-      <div className={stacked ? "" : "grid grid-cols-[minmax(280px,480px)_minmax(0,1fr)] items-start gap-6 4xl:grid-cols-[minmax(320px,560px)_minmax(0,1fr)]"}>
-        {(!stacked || pane === "edit") && composer}
-        {(!stacked || pane === "preview") && <div className="border border-line-subtle">{stage}</div>}
+        <div className="hidden gap-1 lg:flex">
+          <button type="button" className={cn("h-8 rounded-sm px-2 text-caption", density === "desktop" ? "bg-surface-3 text-fg-1" : "text-fg-3")} onClick={() => setDensity("desktop")}>Desktop</button>
+          <button type="button" className={cn("h-8 rounded-sm px-2 text-caption", density === "mobile" ? "bg-surface-3 text-fg-1" : "text-fg-3")} onClick={() => setDensity("mobile")}>Mobile</button>
+        </div>
       </div>
-      <SaveBar dirty={dirty} saving={saving} error={error} onSave={() => void save()} onDiscard={reset} />
-    </div>
-  );
-}
 
-function Pair({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return (
-    <label className="block text-small text-fg-2">
-      {label}
-      <Input value={value} onChange={(event) => onChange(event.target.value)} className="mt-1" />
-    </label>
+      <div className={pane === "preview" ? "lg:hidden" : "hidden"}>
+        <DiscordMessagePreview guildId={guildId} message={current.payload || emptyMessage()} values={preview} />
+      </div>
+      <div className={pane === "edit" ? "block" : "hidden lg:block"}>
+        <MessageComposer
+          guildId={guildId}
+          message={current.payload}
+          onChange={setPayload}
+          emojis={emojis}
+          values={preview}
+          variables={variables}
+          selection={selection}
+          onSelect={setSelection}
+          showPreview
+          previewDensity={density}
+        />
+      </div>
+    </div>
   );
 }

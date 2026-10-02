@@ -64,6 +64,7 @@ _GUILD_SUBROUTE_PREFIXES = (
     "/invites/v2/",
     "/giveaways/",
     "/messages/",
+    "/welcome/",
     "/media/",
     "/emojis/",
 )

@@ -41,9 +41,12 @@ class joindm(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def joindm(self, ctx):
         # Display the current join DM message
-        guild_id = str(ctx.guild.id)
-        if guild_id in self.joindm_messages:
-            await ctx.send(view=CV2("✅ Join DM Status", f"The current join DM message is:\n`{self.joindm_messages[guild_id]}`"))
+        from cls_platform.welcome.store import read_dm
+
+        record = read_dm(ctx.guild.id)
+        if record["enabled"]:
+            text = record["payload"].get("content") or "Embed message"
+            await ctx.send(view=CV2("✅ Join DM Status", f"The current join DM message is:\n`{text}`"))
         else:
             await ctx.send(view=CV2("❌ Error", "No custom join DM message has been set for this server."))
 
@@ -54,47 +57,58 @@ class joindm(commands.Cog):
         if message is None:
             await ctx.send(view=CV2("❌ Error", "Please provide a custom join DM message."))
         else:
-            self.joindm_messages[str(ctx.guild.id)] = message
-            self.save_joindm_messages()
+            from cls_platform.welcome.store import EMPTY_PAYLOAD, write_dm
+
+            payload = {**EMPTY_PAYLOAD, "content": message, "embeds": []}
+            write_dm(ctx.guild.id, enabled=True, payload=payload)
             await ctx.send(view=CV2("✅ Success", "Custom join DM message set successfully."))
 
     @joindm.command()
     @commands.has_permissions(administrator=True)
     async def enable(self, ctx):
         # Enable the join DM module
-        self.bot.add_listener(self.on_member_join, 'on_member_join')
+        from cls_platform.welcome.store import read_dm, write_dm
+
+        record = read_dm(ctx.guild.id)
+        write_dm(ctx.guild.id, enabled=True, payload=record["payload"])
         await ctx.send(view=CV2("✅ Success", "Join DM module enabled. Custom DM will be sent to new members."))
 
     @joindm.command()
     @commands.has_permissions(administrator=True)
     async def disable(self, ctx):
         # Disable the join DM module
-        self.bot.remove_listener(self.on_member_join)
+        from cls_platform.welcome.store import read_dm, write_dm
+
+        record = read_dm(ctx.guild.id)
+        write_dm(ctx.guild.id, enabled=False, payload=record["payload"])
         await ctx.send(view=CV2("✅ Success", "Join DM module disabled. Custom DM will not be sent to new members."))
 
     @joindm.command()
     async def test(self, ctx):
         # Send a test join DM to the author of the command
-        guild_id = str(ctx.guild.id)
-        if guild_id in self.joindm_messages:
-            message = self.joindm_messages[guild_id]
-            server_name = ctx.guild.name
-            join_dm_message = f"{message}\n\n ``Sent from {server_name} `` "
+        from cls_platform.welcome.runtime import send_rendered
+        from cls_platform.welcome.store import WELCOME_VARIABLES, member_values, read_dm
+
+        record = read_dm(ctx.guild.id)
+        if record["enabled"]:
             await ctx.send(view=CV2("✅ Test Sent", "Test Join DM Sent To Your Dm"))
             await ctx.message.add_reaction(BLOBPART)
-            await ctx.author.send(view=CV2("👋 Welcome", join_dm_message))
+            await send_rendered(ctx.author, ctx.guild.id, record["payload"], member_values(ctx.author, ctx.guild), WELCOME_VARIABLES)
         else:
             await ctx.send(view=CV2("❌ Error", "No custom join DM message has been set for this server."))
 
+    @commands.Cog.listener()
     async def on_member_join(self, member):
-        
-        guild_id = str(member.guild.id)
-        if guild_id in self.joindm_messages:
-            message = self.joindm_messages[guild_id]
-            dm_channel = await member.create_dm()
-            server_name = member.guild.name
-            join_dm_message = f"{message}\n\n``Sent from {server_name} ``"
-            await dm_channel.send(view=CV2("👋 Welcome", join_dm_message))
+        # Channel welcome sends the DM as well. This listener covers restarts
+        # where only this cog is loaded, and skips work when greet already ran.
+        if self.bot.get_cog("greet") is not None:
+            return
+        from cls_platform.welcome.runtime import send_direct_welcome
+
+        try:
+            await send_direct_welcome(member)
+        except Exception:
+            return
 
 async def setup(bot):
     await bot.add_cog(joindm(bot))

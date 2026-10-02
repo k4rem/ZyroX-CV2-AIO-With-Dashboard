@@ -6,7 +6,7 @@ import { mediaSrc } from "@/components/discord/media-field";
 
 function text(value: string, values: Record<string, string>) {
   const rendered = applyVariables(value, values);
-  return rendered.replace(/<t:(\d+):[a-zA-Z]>/g, (_, unix) =>
+  return rendered.replace(/<t:(\d+)(?::[a-zA-Z])?>/g, (_, unix) =>
     new Date(Number(unix) * 1000).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
   );
 }

@@ -194,13 +194,14 @@ def variable_values(guild) -> dict[str, str]:
     }
 
 
-def apply_variables(payload: dict, values: dict[str, str]) -> dict:
-    """Replace standalone variables. Unknown tokens are left untouched."""
+def apply_variables(payload: dict, values: dict[str, str], allowed: tuple[str, ...] | list[str] | None = None) -> dict:
+    """Replace variables the caller allows. Unknown tokens are left untouched."""
+    permitted = set(STANDALONE_VARIABLES if allowed is None else allowed)
 
     def swap(text: str) -> str:
         def repl(match: re.Match) -> str:
             key = match.group(1)
-            if key in STANDALONE_VARIABLES and key in values:
+            if key in permitted and key in values:
                 return values[key]
             return match.group(0)
 

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import io
-from datetime import datetime, timezone
-
 import discord
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
@@ -12,8 +9,9 @@ from pydantic import BaseModel
 
 from api.dependencies import get_bot
 from cls_platform import storage
+from cls_platform.messages.deliver import DeliveryError, render_message
 from cls_platform.messages.media import inspect_image, new_key, valid_key, MediaError
-from cls_platform.messages.schema import MessageSchemaError, apply_variables, validate_payload, variable_values
+from cls_platform.messages.schema import MessageSchemaError, validate_payload, variable_values
 from cls_platform.messages.store import (
     MessageError,
     create_template,
@@ -83,58 +81,11 @@ def _namespace(guild_id: int) -> str:
     return f"g{guild_id}"
 
 
-async def _resolve_media(guild_id: int, ref: dict | None, files: list[discord.File]) -> str | None:
-    if not ref:
-        return None
-    if ref.get("kind") == "url":
-        return ref.get("value")
-    key = ref.get("value")
-    if not valid_key(key or ""):
-        raise HTTPException(status_code=422, detail="Uploaded image is missing.")
-    data = await storage.get(_namespace(guild_id), key)
-    if data is None:
-        raise HTTPException(status_code=422, detail="Uploaded image is missing.")
-    if not any(item.filename == key for item in files):
-        files.append(discord.File(io.BytesIO(data), filename=key))
-    return f"attachment://{key}"
-
-
-async def _discord_args(guild, payload: dict) -> tuple[str, list[discord.Embed], discord.ui.View, list[discord.File]]:
-    rendered = validate_payload(apply_variables(validate_payload(payload), variable_values(guild)))
-    files: list[discord.File] = []
-    embeds: list[discord.Embed] = []
-    for item in rendered["embeds"]:
-        color = int(item["color"][1:], 16) if item.get("color") else None
-        embed = discord.Embed(
-            title=item.get("title") or None,
-            description=item.get("description") or None,
-            url=item.get("url"),
-            color=color,
-        )
-        if item.get("timestamp"):
-            embed.timestamp = datetime.now(timezone.utc)
-        author = item.get("author") or {}
-        icon = await _resolve_media(guild.id, author.get("icon"), files)
-        if author.get("name"):
-            embed.set_author(name=author["name"][:256], url=author.get("url"), icon_url=icon)
-        thumb = await _resolve_media(guild.id, item.get("thumbnail"), files)
-        if thumb:
-            embed.set_thumbnail(url=thumb)
-        image = await _resolve_media(guild.id, item.get("image"), files)
-        if image:
-            embed.set_image(url=image)
-        for field in item.get("fields") or []:
-            embed.add_field(name=field["name"][:256], value=field["value"][:1024], inline=bool(field.get("inline")))
-        footer = item.get("footer") or {}
-        footer_icon = await _resolve_media(guild.id, footer.get("icon"), files)
-        if footer.get("text"):
-            embed.set_footer(text=footer["text"][:2048], icon_url=footer_icon)
-        embeds.append(embed)
-    view = discord.ui.View()
-    for button in rendered["buttons"]:
-        emoji = button.get("emoji") or None
-        view.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label=button["label"][:80], url=button["url"], emoji=emoji))
-    return rendered["content"] or None, embeds, view, files
+async def _discord_args(guild, payload: dict):
+    try:
+        return await render_message(guild.id, payload, variable_values(guild))
+    except DeliveryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/{guild_id}/messages/context")

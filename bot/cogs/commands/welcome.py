@@ -248,10 +248,16 @@ class Welcomer(commands.Cog):
     
     async def _save_welcome_data(self, guild_id, welcome_type, message, embed_data=None):
         async with aiosqlite.connect("db/welcome.db") as db:
+            async with db.execute(
+                "SELECT channel_id, auto_delete_duration FROM welcome WHERE guild_id = ?",
+                (guild_id,),
+            ) as cursor:
+                existing = await cursor.fetchone()
+            channel_id, auto_delete = existing if existing else (None, None)
             await db.execute("""
-            INSERT OR REPLACE INTO welcome (guild_id, welcome_type, welcome_message, embed_data)
-            VALUES (?, ?, ?, ?)
-            """, (guild_id, welcome_type, message, json.dumps(embed_data) if embed_data else None))
+            INSERT OR REPLACE INTO welcome (guild_id, welcome_type, welcome_message, channel_id, embed_data, auto_delete_duration)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """, (guild_id, welcome_type, message, channel_id, json.dumps(embed_data) if embed_data else None, auto_delete))
             await db.commit()
 
     

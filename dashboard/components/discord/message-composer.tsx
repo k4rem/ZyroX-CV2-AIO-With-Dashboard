@@ -40,6 +40,7 @@ export function MessageComposer({
   selection,
   onSelect,
   showPreview,
+  previewDensity = "desktop",
 }: {
   guildId: string;
   message: MessageDraft;
@@ -50,6 +51,7 @@ export function MessageComposer({
   selection: ComposerSelection;
   onSelect: (next: ComposerSelection) => void;
   showPreview: boolean;
+  previewDensity?: "desktop" | "mobile";
 }) {
   const embed = selection.kind === "embed" ? message.embeds[selection.index] : null;
   const button = selection.kind === "button" ? message.buttons[selection.index] : null;
@@ -227,7 +229,7 @@ export function MessageComposer({
         )}
       </section>
       {showPreview && (
-        <aside className="hidden min-w-0 lg:sticky lg:top-3 lg:block lg:self-start">
+        <aside className={cn("hidden min-w-0 lg:sticky lg:top-3 lg:block lg:self-start", previewDensity === "mobile" && "max-w-[300px]")}>
           <p className="mb-1 text-caption text-fg-3">Preview</p>
           <DiscordMessagePreview guildId={guildId} message={message} values={values} />
         </aside>
