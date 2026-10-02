@@ -13,11 +13,11 @@
 # ╚══════════════════════════════════════════════════════════════════╝
 
 import discord
-from utils.emoji import TICK
 from discord.ext import commands
 import aiosqlite
 import asyncio
-from datetime import timedelta
+
+from cls_platform.automod_compat import enforce, rule_action
 
 class AntiSpam(commands.Cog):
     def __init__(self, bot):
@@ -84,7 +84,8 @@ class AntiSpam(commands.Cog):
         channel = message.channel
         guild_id = guild.id
 
-        if not await self.is_automod_enabled(guild_id) or not await self.is_anti_spam_enabled(guild_id):
+        action = await rule_action(guild_id, "anti_spam")
+        if not await self.is_automod_enabled(guild_id) or not action:
             return
 
         if user == guild.owner or user == self.bot.user:
@@ -99,42 +100,24 @@ class AntiSpam(commands.Cog):
             return
 
         current_time = message.created_at.timestamp()
-        user_messages = self.recent_messages.get(user.id, [])
-        user_messages = [msg for msg in user_messages if current_time - msg < 10]
-        user_messages.append(current_time)
-        self.recent_messages[user.id] = user_messages
+        key = (guild_id, user.id)
+        user_messages = self.recent_messages.get(key, [])
+        user_messages = [item for item in user_messages if current_time - item[0] < 10]
+        user_messages.append((current_time, message))
+        self.recent_messages[key] = user_messages
 
         if len(user_messages) > self.spam_threshold:
-            punishment = await self.get_punishment(guild_id)
-            action_taken = None
-            reason = "Spamming"
-
-            try:
-                if punishment == "Mute":
-                    timeout_duration = discord.utils.utcnow() + timedelta(minutes=12)
-                    await user.edit(timed_out_until=timeout_duration, reason="Spamming")
-                    action_taken = "Muted for 12 minutes"
-                elif punishment == "Kick":
-                    await user.kick(reason="Spamming")
-                    action_taken = "Kicked"
-                elif punishment == "Ban":
-                    await user.ban(reason="Spamming")
-                    action_taken = "Banned"
-
-                simple_embed = discord.Embed(title="Automod Anti-Spam", color=0xFF0000)
-                simple_embed.description = f"{TICK} | {user.mention} has been successfully **{action_taken}** for **Spamming.**"
-                
-                simple_embed.set_footer(text="Use the “automod logging” command to get automod logs if it is not enabled.", icon_url=self.bot.user.avatar.url)
-                await channel.send(embed=simple_embed, delete_after=30)
-
-                await self.log_action(guild, user, channel, action_taken, reason)
-
-            except discord.Forbidden:
-                pass
-            except discord.HTTPException:
-                pass
-            except Exception:
-                pass
+            burst = [item[1] for item in user_messages] if action == "delete" else []
+            result = await enforce(
+                self.bot,
+                message,
+                rule="anti_spam",
+                action=action,
+                reason="Spamming",
+                messages=burst,
+            )
+            if result.get("ok"):
+                self.recent_messages.pop(key, None)
 
     @commands.Cog.listener()
     async def on_rate_limit(self, message):

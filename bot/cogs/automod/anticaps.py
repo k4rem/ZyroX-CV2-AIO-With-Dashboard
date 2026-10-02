@@ -13,11 +13,11 @@
 # ╚══════════════════════════════════════════════════════════════════╝
 
 import discord
-from utils.emoji import TICK
 from discord.ext import commands
 import aiosqlite
 import asyncio
-from datetime import timedelta
+
+from cls_platform.automod_compat import enforce, rule_action
 
 class AntiCaps(commands.Cog):
     def __init__(self, bot):
@@ -85,7 +85,8 @@ class AntiCaps(commands.Cog):
         channel = message.channel
         guild_id = guild.id
 
-        if not await self.is_automod_enabled(guild_id) or not await self.is_anti_caps_enabled(guild_id):
+        action = await rule_action(guild_id, "anti_caps")
+        if not await self.is_automod_enabled(guild_id) or not action:
             return
 
         if user == guild.owner or user == self.bot.user:
@@ -104,37 +105,7 @@ class AntiCaps(commands.Cog):
             caps_percentage = (caps_count / len(message.content)) * 100
 
             if caps_percentage > self.caps_threshold:
-                punishment = await self.get_punishment(guild_id)
-                action_taken = None
-                reason = "Excessive Caps"
-
-                try:
-                    if punishment == "Mute":
-                        timeout_duration = discord.utils.utcnow() + timedelta(minutes=1)
-                        await user.edit(timed_out_until=timeout_duration, reason="Excessive Caps")
-                        action_taken = "Muted for 1 minutes"
-                    elif punishment == "Kick":
-                        await user.kick(reason="Excessive Caps")
-                        action_taken = "Kicked"
-                    elif punishment == "Ban":
-                        await user.ban(reason="Excessive Caps")
-                        action_taken = "Banned"
-                    await message.delete()
-
-                    simple_embed = discord.Embed(title="Automod Anti-Caps", color=0xFF0000)
-                    simple_embed.description = f"{TICK} | {user.mention} has been successfully **{action_taken}** for **Excessive caps.**"
-                    
-                    simple_embed.set_footer(text="Use the “automod logging” command to get automod logs if it is not enabled.", icon_url=self.bot.user.avatar.url)
-                    await channel.send(embed=simple_embed, delete_after=30)
-
-                    await self.log_action(guild, user, channel, action_taken, reason)
-
-                except discord.Forbidden:
-                    pass
-                except discord.HTTPException:
-                    pass
-                except Exception:
-                    pass
+                await enforce(self.bot, message, rule="anti_caps", action=action, reason="Excessive Caps", messages=[message])
 
     @commands.Cog.listener()
     async def on_rate_limit(self, message):

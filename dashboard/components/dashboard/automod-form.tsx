@@ -21,7 +21,6 @@ import { AutomodConfig } from "@/types/api";
 
 const PUNISHMENT_OPTIONS = [
   { value: "delete", label: "Delete message" },
-  { value: "warn", label: "Warn user" },
   { value: "mute", label: "Mute user" },
   { value: "kick", label: "Kick user" },
   { value: "ban", label: "Ban user" },

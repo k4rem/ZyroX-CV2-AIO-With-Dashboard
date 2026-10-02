@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { InlineBanner } from "@/components/ui/state";
+import { api, ApiError } from "@/lib/api";
 import { SaveBar } from "@/components/settings/save-bar";
 import { SettingGroup } from "@/components/settings/setting-group";
 import { SettingRow } from "@/components/settings/setting-row";
@@ -12,7 +14,6 @@ import { Readout } from "@/components/ui/readout";
 import { StatusLabel } from "@/components/ui/status";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { api } from "@/lib/api";
 
 type VerificationState = {
   enabled: boolean;
@@ -33,6 +34,7 @@ export default function VerificationPage({ params }: { params: { guildId: string
   const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
   const [saved, setSaved] = useState<VerificationState | null>(null);
   const [draft, setDraft] = useState<VerificationState | null>(null);
+  const [canEnable, setCanEnable] = useState(false);
 
   useEffect(() => {
     let cancel = false;
@@ -44,8 +46,10 @@ export default function VerificationPage({ params }: { params: { guildId: string
           api.getRoles(params.guildId),
         ]);
         if (cancel) return;
+        const publishReady = Boolean(config?.can_enable);
+        setCanEnable(publishReady);
         const next: VerificationState = {
-          enabled: Boolean(config?.enabled),
+          enabled: publishReady && Boolean(config?.enabled),
           unverified_role_id: config?.unverified_role_id ?? null,
           verified_role_id: config?.verified_role_id ?? null,
           channel_id: config?.channel_id ?? null,
@@ -92,13 +96,16 @@ export default function VerificationPage({ params }: { params: { guildId: string
         protected_category_ids: draft.protected_category_ids,
         verification_method: "button",
       });
-      const next = { ...draft, ...(result || {}), counts: result?.counts ?? draft.counts };
+      const next = { ...draft, ...(result || {}), counts: result?.counts ?? draft.counts, enabled: Boolean(result?.can_enable) && Boolean(result?.enabled) };
       setSaved(next);
       setDraft(next);
       toast.success("Verification saved");
-    } catch {
-      setError("Could not save. Enable needs the unverified role, at least one category, and the bot above that role.");
-      toast.error("Could not save verification");
+    } catch (err) {
+      const message = err instanceof ApiError && err.message
+        ? err.message
+        : "Could not save. Enable needs the unverified role, at least one category, and the bot above that role.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -119,6 +126,11 @@ export default function VerificationPage({ params }: { params: { guildId: string
         title="Verification"
         description="Unverified members are denied the categories you choose. The verified role is only a status, not a permission key."
       />
+      {!canEnable ? (
+        <InlineBanner tone="warning" title="Verification cannot be enabled until a verification message is published.">
+          Publishing a verify message is not available yet, so the gate stays off.
+        </InlineBanner>
+      ) : null}
       <SettingsInstrument wide summary={draft.enabled ? "Gate on. New joins are unverified. Existing members stay in grace." : "Gate off. No overwrites are applied."}>
         <dl className="grid grid-cols-2 border border-line-subtle sm:grid-cols-4">
           <Readout label="Status">
@@ -130,8 +142,8 @@ export default function VerificationPage({ params }: { params: { guildId: string
         </dl>
 
         <SettingGroup id="verification-gate" label="Gate">
-          <SettingRow label="Enabled" description="Off leaves every overwrite untouched. On denies view for the unverified role on the selected categories.">
-            <Switch checked={draft.enabled} onCheckedChange={(enabled) => setDraft({ ...draft, enabled })} aria-label="Verification enabled" />
+          <SettingRow label="Enabled" description={canEnable ? "Off leaves every overwrite untouched. On denies view for the unverified role on the selected categories." : "Verification cannot be enabled until a verification message is published."}>
+            <Switch checked={draft.enabled} disabled={!canEnable} onCheckedChange={(enabled) => { if (canEnable) setDraft({ ...draft, enabled }); }} aria-label="Verification enabled" />
           </SettingRow>
           <SettingRow label="Unverified role" description="This role is denied the protected categories. It is removed after the member passes.">
             <Combobox id="unverified-role" value={draft.unverified_role_id} options={roleOptions} onValueChange={(unverified_role_id) => setDraft({ ...draft, unverified_role_id })} placeholder="Choose a role" />
@@ -139,7 +151,7 @@ export default function VerificationPage({ params }: { params: { guildId: string
           <SettingRow label="Status role" description="Optional. It does not grant channel access.">
             <Combobox id="verified-role" value={draft.verified_role_id} options={roleOptions} onValueChange={(verified_role_id) => setDraft({ ...draft, verified_role_id })} placeholder="None" />
           </SettingRow>
-          <SettingRow label="Channel" description="Where the verify button is posted.">
+          <SettingRow label="Channel" description="Verification cannot be enabled until a verification message is published.">
             <Combobox id="verify-channel" value={draft.channel_id} options={channelOptions} onValueChange={(channel_id) => setDraft({ ...draft, channel_id })} placeholder="Choose a channel" />
           </SettingRow>
         </SettingGroup>

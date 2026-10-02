@@ -19,6 +19,7 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { InlineBanner } from "@/components/ui/state";
 import { SettingGroup } from "@/components/settings/setting-group";
 import { SettingsInstrument } from "@/components/settings/settings-instrument";
 import { api } from "@/lib/api";
@@ -96,9 +97,12 @@ export default function VanityRolesPage({ params }: { params: { guildId: string 
   }
 
   return (
-    <div>
-      <PageHeader title="Vanity roles" description="Assign a role when a member's status contains the vanity text." />
-      <SettingsInstrument wide summary={`${setups.length} setups. Matching status text adds the role. Removing the text removes it.`}>
+    <div className="space-y-4">
+      <PageHeader title="Vanity roles" description="Saved setups stay stored. Member-status matching is not running." />
+      <InlineBanner tone="warning">
+        Vanity Roles is temporarily unavailable while member-status matching is being rebuilt.
+      </InlineBanner>
+      <SettingsInstrument wide summary={`${setups.length} saved. Automation is off, so no roles are added or removed.`}>
       <SettingGroup id="vanity-add" label="Add setup">
         <div className="mt-3 grid gap-3 md:grid-cols-3">
           <label className="text-small text-fg-2">
@@ -108,6 +112,7 @@ export default function VanityRolesPage({ params }: { params: { guildId: string 
               onChange={(event) => setNewSetup({ ...newSetup, vanity: event.target.value })}
               placeholder=".gg/example"
               className="mt-1"
+              disabled
             />
           </label>
           <label className="text-small text-fg-2">
@@ -144,16 +149,16 @@ export default function VanityRolesPage({ params }: { params: { guildId: string 
           </label>
         </div>
         <div className="mt-3">
-          <Button type="button" variant="secondary" onClick={() => void handleAdd()} disabled={saving}>
+          <Button type="button" variant="secondary" onClick={() => void handleAdd()} disabled>
             Add setup
           </Button>
         </div>
       </SettingGroup>
-      <SettingGroup id="vanity-active" label="Active setups" meta={String(setups.length)}>
+      <SettingGroup id="vanity-active" label="Saved setups" meta={String(setups.length)}>
         <ul className="mt-2 border-t border-line">
           {setups.length === 0 ? (
             <li className="py-3 text-small text-fg-3" dir="auto">
-              No setups yet. Add vanity text, a role, and a log channel above.
+              No saved setups. New setups cannot be added until member-status matching is rebuilt.
             </li>
           ) : (
             setups.map((setup, index) => {

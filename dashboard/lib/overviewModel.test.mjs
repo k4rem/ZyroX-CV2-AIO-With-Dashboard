@@ -16,6 +16,9 @@ import {
   summarizeCoverage,
   ticketSteps,
   welcomeSteps,
+  welcomeV2State,
+  automodEffectiveState,
+  protectionOverview,
 } from "./overviewModel.ts";
 import { ACTIVITY_WIDGETS, availableActivityWidgets } from "./overviewWidgets.ts";
 
@@ -150,6 +153,42 @@ test("System Core outer ring: one item per required module, failures included, d
     { key: "m-TicketCog", label: "Tickets", state: "failed" },
   ]);
   assert.equal(moduleDisplayName("Unknown"), "Unknown");
+});
+
+test("welcome V2 status follows the enabled switch, not the legacy welcome payload", () => {
+  assert.deepEqual(welcomeV2State(null), { on: false, channelId: null });
+  assert.deepEqual(welcomeV2State({ enabled: false, channel_id: "1543105121804615781" }), {
+    on: false,
+    channelId: "1543105121804615781",
+  });
+  assert.deepEqual(welcomeV2State({ enabled: true, channel_id: "1543105121804615781" }), {
+    on: true,
+    channelId: "1543105121804615781",
+  });
+});
+
+test("automod overview counts only rules that are actually enforcing", () => {
+  assert.deepEqual(automodEffectiveState({ enabled: true, punishments: { anti_spam: "delete", anti_links: "mute" } }), {
+    on: true,
+    rules: 2,
+    detail: "2 rules enforcing",
+  });
+  assert.deepEqual(automodEffectiveState({ enabled: false, punishments: { anti_spam: "delete" } }), {
+    on: false,
+    rules: 0,
+    detail: "Off",
+  });
+  assert.equal(automodEffectiveState({ enabled: true, punishments: {} }).on, false);
+});
+
+test("protection overview does not describe trusted actors as a whitelist", () => {
+  const off = protectionOverview({ human_mode: "OFF", whitelisted_users: ["1", "2"], trusted_actors: [] });
+  assert.equal(off.on, false);
+  assert.equal(off.detail.includes("whitelist"), false);
+  const watching = protectionOverview({ effective_human_mode: "OBSERVE", trusted_actors: [{ subject_id: "1" }] });
+  assert.equal(watching.on, true);
+  assert.equal(watching.detail, "Observing · 1 trusted actor");
+  assert.equal(watching.detail.includes("whitelist"), false);
 });
 
 test("System Core inner ring: per-guild permission requirements; unknown guild is not reported", () => {

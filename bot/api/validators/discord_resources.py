@@ -43,6 +43,16 @@ def _collect_resource_ids(obj: Any, found: dict[str, set[int]]) -> None:
                     sid = _parse_snowflake(item)
                     if sid:
                         found.setdefault("role", set()).add(sid)
+            elif (lk.endswith("_role_ids") or lk == "role_ids") and isinstance(val, list):
+                for item in val:
+                    sid = _parse_snowflake(item)
+                    if sid:
+                        found.setdefault("role", set()).add(sid)
+            elif (lk.endswith("_channel_ids") or lk == "channel_ids") and isinstance(val, list):
+                for item in val:
+                    sid = _parse_snowflake(item)
+                    if sid:
+                        found.setdefault("channel", set()).add(sid)
             else:
                 _collect_resource_ids(val, found)
     elif isinstance(obj, list):

@@ -20,7 +20,9 @@ import {
   stepsDone,
   summarizeCoverage,
   ticketSteps,
-  welcomeSteps,
+  automodEffectiveState,
+  protectionOverview,
+  welcomeV2State,
   type ChannelKind,
   type ChecklistStep,
   type CoreItem,
@@ -183,7 +185,7 @@ export async function loadOverview(opts: {
     settled(api.getSecurity(guildId)),
     settled(api.getAutomod(guildId)),
     settled(api.getTicketsV2(guildId)),
-    settled(api.getWelcome(guildId)),
+    settled(api.getWelcomeHome(guildId)),
     settled(api.getJ2C(guildId)),
     settled(api.getLoggingV2(guildId)),
     settled(api.getRoleAutomation(guildId)),
@@ -256,31 +258,30 @@ export async function loadOverview(opts: {
 
   // Security
   if (antinukeRes.ok) {
-    const wl = antinukeRes.value?.whitelisted_users?.length ?? 0;
+    const protection = protectionOverview(antinukeRes.value);
     modules.push({
       key: "antinuke",
-      name: "Antinuke",
+      name: "Protection",
       domain: "security",
-      status: antinukeStatus ? "online" : "disabled",
-      statusLabel: antinukeStatus ? "On" : "Off",
-      bucket: antinukeStatus ? "on" : "off",
-      detail: plural(wl, "whitelisted user"),
+      status: protection.on ? "online" : "disabled",
+      statusLabel: protection.on ? "On" : "Off",
+      bucket: protection.on ? "on" : "off",
+      detail: protection.detail,
       href: `${base}/antinuke`,
     });
-  } else modules.push(unavailableRow("antinuke", "Antinuke", "security", `${base}/antinuke`));
+  } else modules.push(unavailableRow("antinuke", "Protection", "security", `${base}/antinuke`));
 
   // Moderation
   if (automodRes.ok) {
-    const on = Boolean(automodRes.value.enabled);
-    const rules = Object.keys(automodRes.value.punishments ?? {}).length;
+    const automod = automodEffectiveState(automodRes.value);
     modules.push({
       key: "automod",
       name: "Automod",
       domain: "moderation",
-      status: on ? "online" : "disabled",
-      statusLabel: on ? "On" : "Off",
-      bucket: on ? "on" : "off",
-      detail: rules > 0 ? `${plural(rules, "punishment rule")} configured` : "No punishment rules configured",
+      status: automod.on ? "online" : "disabled",
+      statusLabel: automod.on ? "On" : "Off",
+      bucket: automod.on ? "on" : "off",
+      detail: automod.detail,
       href: `${base}/automod`,
     });
   } else modules.push(unavailableRow("automod", "Automod", "moderation", `${base}/automod`));
@@ -333,22 +334,16 @@ export async function loadOverview(opts: {
 
   // Engagement
   if (welcomeRes.ok) {
-    const w = welcomeRes.value;
-    const steps = welcomeSteps(w);
-    const st = checklistState(steps, "online", "On", "Off");
-    const ch = channelName(w?.channel_id);
+    const welcome = welcomeV2State(welcomeRes.value?.welcome);
+    const ch = channelName(welcome.channelId);
     modules.push({
       key: "welcome",
       name: "Welcome",
       domain: "engagement",
-      status: st.status,
-      statusLabel: st.label,
-      bucket: bucketFor(st.status),
-      detail:
-        stepsDone(steps) === steps.length
-          ? `Sends ${w?.welcome_type === "embed" ? "an embed" : "a message"} to ${ch ? `#${ch}` : "the set channel"}`
-          : missingSentence(steps),
-      meter: stepsMeter(steps),
+      status: welcome.on ? "online" : "disabled",
+      statusLabel: welcome.on ? "On" : "Off",
+      bucket: welcome.on ? "on" : "off",
+      detail: welcome.on ? `Sends a welcome message${ch ? ` to #${ch}` : ""}` : "Off",
       href: `${base}/welcome`,
     });
   } else modules.push(unavailableRow("welcome", "Welcome", "engagement", `${base}/welcome`));

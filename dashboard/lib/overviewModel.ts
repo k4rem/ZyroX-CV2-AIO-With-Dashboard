@@ -66,6 +66,44 @@ export interface WelcomeLike {
   embed_data?: { message?: string | null; title?: string | null; description?: string | null } | null;
 }
 
+/** Welcome V2 channel record. `enabled` is the switch the welcome runtime reads. */
+export function welcomeV2State(
+  record: { enabled?: boolean; channel_id?: string | null } | null | undefined,
+): { on: boolean; channelId: string | null } {
+  const channelId = record?.channel_id ? String(record.channel_id) : null;
+  return { on: Boolean(record?.enabled), channelId };
+}
+
+/**
+ * Effective automod: the master switch and only punishments the runtime can run.
+ * A stored rule does not count while the master switch is off.
+ */
+export function automodEffectiveState(
+  cfg: { enabled?: boolean; punishments?: Record<string, string> | null } | null | undefined,
+): { on: boolean; rules: number; detail: string } {
+  const master = Boolean(cfg?.enabled);
+  const rules = master ? Object.keys(cfg?.punishments ?? {}).length : 0;
+  if (!master) return { on: false, rules: 0, detail: "Off" };
+  if (rules === 0) return { on: false, rules: 0, detail: "No rules enforcing" };
+  return { on: true, rules, detail: rules === 1 ? "1 rule enforcing" : `${rules} rules enforcing` };
+}
+
+/** Protection status from the security config. Trusted actors are not a whitelist. */
+export function protectionOverview(
+  security: {
+    human_mode?: string | null;
+    effective_human_mode?: string | null;
+    trusted_actors?: unknown[] | null;
+  } | null | undefined,
+): { on: boolean; detail: string } {
+  const mode = security?.effective_human_mode || security?.human_mode || "OFF";
+  if (!mode || mode === "OFF") return { on: false, detail: "Off" };
+  const trusted = Array.isArray(security?.trusted_actors) ? security.trusted_actors.length : 0;
+  const label = mode === "OBSERVE" ? "Observing" : mode;
+  const noun = trusted === 1 ? "trusted actor" : "trusted actors";
+  return { on: true, detail: `${label} · ${trusted} ${noun}` };
+}
+
 export function welcomeSteps(cfg: WelcomeLike | null | undefined): ChecklistStep[] {
   const embed = cfg?.welcome_type === "embed";
   const content = embed

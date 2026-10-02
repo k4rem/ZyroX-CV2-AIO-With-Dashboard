@@ -16,6 +16,7 @@ import discord
 from discord.ext import commands
 import aiosqlite
 import asyncio
+from cls_platform.invc_gate import invc_role_should_apply
 from utils.Tools import *
 from utils.cv2 import CV2
 from utils.config import *
@@ -31,9 +32,14 @@ class Invcrole(commands.Cog):
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS vcroles (
                     guild_id INTEGER PRIMARY KEY,
-                    role_id INTEGER NOT NULL
+                    role_id INTEGER NOT NULL,
+                    enabled INTEGER DEFAULT 0
                 )
             ''')
+            try:
+                await db.execute("ALTER TABLE vcroles ADD COLUMN enabled INTEGER DEFAULT 0")
+            except Exception:
+                pass
             await db.commit()
 
     @commands.group(name='vcrole', help="Vcrole Setup commands", invoke_without_command=True)
@@ -93,9 +99,14 @@ class Invcrole(commands.Cog):
     async def on_voice_state_update(self, member, before, after):
         try:
             async with aiosqlite.connect(self.db_path) as db:
-                async with db.execute('SELECT role_id FROM vcroles WHERE guild_id = ?', (member.guild.id,)) as cursor:
+                try:
+                    await db.execute("ALTER TABLE vcroles ADD COLUMN enabled INTEGER DEFAULT 0")
+                    await db.commit()
+                except Exception:
+                    pass
+                async with db.execute('SELECT role_id, enabled FROM vcroles WHERE guild_id = ?', (member.guild.id,)) as cursor:
                     row = await cursor.fetchone()
-                    if not row:
+                    if not row or not invc_role_should_apply(row[0], row[1] if len(row) > 1 else 0):
                         return
                     role = member.guild.get_role(row[0])
 

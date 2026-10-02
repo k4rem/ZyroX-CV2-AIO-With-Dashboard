@@ -120,9 +120,11 @@ async def get_guild_automod(guild_id: int):
     enabled_row = await cursor.fetchone()
     enabled = bool(enabled_row[0]) if enabled_row else False
 
-    # Get punishments
+    # Get punishments and expose only rules the runtime will enforce.
+    from cls_platform.automod_compat import effective_punishments
+
     cursor = await db.execute("SELECT event, punishment FROM automod_punishments WHERE guild_id = ?", (guild_id,))
-    punishments = {row[0]: row[1] for row in await cursor.fetchall()}
+    punishments = effective_punishments({row[0]: row[1] for row in await cursor.fetchall()})
 
     # Get ignored items
     cursor = await db.execute("SELECT type, id FROM automod_ignored WHERE guild_id = ?", (guild_id,))
@@ -149,6 +151,14 @@ async def patch_guild_automod(guild_id: int, data: AutomodUpdate):
     """
     Updates parts of the AutoMod configuration for a specific guild.
     """
+    from cls_platform.automod_compat import apply_punishment_update, prepare_punishment_rows
+
+    if data.punishments is not None:
+        try:
+            prepare_punishment_rows(data.punishments)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     db = await db_manager.get_connection('db/automod.db')
     if data.enabled is not None:
         await db.execute(
@@ -157,11 +167,7 @@ async def patch_guild_automod(guild_id: int, data: AutomodUpdate):
         )
 
     if data.punishments is not None:
-        for event, punishment in data.punishments.items():
-            await db.execute(
-                "INSERT OR REPLACE INTO automod_punishments (guild_id, event, punishment) VALUES (?, ?, ?)",
-                (guild_id, event, punishment)
-            )
+        await apply_punishment_update(db, guild_id, data.punishments)
 
     if data.ignored_roles is not None:
         await db.execute("DELETE FROM automod_ignored WHERE guild_id = ? AND type = 'role'", (guild_id,))
@@ -520,7 +526,11 @@ async def patch_guild_verification(guild_id: int, data: VerificationUpdate, requ
     actor = int(auth.user_id) if auth is not None else None
     current = await get_config(guild_id)
     enabling = data.enabled is True
-    disabling = data.enabled is False and current["enabled"]
+    disabling = data.enabled is False and bool(current.get("stored_enabled"))
+    if enabling and not current.get("can_enable"):
+        from cls_platform.verification.engine import VERIFICATION_ENABLE_BLOCK
+
+        raise HTTPException(status_code=409, detail=VERIFICATION_ENABLE_BLOCK)
     role_id = int(data.unverified_role_id) if getattr(data, "unverified_role_id", None) else (
         int(current["unverified_role_id"]) if current["unverified_role_id"] else None
     )
@@ -588,6 +598,11 @@ async def get_guild_vanityroles(guild_id: int):
 
 @router.post("/{guild_id}/vanityroles", summary="Add/Update a Vanity Role setup")
 async def post_guild_vanityroles(guild_id: int, data: VanityRoleSetup):
+    from cls_platform.vanity_safety import VANITY_UNAVAILABLE, vanity_automation_allowed
+
+    if not vanity_automation_allowed():
+        raise HTTPException(status_code=409, detail=VANITY_UNAVAILABLE)
+
     import aiosqlite
     
     async with aiosqlite.connect("db/vanity.db") as db:

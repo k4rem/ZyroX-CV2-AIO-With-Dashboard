@@ -40,7 +40,24 @@ def grace_deadline(now: datetime, grace_seconds: int) -> datetime:
     return now + timedelta(seconds=grace_seconds)
 
 
-def validate_enable(*, unverified_role_id: int | None, category_ids: list[int], bot_top: int, role_position: int | None) -> str:
+VERIFICATION_ENABLE_BLOCK = (
+    "Verification cannot be enabled until a verification message is published."
+)
+
+
+def verification_message_reachable(*, published_message_id, channel_id) -> bool:
+    """A channel choice is not a posted verify button. Joining members must be able to reach one."""
+    return bool(published_message_id and channel_id)
+
+
+def validate_enable(
+    *,
+    unverified_role_id: int | None,
+    category_ids: list[int],
+    bot_top: int,
+    role_position: int | None,
+    message_published: bool = False,
+) -> str:
     if not unverified_role_id:
         return "role_missing"
     if role_position is None:
@@ -49,4 +66,6 @@ def validate_enable(*, unverified_role_id: int | None, category_ids: list[int], 
         return "category_missing"
     if role_position >= bot_top:
         return "hierarchy"
+    if not message_published:
+        return "message_unpublished"
     return "ok"

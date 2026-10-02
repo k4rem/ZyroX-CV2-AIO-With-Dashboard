@@ -13,12 +13,12 @@
 # ╚══════════════════════════════════════════════════════════════════╝
 
 import discord
-from utils.emoji import TICK
 from discord.ext import commands
 import aiosqlite
 import re
-from datetime import timedelta
 import asyncio
+
+from cls_platform.automod_compat import enforce, rule_action
 
 class AntiEmojiSpam(commands.Cog):
     def __init__(self, bot):
@@ -82,7 +82,8 @@ class AntiEmojiSpam(commands.Cog):
         channel = message.channel
         guild_id = guild.id
 
-        if not await self.is_automod_enabled(guild_id) or not await self.is_anti_emoji_spam_enabled(guild_id):
+        action = await rule_action(guild_id, "anti_emoji_spam")
+        if not await self.is_automod_enabled(guild_id) or not action:
             return
 
         if user == guild.owner or user == self.bot.user:
@@ -120,39 +121,14 @@ class AntiEmojiSpam(commands.Cog):
         emoji_count = len(emoji_pattern.findall(message.content))
 
         if emoji_count > self.emoji_threshold:
-            punishment = await self.get_punishment(guild_id)
-            action_taken = None
-            reason = f"Emoji Spam ({emoji_count} emojis)"
-
-            try:
-                if punishment == "Mute":
-                    timeout_duration = discord.utils.utcnow() + timedelta(minutes=1)
-                    await user.edit(timed_out_until=timeout_duration, reason=reason)
-                    action_taken = "Muted for 1 minute"
-                elif punishment == "Kick":
-                    await user.kick(reason=reason)
-                    action_taken = "Kicked"
-                elif punishment == "Ban":
-                    await user.ban(reason=reason)
-                    action_taken = "Banned"
-
-                await message.delete()
-                
-                simple_embed = discord.Embed(title="Automod Anti Emoji Spam", color=0xFF0000)
-                simple_embed.description = f"{TICK} | {user.mention} has been successfully **{action_taken}** for **Spamming Emojis.**"
-                
-                simple_embed.set_footer(text="Use the “automod logging” command to get automod logs if it is not enabled.", icon_url=self.bot.user.avatar.url)
-                await channel.send(embed=simple_embed, delete_after=30)
-
-                
-                await self.log_action(guild, user, channel, action_taken, reason)
-
-            except discord.Forbidden:
-                pass
-            except discord.HTTPException:
-                pass
-            except Exception:
-                pass
+            await enforce(
+                self.bot,
+                message,
+                rule="anti_emoji_spam",
+                action=action,
+                reason=f"Emoji Spam ({emoji_count} emojis)",
+                messages=[message],
+            )
 
     @commands.Cog.listener()
     async def on_rate_limit(self, message):

@@ -12,7 +12,13 @@ from cls_platform.database import session_scope
 from cls_platform.discord_types import snowflake_to_str
 from cls_platform.models import Base
 from cls_platform.services.audit import record_audit
-from cls_platform.verification.engine import grace_deadline, plan_member, validate_enable
+from cls_platform.verification.engine import (
+    VERIFICATION_ENABLE_BLOCK,
+    grace_deadline,
+    plan_member,
+    validate_enable,
+    verification_message_reachable,
+)
 
 
 class VerificationConfigRow(Base):
@@ -52,9 +58,15 @@ class VerificationOverwriteBackup(Base):
 
 
 def _public(row: VerificationConfigRow, counts: dict) -> dict:
+    reachable = verification_message_reachable(
+        published_message_id=getattr(row, "published_message_id", None),
+        channel_id=row.channel_id,
+    )
     return {
         "guild_id": snowflake_to_str(row.guild_id),
-        "enabled": row.enabled,
+        "enabled": bool(row.enabled and reachable),
+        "can_enable": reachable,
+        "stored_enabled": bool(row.enabled),
         "unverified_role_id": snowflake_to_str(row.unverified_role_id) if row.unverified_role_id else None,
         "verified_role_id": snowflake_to_str(row.verified_role_id) if row.verified_role_id else None,
         "channel_id": snowflake_to_str(row.channel_id) if row.channel_id else None,
@@ -93,6 +105,11 @@ async def get_config(guild_id: int) -> dict:
 
 
 async def save_config(*, guild_id: int, actor_id: int | None, fields: dict, gate_check: str) -> dict:
+    if fields.get("enabled") is True and not verification_message_reachable(
+        published_message_id=fields.get("published_message_id"),
+        channel_id=fields.get("channel_id"),
+    ):
+        raise ValueError(VERIFICATION_ENABLE_BLOCK)
     if fields.get("enabled") and gate_check != "ok":
         raise ValueError(gate_check)
     async with session_scope() as session:
@@ -143,8 +160,12 @@ async def observe_member(
     async with session_scope() as session:
         config = await session.get(VerificationConfigRow, guild_id)
         member = await session.get(VerificationMemberRow, (guild_id, user_id))
+        reachable = verification_message_reachable(
+            published_message_id=getattr(config, "published_message_id", None) if config else None,
+            channel_id=config.channel_id if config else None,
+        )
         decision = plan_member(
-            enabled=bool(config and config.enabled),
+            enabled=bool(config and config.enabled and reachable),
             user_id=user_id,
             owner_id=owner_id,
             root_ids=root_ids,
