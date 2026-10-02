@@ -1,19 +1,15 @@
 import React from "react";
-import dynamic from "next/dynamic";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { RoleAutomation } from "@/components/dashboard/role-automation";
 import { api } from "@/lib/api";
 
-const AutoRoleForm = dynamic(() => import("@/components/dashboard/autorole-form").then((mod) => mod.AutoRoleForm), {
-  loading: () => <div className="h-24 w-full animate-pulse rounded-md bg-surface-2" />,
-});
-
 export default async function AutoRolePage({ params }: { params: { guildId: string } }) {
-  const [config, roles] = await Promise.all([api.getAutoRole(params.guildId), api.getRoles(params.guildId)]);
+  const [config, roles] = await Promise.all([api.getRoleAutomation(params.guildId), api.getRoles(params.guildId)]);
 
   return (
     <div>
-      <PageHeader title="Auto roles" description="Roles assigned when someone joins this server." />
-      <AutoRoleForm initialConfig={config} roles={roles} guildId={params.guildId} />
+      <PageHeader title="Role Automation" description="Join roles and rules that add or remove roles when something happens." />
+      <RoleAutomation guildId={params.guildId} join={config.join} rules={config.rules || []} roles={roles} />
     </div>
   );
 }

@@ -186,7 +186,7 @@ export async function loadOverview(opts: {
     settled(api.getWelcome(guildId)),
     settled(api.getJ2C(guildId)),
     settled(api.getLoggingV2(guildId)),
-    settled(api.getAutoRole(guildId)),
+    settled(api.getRoleAutomation(guildId)),
     settled(api.getRoleMenus(guildId)),
     settled(api.getChannels(guildId)),
     settled(api.getPrefix(guildId)),
@@ -376,20 +376,21 @@ export async function loadOverview(opts: {
   } else modules.push(unavailableRow("j2c", "Join to Create", "engagement", `${base}/j2c`));
 
   if (autoroleRes.ok) {
-    const humans = autoroleRes.value.humans?.length ?? 0;
-    const bots = autoroleRes.value.bots?.length ?? 0;
-    const on = humans + bots > 0;
+    const humans = autoroleRes.value.join?.member_role_ids?.length ?? 0;
+    const bots = autoroleRes.value.join?.bot_role_ids?.length ?? 0;
+    const rules = autoroleRes.value.rules?.length ?? 0;
+    const on = humans + bots + rules > 0;
     modules.push({
       key: "autorole",
-      name: "Auto roles",
+      name: "Role Automation",
       domain: "engagement",
       status: on ? "online" : "disabled",
       statusLabel: on ? "On" : "Off",
       bucket: on ? "on" : "off",
-      detail: on ? `${plural(humans, "member role")} · ${plural(bots, "bot role")}` : "No roles assigned on join",
+      detail: on ? `${plural(humans, "member role")} · ${plural(bots, "bot role")} · ${plural(rules, "rule")}` : "No join roles or rules yet",
       href: `${base}/autorole`,
     });
-  } else modules.push(unavailableRow("autorole", "Auto roles", "engagement", `${base}/autorole`));
+  } else modules.push(unavailableRow("autorole", "Role Automation", "engagement", `${base}/autorole`));
 
   if (rrRes.ok) {
     const list = rrRes.value?.menus ?? [];

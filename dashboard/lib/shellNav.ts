@@ -144,11 +144,11 @@ export const NAV_ITEMS: NavItemDef[] = [
   },
   {
     id: "autorole",
-    label: "Auto roles",
+    label: "Role Automation",
     icon: "autorole",
     group: "engagement",
     scope: "guild",
-    routes: [{ path: "/autorole", label: "Auto roles" }],
+    routes: [{ path: "/autorole", label: "Role Automation" }],
   },
   {
     id: "reactionroles",
@@ -323,7 +323,7 @@ export function parseDashboardPath(pathname: string): ParsedPath {
  */
 export function isFluidRoute(pathname: string): boolean {
   const { guildId, subpath } = parseDashboardPath(pathname);
-  return guildId !== null && (subpath === "" || subpath === "/tickets" || subpath.startsWith("/tickets/") || subpath === "/reactionroles" || subpath.startsWith("/reactionroles/"));
+  return guildId !== null && (subpath === "" || subpath === "/tickets" || subpath.startsWith("/tickets/") || subpath === "/reactionroles" || subpath.startsWith("/reactionroles/") || subpath === "/autorole" || subpath.startsWith("/autorole/"));
 }
 
 export function guildBase(guildId: string): string {

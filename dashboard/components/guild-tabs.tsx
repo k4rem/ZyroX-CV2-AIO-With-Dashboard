@@ -73,7 +73,7 @@ export function GuildTabs({ guildId }: { guildId: string }) {
     { name: "Verification", href: `/dashboard/guild/${guildId}/verification`, icon: Shield },
     { name: "Welcome", href: `/dashboard/guild/${guildId}/welcome`, icon: SmilePlus },
     { name: "Invites", href: `/dashboard/guild/${guildId}/invites`, icon: LinkIcon },
-    { name: "Auto Role", href: `/dashboard/guild/${guildId}/autorole`, icon: Bot },
+    { name: "Role Automation", href: `/dashboard/guild/${guildId}/autorole`, icon: Bot },
     { name: "Role Menus", href: `/dashboard/guild/${guildId}/reactionroles`, icon: Activity },
     { name: "Join to Create", href: `/dashboard/guild/${guildId}/j2c`, icon: Mic },
     { name: "Voice Role", href: `/dashboard/guild/${guildId}/invcrole`, icon: Volume2 },

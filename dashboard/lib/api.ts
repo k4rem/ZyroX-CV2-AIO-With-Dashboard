@@ -244,6 +244,12 @@ export const api = {
       method: "DELETE",
     }),
 
+  getRoleAutomation: (guildId: string) => request<{ join: any; rules: any[]; bot_position?: number }>(`/guilds/${guildId}/autorole/v2`),
+  saveJoinRoles: (guildId: string, data: any) => request<any>(`/guilds/${guildId}/autorole/v2/join`, { method: "PUT", body: JSON.stringify(data) }),
+  createRoleRule: (guildId: string, data: any) => request<any>(`/guilds/${guildId}/autorole/v2/rules`, { method: "POST", body: JSON.stringify(data) }),
+  updateRoleRule: (guildId: string, ruleId: string, data: any) => request<any>(`/guilds/${guildId}/autorole/v2/rules/${ruleId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  duplicateRoleRule: (guildId: string, ruleId: string) => request<any>(`/guilds/${guildId}/autorole/v2/rules/${ruleId}/duplicate`, { method: "POST" }),
+  deleteRoleRule: (guildId: string, ruleId: string) => request<any>(`/guilds/${guildId}/autorole/v2/rules/${ruleId}`, { method: "DELETE" }),
   getAutoRole: (guildId: string) => request<AutoRoleConfig>(`/guilds/${guildId}/autorole`),
   updateAutoRole: (guildId: string, data: AutoRoleUpdate) =>
     request<{ status: string }>(`/guilds/${guildId}/autorole`, {
