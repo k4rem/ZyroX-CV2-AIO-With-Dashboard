@@ -192,6 +192,18 @@ class Mute(commands.Cog):
             dm_status = "No"
 
         await user.edit(timed_out_until=discord.utils.utcnow() + time_delta, reason=f"Muted by {ctx.author} for {duration_text}. Reason: {reason or 'None'}")
+        from cls_platform.logging.publish import log_moderation_command
+
+        await log_moderation_command(
+            guild_id=ctx.guild.id,
+            command="timeout",
+            moderator_id=ctx.author.id,
+            target_id=user.id,
+            reason=reason,
+            duration=duration_text,
+            moderator_name=ctx.author.display_name,
+            target_name=user.display_name,
+        )
 
 
         embed = discord.Embed(description=f"**{TICK} | Successfully Muted [{user}](https://discord.com/users/{user.id}) For {duration_text}\nReason {reason}**",

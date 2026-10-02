@@ -109,6 +109,17 @@ class Ban(commands.Cog):
 
         # Ban the user
         await ctx.guild.ban(user, reason=f"Ban requested by {ctx.author} for reason: {reason or 'No reason provided'}")
+        from cls_platform.logging.publish import log_moderation_command
+
+        await log_moderation_command(
+            guild_id=ctx.guild.id,
+            command="ban",
+            moderator_id=ctx.author.id,
+            target_id=user.id,
+            reason=reason,
+            moderator_name=ctx.author.display_name,
+            target_name=getattr(user, "display_name", None) or user.name,
+        )
 
         # Success container with Components V2
         container = ui.Container()

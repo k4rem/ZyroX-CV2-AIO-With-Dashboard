@@ -11,7 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from cls_platform.database import session_scope
 from cls_platform.discord_types import snowflake_to_str
-from cls_platform.logging.pipeline import resolve_delivery
+from cls_platform.logging.pipeline import NOISY_DEFAULT_OFF, resolve_delivery
 from cls_platform.logging.present import TITLES, present
 from cls_platform.logging.redact import redact
 from cls_platform.logging.render import FOOTER_MODES, STYLES, default_appearance
@@ -109,6 +109,8 @@ class LogAppearance(Base):
     footer_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="cls")
     footer_text: Mapped[str | None] = mapped_column(String(80), nullable=True)
     colors: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    event_styles: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    ignore_scope: Mapped[str] = mapped_column(String(16), nullable=False, default="messages")
 
 
 class LoggingError(ValueError):
@@ -258,8 +260,15 @@ async def list_events(
     until: datetime | None = None,
     cursor: str | None = None,
     limit: int = 50,
+    page: int | None = None,
+    page_size: int | None = None,
+    confidence: str | None = None,
 ) -> dict:
-    limit = max(1, min(limit, 100))
+    numbered = page is not None
+    if numbered:
+        limit = page_size if page_size in {25, 50, 100} else 25
+    else:
+        limit = max(1, min(limit, 100))
     async with session_scope() as session:
         stmt = select(LogEvent).where(LogEvent.guild_id == guild_id)
         if category:
@@ -285,10 +294,31 @@ async def list_events(
                     + LogEvent.event_type
                 )
                 stmt = stmt.where(blob.contains(needle))
+        if confidence in CONFIDENCE:
+            stmt = stmt.where(LogEvent.actor_confidence == confidence)
         if since:
             stmt = stmt.where(LogEvent.occurred_at >= since)
         if until:
             stmt = stmt.where(LogEvent.occurred_at <= until)
+        if numbered:
+            total = int((await session.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one())
+            current = max(1, int(page or 1))
+            pages = max(1, (total + limit - 1) // limit) if total else 1
+            if current > pages:
+                current = pages
+            rows = (
+                await session.execute(
+                    stmt.order_by(LogEvent.occurred_at.desc(), LogEvent.id.desc()).offset((current - 1) * limit).limit(limit)
+                )
+            ).scalars().all()
+            return {
+                "events": [_with_presentation(_event_dict(row)) for row in rows],
+                "next_cursor": None,
+                "total": total,
+                "page": current,
+                "pages": pages,
+                "page_size": limit,
+            }
         if cursor:
             stamp, raw_id = cursor.split("|", 1)
             moment = datetime.fromisoformat(stamp)
@@ -475,6 +505,8 @@ def _appearance_dict(row: LogAppearance | None) -> dict:
         "footer_mode": row.footer_mode if row.footer_mode in FOOTER_MODES else "cls",
         "footer_text": row.footer_text,
         "colors": {str(key): value for key, value in colors.items() if isinstance(value, str)},
+        "event_styles": row.event_styles if isinstance(getattr(row, "event_styles", None), dict) else {},
+        "ignore_scope": row.ignore_scope if getattr(row, "ignore_scope", None) in {"messages", "all"} else "messages",
     }
 
 
@@ -497,7 +529,7 @@ async def set_event_route(*, guild_id: int, event_type: str, mode: str, channel_
     if mode != "custom":
         channel_id = None
     async with session_scope() as session:
-        if mode == "inherit":
+        if mode == "inherit" and event_type not in NOISY_DEFAULT_OFF:
             await session.execute(
                 delete(LogEventRoute).where(LogEventRoute.guild_id == guild_id, LogEventRoute.event_type == event_type)
             )
@@ -508,17 +540,23 @@ async def set_event_route(*, guild_id: int, event_type: str, mode: str, channel_
                 session.add(row)
             row.mode = mode
             row.channel_id = channel_id
-    return {"event_type": event_type, "mode": mode, "channel_id": _sid(channel_id)}
+    return {
+        "event_type": event_type,
+        "mode": mode,
+        "channel_id": _sid(channel_id),
+        "kept": event_type in NOISY_DEFAULT_OFF,
+    }
 
 
 async def delivery_target(guild_id: int, category: str, event_type: str) -> dict:
     async with session_scope() as session:
         route = await session.get(LogRoute, (guild_id, category))
         event = await session.get(LogEventRoute, (guild_id, event_type))
+    default_mode = "disabled" if event is None and event_type in NOISY_DEFAULT_OFF else "inherit"
     decision = resolve_delivery(
         category_enabled=bool(route and route.enabled),
         category_channel_id=route.channel_id if route else None,
-        mode=event.mode if event else "inherit",
+        mode=event.mode if event else default_mode,
         event_channel_id=event.channel_id if event else None,
     )
     channel = decision["channel_id"]
@@ -562,5 +600,29 @@ async def set_appearance(guild_id: int, patch: dict) -> dict:
                     raise LoggingError("invalid_color")
                 colors[key] = value.lower()
             row.colors = colors
+        if "ignore_scope" in patch:
+            scope = str(patch["ignore_scope"])
+            if scope not in {"messages", "all"}:
+                raise LoggingError("unknown_ignore_scope")
+            row.ignore_scope = scope
+        if "event_styles" in patch and isinstance(patch["event_styles"], dict):
+            styles = dict(row.event_styles or {})
+            for key, value in patch["event_styles"].items():
+                if key not in TITLES or not isinstance(value, dict):
+                    raise LoggingError("invalid_event_style")
+                item = {"use_default": bool(value.get("use_default", True))}
+                color = value.get("color")
+                if color:
+                    if not isinstance(color, str) or not _valid_color(color):
+                        raise LoggingError("invalid_color")
+                    item["color"] = color.lower()
+                title = value.get("title")
+                if title:
+                    item["title"] = str(title)[:80]
+                icon = value.get("icon")
+                if icon in {"plus", "minus", "edit", "shield", "none"}:
+                    item["icon"] = icon
+                styles[str(key)] = item
+            row.event_styles = styles
         await session.flush()
         return _appearance_dict(row)

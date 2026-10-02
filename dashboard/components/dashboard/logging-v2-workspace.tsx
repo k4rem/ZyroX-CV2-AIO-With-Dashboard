@@ -1,18 +1,20 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Hash, MessageSquare, Mic, Settings, Shield, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { LoggingAppearancePanel, type Appearance } from "@/components/dashboard/logging-appearance-panel";
 import { LoggingRoutingPanel } from "@/components/dashboard/logging-routing-panel";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { DataTable } from "@/components/platform/data-table";
+import { DetailsDrawer } from "@/components/platform/details-drawer";
+import { HealthBadge } from "@/components/platform/health";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
+import type { PageSize } from "@/lib/pagination";
 
 const LABELS: Record<string, string> = {
   message_events: "Messages",
@@ -65,12 +67,20 @@ type Presentation = {
   changes?: Array<{ label: string; value: string }>;
   jump_url?: string | null;
   identifiers?: string[];
+  attribution?: string;
+  source_line?: string;
+  source_module?: string | null;
 };
 type EventRow = {
   id: string;
   category: string;
   event_type: string;
   occurred_at: string;
+  actor_id?: string | null;
+  target_id?: string | null;
+  channel_id?: string | null;
+  actor_confidence?: string;
+  metadata?: Record<string, unknown>;
   before?: { content?: string; roles?: Entity[] } | null;
   after?: { content?: string; roles?: Entity[] } | null;
   presentation?: Presentation;
@@ -81,6 +91,11 @@ type Home = {
   routes: RouteRow[];
   events: EventRow[];
   next_cursor: string | null;
+  total?: number;
+  page?: number;
+  pages?: number;
+  page_size?: number;
+  health?: { view_audit_log?: boolean | null; attribution?: string; note?: string | null; recent_failures?: string[] };
   event_types?: Array<{ id: string; label: string; category: string }>;
   groups?: Array<{ category: string; label: string; events: Array<{ id: string; label: string }> }>;
   event_routes?: Array<{ event_type: string; mode: string; channel_id: string | null }>;
@@ -98,6 +113,8 @@ const DEFAULT_APPEARANCE: Appearance = {
   footer_mode: "cls",
   footer_text: null,
   colors: {},
+  event_styles: {},
+  ignore_scope: "messages",
 };
 
 function eventTitle(row: EventRow) {
@@ -119,19 +136,7 @@ function subjectOf(row: EventRow) {
 }
 
 function headline(row: EventRow) {
-  const name = subjectOf(row);
-  const type = row.event_type;
-  if (type === "message_edit") return `${name} edited a message`;
-  if (type === "message_delete") return `${name}'s message was deleted`;
-  if (type === "message_bulk_delete") return "Messages were deleted";
-  if (type === "member_roles") return `${name}'s roles changed`;
-  if (type === "member_join") return `${name} joined`;
-  if (type === "member_leave") return `${name} left`;
-  if (type === "member_kick") return `${name} was kicked`;
-  if (type === "member_ban") return `${name} was banned`;
-  if (type === "voice_join") return `${name} joined voice`;
-  if (type === "voice_leave") return `${name} left voice`;
-  if (type === "voice_move") return `${name} moved voice channels`;
+  if (row.presentation?.summary) return row.presentation.summary;
   return eventTitle(row);
 }
 
@@ -145,22 +150,12 @@ function relativeTime(iso: string) {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-function EventIcon({ category }: { category: string }) {
-  const className = "size-3.5 text-fg-3";
-  if (category === "message_events") return <MessageSquare className={className} aria-hidden />;
-  if (category === "voice_events") return <Mic className={className} aria-hidden />;
-  if (category === "channel_events") return <Hash className={className} aria-hidden />;
-  if (category === "guild_events" || category === "bot_actions") return <Settings className={className} aria-hidden />;
-  if (category === "role_events") return <Shield className={className} aria-hidden />;
-  return <UserRound className={className} aria-hidden />;
-}
-
 function Avatar({ entity }: { entity?: Entity | null }) {
   const name = personName(entity) || "Unknown member";
   if (entity?.avatar_url) {
     // Discord avatar hosts are not in the image allowlist.
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={entity.avatar_url} alt="" className="size-8 rounded-full object-cover" />;
+    return <img src={entity.avatar_url} alt="" draggable={false} className="size-8 rounded-full object-cover" />;
   }
   return <span className="grid size-8 place-items-center rounded-full bg-bg-2 text-caption text-fg-2">{name.slice(0, 1).toUpperCase()}</span>;
 }
@@ -171,12 +166,14 @@ export function LoggingV2Workspace({
   channels,
   roles,
   initialTab = "activity",
+  initialError = null,
 }: {
   guildId: string;
   initial: Home;
   channels: Array<{ id: string; name: string; type?: string | number }>;
   roles: Array<{ id: string; name: string; color?: number }>;
   initialTab?: string;
+  initialError?: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -191,6 +188,10 @@ export function LoggingV2Workspace({
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
   const [detail, setDetail] = useState<EventRow | null>(null);
+  const [page, setPage] = useState(initial.page || 1);
+  const [pageSize, setPageSize] = useState<PageSize>((initial.page_size as PageSize) || 25);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(initialError);
   const [routes, setRoutes] = useState(initial.routes);
   const [eventRoutes, setEventRoutes] = useState(initial.event_routes ?? []);
   const [appearance, setAppearance] = useState<Appearance>(initial.appearance ?? DEFAULT_APPEARANCE);
@@ -206,21 +207,33 @@ export function LoggingV2Workspace({
     router.replace(next === "activity" ? pathname : `${pathname}?tab=${next}`);
   };
 
-  const load = async (cursor?: string | null) => {
+  const load = async (nextPage = 1, nextSize: PageSize = pageSize) => {
     const params = new URLSearchParams();
+    params.set("page", String(nextPage));
+    params.set("page_size", String(nextSize));
     if (category) params.set("category", category);
     if (eventType) params.set("event_type", eventType);
     if (memberId) params.set("member_id", memberId);
     else if (search.trim()) params.set("q", search.trim());
     if (since) params.set("since", new Date(since).toISOString());
     if (until) params.set("until", new Date(until).toISOString());
-    if (cursor) params.set("cursor", cursor);
-    const next = await api.getLoggingV2(guildId, params.size ? `?${params.toString()}` : "");
-    setData(next);
-    setRoutes(next.routes);
-    setEventRoutes(next.event_routes ?? []);
-    if (next.appearance) setAppearance(next.appearance);
-    setDetail(null);
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const next = await api.getLoggingV2(guildId, `?${params.toString()}`);
+      setData(next);
+      setRoutes(next.routes ?? []);
+      setEventRoutes(next.event_routes ?? []);
+      setPage(next.page || nextPage);
+      setPageSize(nextSize);
+      if (next.appearance) setAppearance(next.appearance);
+      setDetail(null);
+      router.replace(`${pathname}?${params.toString()}`);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Logging could not be loaded");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const lookup = async (value: string) => {
@@ -258,6 +271,16 @@ export function LoggingV2Workspace({
         ))}
       </div>
 
+      {tab === "activity" && data.health?.note ? (
+        <p className="flex items-center gap-2 text-small text-fg-2" role="status">
+          <HealthBadge status="warning" />
+          <span>{data.health.note}</span>
+        </p>
+      ) : null}
+      {tab === "activity" && data.health?.recent_failures?.length ? (
+        <p className="text-small text-fg-2" role="status">Delivery issue · {data.health.recent_failures[0]}</p>
+      ) : null}
+
       {tab === "activity" ? (
         <Activity
           data={data}
@@ -280,6 +303,13 @@ export function LoggingV2Workspace({
           setUntil={setUntil}
           dateLabel={dateLabel}
           load={load}
+          page={page}
+          pages={data.pages || 1}
+          pageSize={pageSize}
+          total={data.total || data.events.length}
+          loading={loading}
+          error={loadError}
+          guildId={guildId}
           clearFilters={() => {
             setCategory("");
             setEventType("");
@@ -314,7 +344,7 @@ export function LoggingV2Workspace({
               const saved = await api.updateLoggingEventRoute(guildId, eventType, { mode, channel_id: channelId });
               setEventRoutes((current) => {
                 const rest = current.filter((item) => item.event_type !== eventType);
-                return saved.mode === "inherit" ? rest : [...rest, saved];
+                return saved.mode === "inherit" && !saved.kept ? rest : [...rest, saved];
               });
             } catch (error) {
               toast.error(error instanceof Error ? error.message : "Could not save the event route");
@@ -352,6 +382,13 @@ export function LoggingV2Workspace({
             }
           }}
           onSearchMembers={async (query) => (await api.searchLoggingMembers(guildId, query)).members ?? []}
+          ignoreScope={appearance.ignore_scope || "messages"}
+          onIgnoreScope={(scope) => {
+            setAppearance((current) => ({ ...current, ignore_scope: scope }));
+            void api.updateLoggingAppearance(guildId, { ignore_scope: scope }).then(setAppearance).catch((error) => {
+              toast.error(error instanceof Error ? error.message : "Could not save exclusions");
+            });
+          }}
         />
       ) : null}
 
@@ -359,7 +396,12 @@ export function LoggingV2Workspace({
         <LoggingAppearancePanel
           appearance={appearance}
           onChange={async (patch) => {
-            setAppearance((current) => ({ ...current, ...patch, colors: patch.colors ? { ...current.colors, ...patch.colors } : current.colors }));
+            setAppearance((current) => ({
+              ...current,
+              ...patch,
+              colors: patch.colors ? { ...current.colors, ...patch.colors } : current.colors,
+              event_styles: patch.event_styles ? { ...current.event_styles, ...patch.event_styles } : current.event_styles,
+            }));
             try {
               const saved = await api.updateLoggingAppearance(guildId, patch);
               setAppearance(saved);
@@ -393,14 +435,21 @@ function Activity(props: {
   setSince: (value: string) => void;
   setUntil: (value: string) => void;
   dateLabel: string;
-  load: (cursor?: string | null) => Promise<void>;
+  load: (page?: number, pageSize?: PageSize) => Promise<void>;
+  page: number;
+  pages: number;
+  pageSize: PageSize;
+  total: number;
+  loading: boolean;
+  error: string | null;
+  guildId: string;
   clearFilters: () => void;
 }) {
   const { data, detail, setDetail } = props;
   return (
-    <section className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <div>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
+    <section className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="min-w-0">
+        <div className="mb-3 flex max-w-full flex-wrap items-center gap-2">
           <Select className="w-40" value={props.category} onValueChange={(value) => { props.setCategory(value); props.setEventType(""); }} options={[{ value: "", label: "All categories" }, ...Object.entries(LABELS).map(([value, label]) => ({ value, label }))]} placeholder="Category" />
           <Select className="w-44" value={props.eventType} onValueChange={props.setEventType} options={[{ value: "", label: "All events" }, ...props.typeOptions.map((item) => ({ value: item.id, label: item.label }))]} placeholder="Event" />
           <div className="relative w-52">
@@ -445,163 +494,161 @@ function Activity(props: {
               <Button type="button" variant="secondary" onClick={props.clearFilters}>Clear filters</Button>
             </PopoverContent>
           </Popover>
-          <Button type="button" variant="secondary" onClick={() => void props.load()}>Filter</Button>
+          <Button type="button" variant="secondary" onClick={() => void props.load(1, props.pageSize)}>Filter</Button>
+          <Button type="button" variant="secondary" onClick={() => void exportEvents(props.guildId, props.category, props.eventType, props.memberId, props.search)}>Export JSON</Button>
         </div>
-        {data.events.length === 0 ? (
-          <p className="text-small text-fg-3">No events match these filters.</p>
-        ) : (
-          <ul className="divide-y divide-line-subtle border-y border-line-subtle">
-            {data.events.map((row) => {
-              const shown = row.presentation;
-              const who = shown?.target || shown?.actor;
-              const actor = personName(shown?.actor);
-              const same = shown?.actor?.id && shown.actor.id === shown?.target?.id;
-              const channel = shown?.channel?.name ? `#${shown.channel.name}` : null;
-              const meta = row.event_type.startsWith("message")
-                ? [channel, relativeTime(row.occurred_at)]
-                : [actor && !same ? `by ${actor}` : null, channel, relativeTime(row.occurred_at)];
-              const selected = detail?.id === row.id;
-              return (
-                <li key={row.id}>
-                  <button
-                    type="button"
-                    className={`grid w-full grid-cols-[2rem_minmax(0,1fr)] items-start gap-2 px-1 py-2 text-start ${selected ? "border-s-2 border-brand-400 bg-bg-2" : ""}`}
-                    onClick={() => setDetail(row)}
-                  >
-                    <Avatar entity={who} />
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-1.5">
-                        <EventIcon category={row.category} />
-                        <span className="truncate text-small text-fg-1">{headline(row)}</span>
-                      </span>
-                      <span className="block truncate text-caption text-fg-3" suppressHydrationWarning>{meta.filter(Boolean).join(" · ")}</span>
-                      {shown?.change_line ? <span className="mt-0.5 block truncate text-caption text-fg-1">{shown.change_line}</span> : null}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {data.next_cursor ? (
-          <Button type="button" variant="secondary" className="mt-3" onClick={() => void props.load(data.next_cursor)}>Older</Button>
-        ) : null}
+        <DataTable
+          rows={props.error ? [] : data.events}
+          columns={[
+            {
+              key: "what",
+              header: "What happened",
+              cell: (row) => (
+                <span className="flex items-start gap-2">
+                  <Avatar entity={row.presentation?.target || row.presentation?.actor} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-fg-1">{headline(row)}</span>
+                    <span className="block truncate text-caption text-fg-3">{row.presentation?.change_line}</span>
+                  </span>
+                </span>
+              ),
+            },
+            {
+              key: "who",
+              header: "Who",
+              cell: (row) => <span className="text-fg-2">{row.presentation?.source_line || personName(row.presentation?.actor) || "Actor unknown"}</span>,
+            },
+            {
+              key: "when",
+              header: "When",
+              cell: (row) => <span className="text-fg-3" suppressHydrationWarning>{relativeTime(row.occurred_at)}</span>,
+            },
+          ]}
+          getRowId={(row) => row.id}
+          page={props.page}
+          pages={props.pages}
+          pageSize={props.pageSize}
+          total={props.total}
+          loading={props.loading}
+          error={props.error}
+          onRetry={() => void props.load(props.page, props.pageSize)}
+          onPageChange={(next) => void props.load(next, props.pageSize)}
+          onPageSizeChange={(size) => void props.load(1, size)}
+          selectedId={detail?.id}
+          onSelect={(id) => setDetail(data.events.find((row) => row.id === id) || null)}
+          emptyTitle="No events"
+          emptyDescription="No events match these filters."
+        />
       </div>
-      <Detail detail={detail} onClose={() => setDetail(null)} />
+      <EventDrawer detail={detail} onClose={() => setDetail(null)} />
     </section>
   );
 }
 
-function useNarrow() {
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 1023px)");
-    const apply = () => setNarrow(query.matches);
-    apply();
-    query.addEventListener("change", apply);
-    return () => query.removeEventListener("change", apply);
-  }, []);
-  return narrow;
+async function exportEvents(guildId: string, category: string, eventType: string, memberId: string, search: string) {
+  const params = new URLSearchParams();
+  if (category) params.set("category", category);
+  if (eventType) params.set("event_type", eventType);
+  if (memberId) params.set("member_id", memberId);
+  else if (search.trim()) params.set("q", search.trim());
+  const payload = await api.getLoggingV2(guildId, `/export${params.size ? `?${params.toString()}` : ""}`);
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "logging-events.json";
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
-function Detail({ detail, onClose }: { detail: EventRow | null; onClose: () => void }) {
-  const narrow = useNarrow();
-  const panel = detail ? <DetailBody detail={detail} /> : <p className="text-small text-fg-3">Select an event.</p>;
-  if (narrow) {
-    return (
-      <Dialog open={Boolean(detail)} onOpenChange={(open) => { if (!open) onClose(); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Event</DialogTitle>
-          </DialogHeader>
-          <DialogBody>{detail ? <DetailBody detail={detail} /> : null}</DialogBody>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-  return <aside className="border border-line-subtle p-3">{panel}</aside>;
-}
-
-function DetailBody({ detail }: { detail: EventRow }) {
-  const view = detail.presentation;
-  const who = view?.target || view?.actor;
-  const added = (view?.changes ?? []).find((change) => change.label === "Roles added");
-  const removed = (view?.changes ?? []).find((change) => change.label === "Roles removed");
-  const before = detail.before?.content;
-  const after = detail.after?.content;
-  const message = detail.event_type === "message_edit" || detail.event_type === "message_delete";
+function EventDrawer({ detail, onClose }: { detail: EventRow | null; onClose: () => void }) {
+  const view = detail?.presentation;
+  const changes = (view?.changes ?? []).filter((change) => change.label !== "Jump to message");
+  const copy = (value: string) => void navigator.clipboard.writeText(value);
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Avatar entity={who} />
-        <div className="min-w-0">
-          <h2 className="truncate text-small font-medium text-fg-1">{subjectOf(detail)}</h2>
-          <p className="text-small text-fg-2">{eventTitle(detail)}</p>
-          <p className="text-caption text-fg-3" suppressHydrationWarning>
-            {view?.channel?.name ? `#${view.channel.name} · ` : ""}
-            {relativeTime(detail.occurred_at)}
-          </p>
-        </div>
-      </div>
-      {message ? (
-        <div className="space-y-2">
-          {before !== undefined ? (
-            <div>
-              <p className="text-caption text-fg-3">Before</p>
-              <p className="whitespace-pre-wrap text-small text-fg-1">{before || "—"}</p>
+    <DetailsDrawer
+      open={Boolean(detail)}
+      onOpenChange={(open) => { if (!open) onClose(); }}
+      title={detail ? headline(detail) : "Event"}
+      summary={null}
+      sections={detail ? [
+        {
+          id: "summary",
+          label: "Summary",
+          content: (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Avatar entity={view?.target || view?.actor} />
+                <div>
+                  <p className="text-fg-1">{subjectOf(detail)}</p>
+                  <p className="text-caption text-fg-3" suppressHydrationWarning>{relativeTime(detail.occurred_at)}</p>
+                </div>
+              </div>
+              <p className="text-fg-1">{view?.summary}</p>
+              <p className="text-caption text-fg-3">{view?.source_line}</p>
             </div>
-          ) : null}
-          {after !== undefined ? (
-            <div>
-              <p className="text-caption text-fg-3">After</p>
-              <p className="whitespace-pre-wrap text-small text-fg-1">{after || "—"}</p>
+          ),
+        },
+        {
+          id: "changes",
+          label: "Changes",
+          content: changes.length ? (
+            <div className="space-y-2">
+              {changes.map((change) => (
+                <div key={`${change.label}-${change.value}`}>
+                  <p className="text-caption text-fg-3">{change.label}</p>
+                  <p className="whitespace-pre-wrap text-fg-1">{change.value}</p>
+                </div>
+              ))}
             </div>
-          ) : null}
-          {view?.jump_url ? (
-            <a className="inline-block border border-line px-2 py-1 text-caption text-fg-1" href={view.jump_url} target="_blank" rel="noreferrer">
-              View message
-            </a>
-          ) : null}
-        </div>
-      ) : null}
-      {added || removed ? (
-        <div className="space-y-2">
-          {added ? <Chips label="Roles added" value={added.value} /> : null}
-          {removed ? <Chips label="Roles removed" value={removed.value} /> : null}
-        </div>
-      ) : null}
-      {(view?.changes ?? [])
-        .filter((change) => !["Roles added", "Roles removed", "Before", "After", "Jump to message"].includes(change.label))
-        .map((change) => (
-          <div key={`${change.label}-${change.value}`}>
-            <p className="text-caption text-fg-3">{change.label}</p>
-            <p className="whitespace-pre-wrap text-small text-fg-1">{change.value}</p>
-          </div>
-        ))}
-      <details className="text-small">
-        <summary className="cursor-pointer text-fg-3">Developer details</summary>
-        <div className="mt-2 space-y-1">
-          {(view?.identifiers ?? []).map((item) => (
-            <p key={item} className="text-caption text-fg-3">{item}</p>
-          ))}
-          <p className="text-caption text-fg-3">{detail.event_type}</p>
-          <pre className="overflow-x-auto whitespace-pre-wrap text-caption text-fg-3">{JSON.stringify(detail, null, 2)}</pre>
-        </div>
-      </details>
-    </div>
-  );
-}
-
-function Chips({ label, value }: { label: string; value: string }) {
-  const names = value.split(",").map((item) => item.trim()).filter((item) => item && item !== "—");
-  return (
-    <div>
-      <p className="text-caption text-fg-3">{label}</p>
-      <div className="mt-1 flex flex-wrap gap-1">
-        {names.map((name) => (
-          <span key={name} className="border border-line px-1.5 py-0.5 text-caption text-fg-1">{name}</span>
-        ))}
-      </div>
-    </div>
+          ) : <p className="text-fg-3">No field changes were captured.</p>,
+        },
+        {
+          id: "attribution",
+          label: "Attribution",
+          content: (
+            <div className="space-y-1">
+              <p className="text-fg-1">{view?.attribution || "Unknown"}</p>
+              <p className="text-fg-2">{view?.source_line}</p>
+              <p className="text-caption text-fg-3">{personName(view?.actor) || "No actor was recorded."}</p>
+            </div>
+          ),
+        },
+        {
+          id: "context",
+          label: "Related context",
+          content: (
+            <div className="space-y-1">
+              <p>{view?.channel?.name ? `#${view.channel.name}` : "No channel"}</p>
+              <p>{view?.target?.name || personName(view?.target) || "No target name"}</p>
+              {view?.jump_url ? <a className="underline" href={view.jump_url} target="_blank" rel="noreferrer">View message</a> : null}
+            </div>
+          ),
+        },
+        {
+          id: "developer",
+          label: "Developer",
+          content: (
+            <div className="space-y-2">
+              {[
+                ["Event ID", detail.id],
+                ["Audit entry", String((detail.metadata || {}).audit_entry_id || "—")],
+                ["Guild", "this server"],
+                ["Channel", detail.channel_id || "—"],
+                ["Member", detail.target_id || detail.actor_id || "—"],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between gap-2">
+                  <span className="text-fg-3">{label}</span>
+                  <span className="font-mono text-caption" dir="ltr">{value}</span>
+                  <Button type="button" variant="secondary" onClick={() => copy(String(value))}>Copy</Button>
+                </div>
+              ))}
+              <Button type="button" variant="secondary" onClick={() => copy(JSON.stringify(detail, null, 2))}>Copy JSON</Button>
+              <pre className="overflow-auto border border-line bg-surface-well p-2 text-caption" dir="ltr">{JSON.stringify(detail, null, 2)}</pre>
+            </div>
+          ),
+        },
+      ] : undefined}
+    />
   );
 }

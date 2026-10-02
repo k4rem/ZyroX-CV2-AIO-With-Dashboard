@@ -9,6 +9,18 @@ ACTIVE_COG = "LoggingV2"
 # not post. Logging V2 is the only delivery pipeline.
 LEGACY_DELIVERY_DISABLED = True
 
+# Captured only after an explicit event route. High-volume and low-signal.
+NOISY_DEFAULT_OFF = frozenset(
+    {
+        "voice_self_mute",
+        "voice_self_unmute",
+        "voice_self_deafen",
+        "voice_self_undeafen",
+        "voice_stream",
+        "voice_camera",
+    }
+)
+
 
 def message_ignored(
     *,
@@ -26,6 +38,17 @@ def message_ignored(
     if author_id is not None and int(author_id) in users:
         return True
     return any(int(role_id) in roles for role_id in (author_role_ids or []))
+
+
+def event_ignored(*, channel_id: int | None, actor_id: int | None, target_id: int | None, ignores: dict) -> bool:
+    """Channel and member exclusions for every category. Role exclusions stay on messages."""
+    channels = {int(item) for item in ignores.get("channels", [])}
+    users = {int(item) for item in ignores.get("users", [])}
+    if channel_id is not None and int(channel_id) in channels:
+        return True
+    if actor_id is not None and int(actor_id) in users:
+        return True
+    return target_id is not None and int(target_id) in users
 
 
 def delivery_state(

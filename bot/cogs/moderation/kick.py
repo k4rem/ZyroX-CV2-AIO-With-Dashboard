@@ -61,6 +61,17 @@ class Kick(commands.Cog):
 
         # --- Kick the member ---
         await member.kick(reason=f"Action by {ctx.author.name} | Reason: {reason}")
+        from cls_platform.logging.publish import log_moderation_command
+
+        await log_moderation_command(
+            guild_id=ctx.guild.id,
+            command="kick",
+            moderator_id=ctx.author.id,
+            target_id=member.id,
+            reason=reason,
+            moderator_name=ctx.author.display_name,
+            target_name=member.display_name,
+        )
         
         # --- Create and send the simplified confirmation embed ---
         member_avatar_url = member.avatar.url if member.avatar else None

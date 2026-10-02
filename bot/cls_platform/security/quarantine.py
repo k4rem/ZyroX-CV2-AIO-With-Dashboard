@@ -275,6 +275,11 @@ async def restore_quarantine(
         restorable = []
     if restorable:
         try:
+            from cls_platform.logging.source import note_source
+
+            guild = getattr(member, "guild", None)
+            if guild is not None:
+                note_source(guild_id=guild.id, target_id=member.id, module="Security Center")
             await member.add_roles(*restorable, reason="CLS-SEC release")
             for role in restorable:
                 results.append({"outcome": "succeeded", "reason": "Role restored", "context": snowflake_to_str(role.id)})

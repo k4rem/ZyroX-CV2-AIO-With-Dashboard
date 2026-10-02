@@ -14,6 +14,8 @@ export type Appearance = {
   footer_mode: "cls" | "custom" | "off";
   footer_text: string | null;
   colors: Record<string, string>;
+  event_styles?: Record<string, { use_default?: boolean; color?: string; icon?: string; title?: string }>;
+  ignore_scope?: "messages" | "all";
 };
 
 const FALLBACK: Record<string, string> = {
@@ -44,6 +46,15 @@ const LABELS: Record<string, string> = {
 
 const SWATCHES = ["#4F6BED", "#2F9E6B", "#C44B4B", "#C4A15A", "#8B5CF6", "#6B7280", "#E8E4DC", "#111111"];
 
+const SAMPLES = [
+  { id: "message_edit", category: "message_events", title: "Message edited", sentence: "AERO edited a message in #general", change: "logging test 1 → logging test 2" },
+  { id: "member_roles", category: "role_events", title: "Role added", sentence: "+EVO+ received R7 Extra", change: "+ R7 Extra" },
+  { id: "role_update", category: "role_events", title: "Role updated", sentence: "@VIP was updated", change: "VIP → VIP Customer" },
+  { id: "channel_update", category: "channel_events", title: "Channel updated", sentence: "#general permissions updated", change: "Send Messages: Allow → Deny" },
+  { id: "automod.flood", category: "automod", title: "Message flood", sentence: "Spam detected", change: "9 messages in 4.1s" },
+  { id: "security.incident_created", category: "security", title: "Incident created", sentence: "Role deletion", change: "Confidence recorded" },
+];
+
 export function LoggingAppearancePanel({
   appearance,
   onChange,
@@ -51,10 +62,14 @@ export function LoggingAppearancePanel({
   appearance: Appearance;
   onChange: (patch: Partial<Appearance> & { colors?: Record<string, string> }) => void;
 }) {
-  const color = appearance.colors.message_events || FALLBACK.message_events;
+  const [sampleId, setSampleId] = React.useState("message_edit");
+  const sample = SAMPLES.find((item) => item.id === sampleId) || SAMPLES[0];
+  const eventStyle = appearance.event_styles?.[sample.id];
+  const usingDefault = eventStyle?.use_default !== false;
+  const color = (!usingDefault && eventStyle?.color) || appearance.colors[sample.category] || FALLBACK[sample.category] || FALLBACK.message_events;
   const style = appearance.style;
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
       <div className="space-y-6">
         <section>
           <h2 className="text-small font-medium text-fg-1">Style</h2>
@@ -97,6 +112,30 @@ export function LoggingAppearancePanel({
           </ul>
         </section>
         <section>
+          <h2 className="mb-2 text-small font-medium text-fg-1">Event appearance</h2>
+          <p className="mb-2 text-caption text-fg-3">Category color is the default. A per-event override can change color, icon, and title.</p>
+          <div className="mb-2 flex flex-wrap gap-1">
+            {SAMPLES.map((item) => (
+              <button key={item.id} type="button" className={`px-2 py-1 text-small ${sample.id === item.id ? "bg-bg-2 text-fg-1 ring-1 ring-brand-400" : "text-fg-2 ring-1 ring-line"}`} onClick={() => setSampleId(item.id)}>
+                {item.title}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="mb-2 text-small text-fg-1"
+            onClick={() => onChange({ event_styles: { [sample.id]: { ...(eventStyle || {}), use_default: !usingDefault } } })}
+          >
+            Use category default: {usingDefault ? "On" : "Off"}
+          </button>
+          {usingDefault ? null : (
+            <div className="flex flex-wrap items-center gap-2">
+              <ColorField value={eventStyle?.color || color} onChange={(value) => onChange({ event_styles: { [sample.id]: { ...(eventStyle || {}), use_default: false, color: value } } })} />
+              <Input className="max-w-xs" value={eventStyle?.title || sample.title} aria-label="Event title" onChange={(event) => onChange({ event_styles: { [sample.id]: { ...(eventStyle || {}), use_default: false, title: event.target.value } } })} />
+            </div>
+          )}
+        </section>
+        <section>
           <h2 className="mb-2 text-small font-medium text-fg-1">Brand footer</h2>
           <div className="flex flex-wrap gap-1">
             {(["cls", "custom", "off"] as const).map((mode) => (
@@ -122,7 +161,7 @@ export function LoggingAppearancePanel({
           ) : null}
         </section>
       </div>
-      <Preview appearance={appearance} color={color} />
+      <Preview appearance={appearance} color={color} title={usingDefault ? sample.title : eventStyle?.title || sample.title} sentence={sample.sentence} change={sample.change} />
     </div>
   );
 }
@@ -175,33 +214,29 @@ function ColorField({ value, onChange }: { value: string; onChange: (value: stri
   );
 }
 
-function Preview({ appearance, color }: { appearance: Appearance; color: string }) {
+function Preview({ appearance, color, title, sentence, change }: { appearance: Appearance; color: string; title: string; sentence: string; change: string }) {
   const brand = appearance.footer_mode === "off" ? "" : appearance.footer_mode === "custom" ? appearance.footer_text || "Custom" : "CLS";
-  const footer = [brand, "Message edited", appearance.show_ids ? "User ID: 100" : ""].filter(Boolean).join(" • ");
+  const footer = [brand, title, appearance.show_ids ? "User ID: 100" : ""].filter(Boolean).join(" • ");
   const detailed = appearance.style === "detailed";
   const compact = appearance.style === "compact";
   return (
-    <aside className="border border-line-subtle p-3">
-      <p className="mb-2 text-caption text-fg-3">Preview · sample message edit, not live activity</p>
-      <div className="border border-line bg-bg-1 p-3" style={{ borderLeft: `3px solid ${color}` }}>
+    <aside className="border border-line-subtle p-4 lg:sticky lg:top-4">
+      <p className="mb-2 text-caption text-fg-3">Preview · {title}</p>
+      <div className="min-h-48 border border-line bg-bg-1 p-4" style={{ borderLeft: `3px solid ${color}` }}>
         <div className="mb-2 flex items-center gap-2">
-          {appearance.show_avatars ? <span className="grid size-7 place-items-center rounded-full bg-bg-2 text-caption">A</span> : null}
+          {appearance.show_avatars ? <span draggable={false} className="grid size-8 place-items-center rounded-full bg-bg-2 text-caption">A</span> : null}
           <span className="text-small text-fg-1">AERO</span>
         </div>
-        <p className="text-small font-medium text-fg-1">✏️ Message Edited</p>
+        <p className="text-small font-medium text-fg-1">{title}</p>
         <p className="mt-1 text-small text-fg-2">
-          AERO edited a message in #public-chat
-          {compact ? <span className="mt-1 block text-fg-1">&quot;logging test 1&quot; → &quot;logging test 2&quot;</span> : null}
+          {sentence}
+          {compact ? <span className="mt-1 block text-fg-1">{change}</span> : null}
         </p>
         {compact ? null : (
           <div className="mt-2 space-y-2">
             <div>
-              <p className="text-caption text-fg-3">Before</p>
-              <p className="text-small text-fg-1">logging test 1</p>
-            </div>
-            <div>
-              <p className="text-caption text-fg-3">After</p>
-              <p className="text-small text-fg-1">logging test 2</p>
+              <p className="text-caption text-fg-3">Change</p>
+              <p className="text-small text-fg-1">{change}</p>
             </div>
             {detailed ? (
               <div>

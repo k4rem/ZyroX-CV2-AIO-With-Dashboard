@@ -37,6 +37,9 @@ class VerificationV2(commands.Cog):
         role = member.guild.get_role(int(role_id))
         if role is None or role >= member.guild.me.top_role:
             return
+        from cls_platform.logging.source import note_source
+
+        note_source(guild_id=member.guild.id, target_id=member.id, module="Verification")
         await member.add_roles(role, reason="CLS verification: unverified")
 
     @commands.Cog.listener()
@@ -62,6 +65,9 @@ class VerificationV2(commands.Cog):
         if config["verified_role_id"] and isinstance(member, discord.Member):
             verified = interaction.guild.get_role(int(config["verified_role_id"]))
             if verified and verified < interaction.guild.me.top_role:
+                from cls_platform.logging.source import note_source
+
+                note_source(guild_id=member.guild.id, target_id=member.id, module="Verification")
                 await member.add_roles(verified, reason="CLS verification status")
         await mark_verified(interaction.guild.id, interaction.user.id)
         await interaction.response.send_message("You are verified. Protected categories use their normal permissions.", ephemeral=True)

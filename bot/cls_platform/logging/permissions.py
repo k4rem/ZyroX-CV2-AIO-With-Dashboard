@@ -97,6 +97,14 @@ def _target_mention(row: dict) -> str:
     return _target_label(row)
 
 
+def _stance(allow: int, deny: int, flag: int) -> str:
+    if allow & flag:
+        return "Allow"
+    if deny & flag:
+        return "Deny"
+    return "Neutral"
+
+
 def overwrite_diff(before: list | None, after: list | None) -> list[dict]:
     """Readable allow/deny changes for channel permission overwrites."""
     old = _by_id(before)
@@ -107,23 +115,17 @@ def overwrite_diff(before: list | None, after: list | None) -> list[dict]:
         current = new.get(target_id, {})
         label = _target_label(current or previous)
         mention = _target_mention(current or previous)
-        allow = permission_diff(previous.get("allow"), current.get("allow"))
-        deny = permission_diff(previous.get("deny"), current.get("deny"))
-        if allow["granted"]:
-            lines.append(_line(f"Granted to {label}", ", ".join(allow["granted"]), f"Granted to {mention}", ", ".join(allow["granted"])))
-        if allow["revoked"]:
-            lines.append(_line(f"Revoked from {label}", ", ".join(allow["revoked"]), f"Revoked from {mention}", ", ".join(allow["revoked"])))
-        if deny["granted"]:
-            lines.append(_line(f"Denied for {label}", ", ".join(deny["granted"]), f"Denied for {mention}", ", ".join(deny["granted"])))
-        if deny["revoked"]:
-            lines.append(
-                _line(
-                    f"No longer denied for {label}",
-                    ", ".join(deny["revoked"]),
-                    f"No longer denied for {mention}",
-                    ", ".join(deny["revoked"]),
-                )
-            )
+        before_allow = _bits(previous.get("allow"))
+        before_deny = _bits(previous.get("deny"))
+        after_allow = _bits(current.get("allow"))
+        after_deny = _bits(current.get("deny"))
+        for flag, name in PERMISSIONS:
+            previous_state = _stance(before_allow, before_deny, flag)
+            current_state = _stance(after_allow, after_deny, flag)
+            if previous_state == current_state:
+                continue
+            shown = f"{name}: {previous_state} → {current_state}"
+            lines.append(_line(label, shown, mention, shown))
     return lines
 
 

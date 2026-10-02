@@ -9,10 +9,13 @@ from datetime import datetime, timedelta, timezone
 import discord
 from discord.ext import commands
 
+from cls_platform.logging.attribution import classify_matches
 from cls_platform.logging.entities import snapshot_channel, snapshot_role, snapshot_user
 from cls_platform.logging.legacy import migrate_legacy_file
-from cls_platform.logging.pipeline import message_ignored
+from cls_platform.logging.pipeline import event_ignored, message_ignored
+from cls_platform.logging.publish import set_log_deliverer
 from cls_platform.logging.render import render_discord
+from cls_platform.logging.source import read_source
 from cls_platform.logging.store import (
     appearance_for,
     delivery_target,
@@ -89,7 +92,12 @@ def _channel_state(channel) -> dict:
 
 def _role_state(role: discord.Role) -> dict:
     snap = snapshot_role(role) or {}
-    return {"name": role.name, "color": snap.get("color"), "permissions": role.permissions.value}
+    return {
+        "name": role.name,
+        "color": snap.get("color"),
+        "mentionable": bool(role.mentionable),
+        "permissions": role.permissions.value,
+    }
 
 
 def _changed(before: dict, after: dict) -> tuple[dict, dict] | None:
@@ -100,6 +108,16 @@ def _changed(before: dict, after: dict) -> tuple[dict, dict] | None:
 
 
 def _meta(entities: dict, **extra) -> dict:
+    reason = extra.get("reason")
+    if reason == "__ambiguous__":
+        extra["reason"] = None
+        extra["attribution"] = "ambiguous"
+    elif reason == "__audit_unavailable__":
+        extra["reason"] = None
+        extra["audit_unavailable"] = True
+    elif reason == "__self__":
+        extra["reason"] = None
+        extra["attribution"] = "self"
     payload = {"entities": {key: value for key, value in entities.items() if value}}
     payload.update({key: value for key, value in extra.items() if value is not None})
     return payload
@@ -111,11 +129,19 @@ class LoggingV2(commands.Cog):
         self._task: asyncio.Task | None = None
 
     async def cog_load(self):
+        set_log_deliverer(self._deliver_published)
         self._task = asyncio.create_task(self._retain())
 
     async def cog_unload(self):
+        set_log_deliverer(None)
         if self._task is not None:
             self._task.cancel()
+
+    async def _deliver_published(self, guild_id: int, channel_id: int, event: dict):
+        guild = self.bot.get_guild(int(guild_id))
+        if guild is None:
+            return
+        await self._deliver(guild, int(channel_id), event)
 
     async def _retain(self):
         await self.bot.wait_until_ready()
@@ -133,29 +159,35 @@ class LoggingV2(commands.Cog):
                 logger.exception("logging retention failed")
             await asyncio.sleep(3600)
 
-    async def _audit(self, guild: discord.Guild, action: discord.AuditLogAction, target_id: int | None):
+    async def _audit(self, guild: discord.Guild, action: discord.AuditLogAction, target_id: int | None, channel_id: int | None = None):
         try:
             if guild.me is None or not guild.me.guild_permissions.view_audit_log:
-                return None, "unknown", None
+                return None, "unknown", "__audit_unavailable__"
             cutoff = datetime.now(timezone.utc) - timedelta(seconds=15)
             matches = []
             async for entry in guild.audit_logs(limit=6, action=action):
                 if entry.created_at < cutoff:
                     continue
                 target = getattr(entry.target, "id", None)
-                if target_id is not None and target != target_id:
+                extra_channel = getattr(getattr(entry, "extra", None), "channel", None)
+                extra_id = getattr(extra_channel, "id", None)
+                if channel_id is not None:
+                    if channel_id not in {target, extra_id}:
+                        continue
+                elif target_id is not None and target != target_id:
                     continue
-                matches.append(entry)
-            if len(matches) == 1 and matches[0].user is not None:
-                return matches[0].user, "certain", matches[0].reason
+                matches.append((entry.user, entry.reason))
+            user, confidence, reason, note = classify_matches(matches)
+            if note == "ambiguous":
+                return None, "unknown", "__ambiguous__"
+            return user, confidence, reason
         except (discord.Forbidden, discord.HTTPException):
-            return None, "unknown", None
-        return None, "unknown", None
+            return None, "unknown", "__audit_unavailable__"
 
     async def _message_actor(self, guild: discord.Guild, action: discord.AuditLogAction, channel_id: int, author_id: int | None):
         try:
             if guild.me is None or not guild.me.guild_permissions.view_audit_log:
-                return None, "unknown", None
+                return None, "unknown", "__audit_unavailable__"
             cutoff = datetime.now(timezone.utc) - timedelta(seconds=15)
             matches = []
             async for entry in guild.audit_logs(limit=6, action=action):
@@ -169,12 +201,13 @@ class LoggingV2(commands.Cog):
                     continue
                 if action is discord.AuditLogAction.message_delete and author_id and target not in {None, author_id}:
                     continue
-                matches.append(entry)
-            if len(matches) == 1 and matches[0].user is not None:
-                return matches[0].user, "certain", matches[0].reason
+                matches.append((entry.user, entry.reason))
+            user, confidence, reason, note = classify_matches(matches)
+            if note == "ambiguous":
+                return None, "unknown", "__ambiguous__"
+            return user, confidence, reason
         except (discord.Forbidden, discord.HTTPException):
-            return None, "unknown", None
-        return None, "unknown", None
+            return None, "unknown", "__audit_unavailable__"
 
     async def _incident(self, guild_id: int, subject_id: int | None) -> str | None:
         if subject_id is None:
@@ -225,6 +258,23 @@ class LoggingV2(commands.Cog):
         decision = await delivery_target(guild.id, payload["category"], payload["event_type"])
         if not decision["capture"]:
             return None
+        appearance = await appearance_for(guild.id)
+        if appearance.get("ignore_scope") == "all":
+            if event_ignored(
+                channel_id=payload.get("channel_id"),
+                actor_id=payload.get("actor_id"),
+                target_id=payload.get("target_id"),
+                ignores=await ignores(guild.id),
+            ):
+                return None
+        metadata = dict(payload.get("metadata") or {})
+        module = read_source(guild_id=guild.id, target_id=payload.get("target_id"))
+        me = guild.me
+        if module and me is not None and payload.get("actor_id") == me.id and not metadata.get("source_module"):
+            metadata["source_module"] = module
+            payload["metadata"] = metadata
+        elif metadata is not payload.get("metadata"):
+            payload["metadata"] = metadata
         saved = await record_event(guild_id=guild.id, **payload)
         if decision["deliver"] and decision["channel_id"]:
             await self._deliver(guild, decision["channel_id"], saved)
@@ -245,7 +295,7 @@ class LoggingV2(commands.Cog):
         await self._save(
             member.guild,
             category="join_leave_events",
-            event_type="member_join",
+            event_type="member_bot_add" if member.bot else "member_join",
             actor_id=member.id,
             actor_confidence="certain",
             target_id=member.id,
@@ -284,11 +334,15 @@ class LoggingV2(commands.Cog):
         await self._save(
             member.guild,
             category="join_leave_events",
-            event_type="member_leave",
+            event_type="member_bot_remove" if member.bot else "member_leave",
             target_id=member.id,
             actor_confidence="unknown",
             before={"roles": roles},
-            metadata=_meta({"target": snapshot_user(member)}, incident_id=incident),
+            metadata=_meta(
+                {"target": snapshot_user(member)},
+                incident_id=incident,
+                reason=reason if reason in {"__audit_unavailable__", "__ambiguous__"} else None,
+            ),
         )
 
     @commands.Cog.listener()
@@ -326,6 +380,7 @@ class LoggingV2(commands.Cog):
         await self._roles(before, after)
         await self._nickname(before, after)
         await self._timeout(before, after)
+        await self._boost(before, after)
 
     async def _roles(self, before: discord.Member, after: discord.Member):
         before_roles = [snapshot_role(role) for role in before.roles if role.id != after.guild.id]
@@ -382,6 +437,27 @@ class LoggingV2(commands.Cog):
             before={"until": previous.isoformat() if previous else None},
             after={"until": current.isoformat() if current else None},
             metadata=_meta({"actor": snapshot_user(actor), "target": snapshot_user(after)}, reason=reason),
+        )
+
+    async def _boost(self, before: discord.Member, after: discord.Member):
+        previous = getattr(before, "premium_since", None)
+        current = getattr(after, "premium_since", None)
+        if previous == current:
+            return
+        name = after.display_name
+        started = current is not None and previous is None
+        await self._save(
+            after.guild,
+            category="join_leave_events",
+            event_type="member_boost" if started else "member_boost_end",
+            actor_id=after.id,
+            actor_confidence="certain",
+            target_id=after.id,
+            metadata=_meta(
+                {"actor": snapshot_user(after), "target": snapshot_user(after)},
+                sentence=f"{name} started boosting" if started else f"{name} stopped boosting",
+                attribution="self",
+            ),
         )
 
     @commands.Cog.listener()
@@ -487,6 +563,8 @@ class LoggingV2(commands.Cog):
                 "afk_timeout": guild.afk_timeout,
                 "afk_channel": getattr(guild.afk_channel, "name", None),
                 "system_channel": getattr(guild.system_channel, "name", None),
+                "icon": getattr(guild.icon, "key", None),
+                "banner": getattr(guild.banner, "key", None),
             }
 
         changed = _changed(state(before), state(after))
@@ -507,13 +585,22 @@ class LoggingV2(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         if before.channel == after.channel:
+            await self._voice_flags(member, before, after)
             return
-        kind = "voice_move" if before.channel and after.channel else "voice_join" if after.channel else "voice_leave"
+        if before.channel and after.channel is None:
+            await self._voice_exit(member, before, after)
+            return
+        if before.channel and after.channel:
+            await self._voice_switch(member, before, after)
+            return
+        await self._voice_self(member, before, after, "voice_join", f"{member.display_name} joined #{after.channel.name}")
+
+    async def _voice_self(self, member, before, after, event_type: str, sentence: str):
         channel = after.channel or before.channel
         await self._save(
             member.guild,
             category="voice_events",
-            event_type=kind,
+            event_type=event_type,
             actor_id=member.id,
             actor_confidence="certain",
             target_id=member.id,
@@ -525,9 +612,142 @@ class LoggingV2(commands.Cog):
                     "actor": snapshot_user(member),
                     "target": snapshot_user(member),
                     "channel": snapshot_channel(channel),
-                }
+                },
+                sentence=sentence,
+                attribution="self",
             ),
         )
+
+    async def _voice_exit(self, member, before, after):
+        actor, confidence, reason = await self._audit(member.guild, discord.AuditLogAction.member_disconnect, member.id)
+        if actor is not None and getattr(actor, "id", None) != member.id:
+            await self._save(
+                member.guild,
+                category="voice_events",
+                event_type="voice_disconnect",
+                actor_id=actor.id,
+                actor_confidence=confidence,
+                target_id=member.id,
+                channel_id=before.channel.id,
+                before={"channel": snapshot_channel(before.channel)},
+                metadata=_meta(
+                    {
+                        "actor": snapshot_user(actor),
+                        "target": snapshot_user(member),
+                        "channel": snapshot_channel(before.channel),
+                    },
+                    sentence=f"{getattr(actor, 'display_name', 'A moderator')} disconnected {member.display_name} from #{before.channel.name}",
+                    reason=reason,
+                ),
+            )
+            return
+        if reason in {"__audit_unavailable__", "__ambiguous__"}:
+            await self._save(
+                member.guild,
+                category="voice_events",
+                event_type="voice_leave",
+                actor_confidence="unknown",
+                target_id=member.id,
+                channel_id=before.channel.id,
+                before={"channel": snapshot_channel(before.channel)},
+                metadata=_meta(
+                    {"target": snapshot_user(member), "channel": snapshot_channel(before.channel)},
+                    sentence=f"{member.display_name} left #{before.channel.name}",
+                    reason=reason,
+                ),
+            )
+            return
+        await self._voice_self(member, before, after, "voice_leave", f"{member.display_name} left #{before.channel.name}")
+
+    async def _voice_switch(self, member, before, after):
+        actor, confidence, reason = await self._audit(member.guild, discord.AuditLogAction.member_move, member.id)
+        if actor is not None and getattr(actor, "id", None) != member.id:
+            await self._save(
+                member.guild,
+                category="voice_events",
+                event_type="voice_mod_move",
+                actor_id=actor.id,
+                actor_confidence=confidence,
+                target_id=member.id,
+                channel_id=after.channel.id,
+                before={"channel": snapshot_channel(before.channel)},
+                after={"channel": snapshot_channel(after.channel)},
+                metadata=_meta(
+                    {
+                        "actor": snapshot_user(actor),
+                        "target": snapshot_user(member),
+                        "channel": snapshot_channel(after.channel),
+                    },
+                    sentence=f"{getattr(actor, 'display_name', 'A moderator')} moved {member.display_name} from #{before.channel.name} to #{after.channel.name}",
+                    reason=reason,
+                ),
+            )
+            return
+        if reason in {"__audit_unavailable__", "__ambiguous__"}:
+            await self._save(
+                member.guild,
+                category="voice_events",
+                event_type="voice_move",
+                actor_confidence="unknown",
+                target_id=member.id,
+                channel_id=after.channel.id,
+                before={"channel": snapshot_channel(before.channel)},
+                after={"channel": snapshot_channel(after.channel)},
+                metadata=_meta(
+                    {"target": snapshot_user(member), "channel": snapshot_channel(after.channel)},
+                    sentence=f"{member.display_name} changed voice channels",
+                    reason=reason,
+                ),
+            )
+            return
+        await self._voice_self(
+            member,
+            before,
+            after,
+            "voice_move",
+            f"{member.display_name} moved from #{before.channel.name} to #{after.channel.name}",
+        )
+
+    async def _voice_flags(self, member, before, after):
+        pairs = (
+            ("mute", "voice_server_mute", "voice_server_unmute", "server mute"),
+            ("deaf", "voice_server_deafen", "voice_server_undeafen", "server deafen"),
+            ("self_mute", "voice_self_mute", "voice_self_unmute", "self mute"),
+            ("self_deaf", "voice_self_deafen", "voice_self_undeafen", "self deafen"),
+            ("self_stream", "voice_stream", None, "streaming"),
+            ("self_video", "voice_camera", None, "camera"),
+        )
+        channel = after.channel
+        for attr, on_type, off_type, label in pairs:
+            previous = bool(getattr(before, attr, False))
+            current = bool(getattr(after, attr, False))
+            if previous == current:
+                continue
+            enabled = current
+            event_type = on_type if enabled or off_type is None else off_type
+            if attr in {"mute", "deaf"}:
+                actor, confidence, reason = await self._audit(member.guild, discord.AuditLogAction.member_update, member.id)
+                actor_id = getattr(actor, "id", None)
+                entities = {"target": snapshot_user(member), "channel": snapshot_channel(channel)}
+                if actor is not None:
+                    entities["actor"] = snapshot_user(actor)
+                sentence = f"{getattr(actor, 'display_name', 'Someone')} changed {label} for {member.display_name}"
+            else:
+                actor_id = member.id
+                confidence = "certain"
+                reason = "__self__"
+                entities = {"actor": snapshot_user(member), "target": snapshot_user(member), "channel": snapshot_channel(channel)}
+                sentence = f"{member.display_name} changed {label}"
+            await self._save(
+                member.guild,
+                category="voice_events",
+                event_type=event_type,
+                actor_id=actor_id,
+                actor_confidence=confidence if actor_id else "unknown",
+                target_id=member.id,
+                channel_id=channel.id if channel else None,
+                metadata=_meta(entities, sentence=sentence, reason=reason),
+            )
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -654,6 +874,178 @@ class LoggingV2(commands.Cog):
                 count=len(payload.message_ids),
                 reason=reason,
             ),
+        )
+
+
+    @commands.Cog.listener()
+    async def on_thread_create(self, thread: discord.Thread):
+        await self._object_event(thread.guild, "channel_events", "thread_create", discord.AuditLogAction.thread_create, thread.id, f"Thread {thread.name} was created", channel_id=thread.id)
+
+    @commands.Cog.listener()
+    async def on_thread_update(self, before: discord.Thread, after: discord.Thread):
+        changed = _changed({"name": before.name, "archived": before.archived}, {"name": after.name, "archived": after.archived})
+        if changed is None:
+            return
+        await self._object_event(
+            after.guild,
+            "channel_events",
+            "thread_update",
+            discord.AuditLogAction.thread_update,
+            after.id,
+            f"Thread {after.name} was updated",
+            channel_id=after.id,
+            before=changed[0],
+            after=changed[1],
+        )
+
+    @commands.Cog.listener()
+    async def on_thread_delete(self, thread: discord.Thread):
+        await self._object_event(thread.guild, "channel_events", "thread_delete", discord.AuditLogAction.thread_delete, thread.id, f"Thread {thread.name} was deleted", channel_id=thread.id)
+
+    @commands.Cog.listener()
+    async def on_invite_create(self, invite: discord.Invite):
+        if invite.guild is None:
+            return
+        await self._object_event(
+            invite.guild,
+            "guild_events",
+            "invite_create",
+            discord.AuditLogAction.invite_create,
+            None,
+            f"Invite {invite.code} was created",
+            channel_id=getattr(invite.channel, "id", None),
+        )
+
+    @commands.Cog.listener()
+    async def on_invite_delete(self, invite: discord.Invite):
+        if invite.guild is None:
+            return
+        await self._object_event(
+            invite.guild,
+            "guild_events",
+            "invite_delete",
+            discord.AuditLogAction.invite_delete,
+            None,
+            f"Invite {invite.code} was deleted",
+            channel_id=getattr(invite.channel, "id", None),
+        )
+
+    @commands.Cog.listener()
+    async def on_guild_emojis_update(self, guild: discord.Guild, before, after):
+        await self._collection(guild, before, after, "emoji", discord.AuditLogAction.emoji_create, discord.AuditLogAction.emoji_update, discord.AuditLogAction.emoji_delete)
+
+    @commands.Cog.listener()
+    async def on_guild_stickers_update(self, guild: discord.Guild, before, after):
+        await self._collection(guild, before, after, "sticker", discord.AuditLogAction.sticker_create, discord.AuditLogAction.sticker_update, discord.AuditLogAction.sticker_delete)
+
+    @commands.Cog.listener()
+    async def on_webhooks_update(self, channel: discord.abc.GuildChannel):
+        await self._audit_kind(
+            channel.guild,
+            channel.id,
+            (
+                ("webhook_create", discord.AuditLogAction.webhook_create, "A webhook was created"),
+                ("webhook_update", discord.AuditLogAction.webhook_update, "A webhook was updated"),
+                ("webhook_delete", discord.AuditLogAction.webhook_delete, "A webhook was deleted"),
+            ),
+            "guild_events",
+            channel.id,
+        )
+
+    @commands.Cog.listener()
+    async def on_scheduled_event_create(self, event: discord.ScheduledEvent):
+        await self._object_event(event.guild, "guild_events", "scheduled_event_create", discord.AuditLogAction.scheduled_event_create, event.id, f"{event.name} was scheduled")
+
+    @commands.Cog.listener()
+    async def on_scheduled_event_update(self, before: discord.ScheduledEvent, after: discord.ScheduledEvent):
+        changed = _changed({"name": before.name, "status": str(before.status)}, {"name": after.name, "status": str(after.status)})
+        if changed is None:
+            return
+        await self._object_event(
+            after.guild,
+            "guild_events",
+            "scheduled_event_update",
+            discord.AuditLogAction.scheduled_event_update,
+            after.id,
+            f"{after.name} was updated",
+            before=changed[0],
+            after=changed[1],
+        )
+
+    @commands.Cog.listener()
+    async def on_scheduled_event_delete(self, event: discord.ScheduledEvent):
+        await self._object_event(event.guild, "guild_events", "scheduled_event_delete", discord.AuditLogAction.scheduled_event_delete, event.id, f"{event.name} was deleted")
+
+    @commands.Cog.listener()
+    async def on_guild_channel_pins_update(self, channel, last_pin):
+        guild = getattr(channel, "guild", None)
+        if guild is None:
+            return
+        await self._audit_kind(
+            guild,
+            channel.id,
+            (
+                ("message_pin", discord.AuditLogAction.message_pin, f"A message was pinned in #{channel.name}"),
+                ("message_unpin", discord.AuditLogAction.message_unpin, f"A message was unpinned in #{channel.name}"),
+            ),
+            "message_events",
+            channel.id,
+        )
+
+    async def _object_event(self, guild, category, event_type, action, target_id, sentence, channel_id=None, before=None, after=None):
+        actor, confidence, reason = await self._audit(guild, action, target_id)
+        await self._save(
+            guild,
+            category=category,
+            event_type=event_type,
+            actor_id=getattr(actor, "id", None),
+            actor_confidence=confidence if actor is not None else "unknown",
+            target_id=target_id,
+            channel_id=channel_id,
+            before=before,
+            after=after,
+            metadata=_meta({"actor": snapshot_user(actor)}, sentence=sentence, reason=reason),
+        )
+
+    async def _collection(self, guild, before, after, kind, created, updated, deleted):
+        old = {item.id: item for item in before}
+        new = {item.id: item for item in after}
+        for item_id, item in new.items():
+            if item_id not in old:
+                await self._object_event(guild, "guild_events", f"{kind}_create", created, item_id, f"{kind.capitalize()} {item.name} was created")
+            elif getattr(old[item_id], "name", None) != item.name:
+                await self._object_event(
+                    guild,
+                    "guild_events",
+                    f"{kind}_update",
+                    updated,
+                    item_id,
+                    f"{kind.capitalize()} {old[item_id].name} was renamed to {item.name}",
+                    before={"name": old[item_id].name},
+                    after={"name": item.name},
+                )
+        for item_id, item in old.items():
+            if item_id not in new:
+                await self._object_event(guild, "guild_events", f"{kind}_delete", deleted, item_id, f"{kind.capitalize()} {item.name} was deleted")
+
+    async def _audit_kind(self, guild, target_id, options, category, channel_id):
+        found = []
+        for event_type, action, sentence in options:
+            actor, confidence, reason = await self._audit(guild, action, None, channel_id=target_id)
+            if actor is not None or reason == "__ambiguous__":
+                found.append((event_type, actor, confidence, reason, sentence))
+        if len(found) != 1:
+            return
+        event_type, actor, confidence, reason, sentence = found[0]
+        await self._save(
+            guild,
+            category=category,
+            event_type=event_type,
+            actor_id=getattr(actor, "id", None),
+            actor_confidence=confidence if actor is not None else "unknown",
+            channel_id=channel_id,
+            target_id=target_id,
+            metadata=_meta({"actor": snapshot_user(actor)} if actor is not None else {}, sentence=sentence, reason=reason),
         )
 
 

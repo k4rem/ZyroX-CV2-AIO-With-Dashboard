@@ -21,6 +21,8 @@ def default_appearance() -> dict:
         "footer_mode": "cls",
         "footer_text": None,
         "colors": {},
+        "event_styles": {},
+        "ignore_scope": "messages",
     }
 
 
@@ -100,7 +102,18 @@ def render_discord(event: dict, appearance: dict | None = None) -> dict:
         name = author.get("display_name") or author.get("name")
     category = str(event.get("category") or "")
     fallback = int(view.get("color") or COLORS.get(category, 0x6B7280))
-    override = (settings.get("colors") or {}).get(category)
+    style_row = (settings.get("event_styles") or {}).get(kind) or {}
+    if isinstance(style_row, dict) and not style_row.get("use_default", True):
+        if style_row.get("title"):
+            title = str(style_row["title"])
+        if style_row.get("color"):
+            fallback = _hex_color(str(style_row["color"]), fallback)
+            override_color = None
+        else:
+            override_color = (settings.get("colors") or {}).get(category)
+    else:
+        override_color = (settings.get("colors") or {}).get(category)
+    override = override_color
     jump = (event.get("metadata") or {}).get("jump_url") if settings.get("show_jump", True) else None
     fields = _fields(view, settings)
     if not fields and settings["style"] != "compact":

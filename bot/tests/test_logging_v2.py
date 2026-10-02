@@ -115,8 +115,8 @@ async def test_snapshots_search_ignores_and_legacy_migration(db_reset):
         metadata={"entities": {"actor": {"id": str(SNOW), "display_name": "Alice", "username": "alice"}, "target": {"id": str(TARGET), "display_name": "Ahmed"}}},
     )
     assert saved["actor_id"] == str(SNOW)
-    assert saved["presentation"]["title"] == "Member roles updated"
-    assert "Alice" in saved["presentation"]["summary"]
+    assert saved["presentation"]["title"] == "Role added"
+    assert "Ahmed received VIP" in saved["presentation"]["summary"]
     assert str(SNOW) not in saved["presentation"]["summary"]
     found = await list_events(GUILD, query="alice")
     assert [row["id"] for row in found["events"]] == [saved["id"]]

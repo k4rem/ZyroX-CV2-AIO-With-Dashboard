@@ -166,6 +166,17 @@ class Unban(commands.Cog):
             dm_status = "No"
 
         await ctx.guild.unban(user, reason=f"Unban requested by {ctx.author} for reason: {reason or 'No reason provided'}")
+        from cls_platform.logging.publish import log_moderation_command
+
+        await log_moderation_command(
+            guild_id=ctx.guild.id,
+            command="unban",
+            moderator_id=ctx.author.id,
+            target_id=user.id,
+            reason=reason,
+            moderator_name=ctx.author.display_name,
+            target_name=getattr(user, "display_name", None) or user.name,
+        )
 
         reasonn = reason or "No reason provided"
         embed = discord.Embed(description=f"**{TICK} | Successfully Unbaned [{user}](https://discord.com/users/{user.id})\nReason {reasonn}**", color=0xFF0000)

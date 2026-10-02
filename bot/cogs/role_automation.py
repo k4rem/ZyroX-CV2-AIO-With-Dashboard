@@ -166,6 +166,9 @@ class RoleAutomation(commands.Cog):
             self._note(member.guild.id, member.id, role.id, action, chain)
         try:
             if action == "add":
+                from cls_platform.logging.source import note_source
+
+                note_source(guild_id=member.guild.id, target_id=member.id, module="Role Automation")
                 await member.add_roles(*roles, reason=f"CLS role automation: {name}")
                 verb = "Added"
             else:

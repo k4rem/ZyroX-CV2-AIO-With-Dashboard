@@ -60,7 +60,7 @@ export function DataTable<T>({
   }
 
   return (
-    <div className="border border-line bg-surface-1">
+    <div className="max-w-full border border-line bg-surface-1">
       {error ? (
         <ErrorState
           title="This table could not be loaded"
@@ -68,7 +68,7 @@ export function DataTable<T>({
           actions={onRetry ? <Button type="button" onClick={onRetry}>Retry</Button> : undefined}
         />
       ) : (
-        <div className="overflow-auto">
+        <div className="max-w-full overflow-auto">
           <table className="w-full text-small">
             <thead>
               <tr className="border-b border-line text-start text-fg-3">

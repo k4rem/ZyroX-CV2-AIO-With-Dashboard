@@ -105,10 +105,19 @@ async def execute_actions(actions: list[dict], target: Any, *, observe: bool) ->
         elif kind == "warn":
             outcomes.append(result(kind, action["label"], "succeeded", "A strike was added to the moderation ledger."))
         elif kind == "timeout":
+            from cls_platform.logging.source import note_source
+
+            note_source(guild_id=int(getattr(target, "guild_id", 0) or 0), target_id=int(getattr(target, "member_id", 0) or 0), module="Automod")
             outcomes.append(await _safe(kind, action, target.timeout(int(action["duration_seconds"]))))
         elif kind == "kick":
+            from cls_platform.logging.source import note_source
+
+            note_source(guild_id=int(getattr(target, "guild_id", 0) or 0), target_id=int(getattr(target, "member_id", 0) or 0), module="Automod")
             outcomes.append(await _safe(kind, action, target.kick()))
         elif kind == "ban":
+            from cls_platform.logging.source import note_source
+
+            note_source(guild_id=int(getattr(target, "guild_id", 0) or 0), target_id=int(getattr(target, "member_id", 0) or 0), module="Automod")
             outcomes.append(await _safe(kind, action, target.ban()))
         elif kind == "dm":
             outcomes.append(await _safe(kind, action, target.dm()))
@@ -131,10 +140,10 @@ def _escalation_action(threshold: dict) -> dict:
 
 async def _log(guild_id: int, match: dict, target: Any, actions: list[dict]) -> str | None:
     try:
-        from cls_platform.logging.store import record_event
+        from cls_platform.logging.publish import publish
 
         sentence = logging_sentence(match["rule_id"], match["summary"], getattr(target, "member_name", "member"), getattr(target, "channel_name", "channel"))
-        recorded = await record_event(
+        recorded = await publish(
             guild_id=guild_id,
             category="automod",
             event_type=LOG_EVENTS.get(match["rule_id"], "automod.keyword"),
@@ -142,8 +151,10 @@ async def _log(guild_id: int, match: dict, target: Any, actions: list[dict]) -> 
             actor_confidence="certain",
             target_id=int(getattr(target, "member_id", 0) or 0) or None,
             channel_id=int(getattr(target, "channel_id", 0) or 0) or None,
-            metadata={"sentence": sentence, "rule": match["name"], "actions": actions, "summary": match["summary"]},
+            metadata={"sentence": sentence, "rule": match["name"], "actions": actions, "summary": match["summary"], "source_module": "Automod"},
         )
+        if not recorded:
+            return None
         return str(recorded.get("id") or "") or None
     except Exception:
         logger.exception("automod log event failed guild=%s", guild_id)

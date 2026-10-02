@@ -6,7 +6,7 @@ import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type Tab = "summary" | "evidence" | "developer";
+type Tab = "summary" | "evidence" | "developer" | string;
 
 export function DetailsDrawer({
   open,
@@ -16,6 +16,7 @@ export function DetailsDrawer({
   evidence,
   ids,
   raw,
+  sections,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -24,13 +25,16 @@ export function DetailsDrawer({
   evidence?: ReactNode;
   ids?: Record<string, string>;
   raw?: unknown;
+  sections?: Array<{ id: string; label: string; content: ReactNode }>;
 }) {
-  const [tab, setTab] = useState<Tab>("summary");
-  const tabs: Array<{ id: Tab; label: string }> = [
-    { id: "summary", label: "Summary" },
-    { id: "evidence", label: "Evidence" },
-    { id: "developer", label: "Developer" },
-  ];
+  const [tab, setTab] = useState<Tab>(sections?.[0]?.id || "summary");
+  const tabs: Array<{ id: Tab; label: string }> = sections
+    ? sections.map((section) => ({ id: section.id, label: section.label }))
+    : [
+        { id: "summary", label: "Summary" },
+        { id: "evidence", label: "Evidence" },
+        { id: "developer", label: "Developer" },
+      ];
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent side="end" title={title} width="min(440px, 100vw)" className="bg-canvas">
@@ -60,9 +64,10 @@ export function DetailsDrawer({
           ))}
         </div>
         <div className="min-h-0 flex-1 overflow-auto px-3 py-3 text-small text-fg-2" role="tabpanel">
-          {tab === "summary" ? summary : null}
-          {tab === "evidence" ? evidence ?? <p className="text-fg-3">No evidence recorded.</p> : null}
-          {tab === "developer" ? (
+          {sections ? sections.find((section) => section.id === tab)?.content : null}
+          {!sections && tab === "summary" ? summary : null}
+          {!sections && tab === "evidence" ? evidence ?? <p className="text-fg-3">No evidence recorded.</p> : null}
+          {!sections && tab === "developer" ? (
             <div className="space-y-3">
               {ids ? (
                 <dl className="space-y-1 font-mono text-caption">

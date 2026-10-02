@@ -38,7 +38,7 @@ class RoleMenus(commands.Cog):
                 category="bot_actions",
                 event_type=event_type,
                 actor_id=actor_id,
-                actor_confidence="confirmed" if actor_id else "unknown",
+                actor_confidence="certain" if actor_id else "unknown",
                 channel_id=channel_id,
                 metadata={"summary": summary},
             )
@@ -207,6 +207,9 @@ class RoleMenus(commands.Cog):
         removed = [role for role in removed if role is not None]
         try:
             if added:
+                from cls_platform.logging.source import note_source
+
+                note_source(guild_id=member.guild.id, target_id=member.id, module="Role Menus")
                 await member.add_roles(*added, reason="CLS role menu")
             if removed:
                 await member.remove_roles(*removed, reason="CLS role menu")

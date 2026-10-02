@@ -16,7 +16,7 @@ type RouteRow = {
   delivery?: string;
 };
 
-type Group = { category: string; label: string; events: Array<{ id: string; label: string }> };
+type Group = { category: string; label: string; events: Array<{ id: string; label: string; default_off?: boolean }> };
 type EventRoute = { event_type: string; mode: string; channel_id: string | null };
 type IgnoreUser = { id: string; display_name?: string | null; username?: string | null };
 
@@ -46,6 +46,8 @@ export function LoggingRoutingPanel({
   onEventTest,
   onIgnores,
   onSearchMembers,
+  ignoreScope = "messages",
+  onIgnoreScope,
 }: {
   routes: RouteRow[];
   groups: Group[];
@@ -61,6 +63,8 @@ export function LoggingRoutingPanel({
   onEventTest: (eventType: string) => void;
   onIgnores: (next: { channels: string[]; roles: string[]; users: IgnoreUser[] }) => void;
   onSearchMembers: (query: string) => Promise<IgnoreUser[]>;
+  ignoreScope?: "messages" | "all";
+  onIgnoreScope?: (scope: "messages" | "all") => void;
 }) {
   const [mode, setMode] = useState<"simple" | "advanced">("simple");
   const [open, setOpen] = useState<string | null>(null);
@@ -87,7 +91,7 @@ export function LoggingRoutingPanel({
           ))}
         </div>
         <button type="button" className="text-small text-fg-2" onClick={() => setExclusions(true)}>
-          Message exclusions · Channels {ignoredChannels.length} · Roles {ignoredRoles.length} · Members {ignoredUsers.length}
+          Exclusions · {ignoreScope === "all" ? "All events" : "Message events"} · Channels {ignoredChannels.length} · Roles {ignoredRoles.length} · Members {ignoredUsers.length}
         </button>
       </div>
 
@@ -156,10 +160,12 @@ export function LoggingRoutingPanel({
                   <ul className="mt-2 space-y-2">
                     {group.events.map((event) => {
                       const row = override(event.id);
-                      const current = row?.mode === "custom" && row.channel_id ? `channel:${row.channel_id}` : row?.mode || "inherit";
+                      const fallback = event.default_off ? "disabled" : "inherit";
+                      const current = row?.mode === "custom" && row.channel_id ? `channel:${row.channel_id}` : row?.mode || fallback;
+                      const badge = row?.mode === "custom" ? "Custom" : row?.mode === "stored_only" ? "Stored only" : row?.mode === "disabled" || (!row && event.default_off) ? "Disabled" : "Inherited";
                       return (
                         <li key={event.id} className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_16rem_auto]">
-                          <span className="text-small text-fg-1">{event.label}</span>
+                          <span className="text-small text-fg-1">{event.label} <span className="ms-1 border border-line px-1 text-caption text-fg-3">{badge}</span></span>
                           <Select
                             value={current}
                             options={[
@@ -194,9 +200,22 @@ export function LoggingRoutingPanel({
       <Dialog open={exclusions} onOpenChange={setExclusions}>
         <DialogContent wide>
           <DialogHeader>
-            <DialogTitle>Message exclusions</DialogTitle>
+            <DialogTitle>Exclusions</DialogTitle>
           </DialogHeader>
           <DialogBody>
+            <p className="mb-3 text-small text-fg-2">
+              {ignoreScope === "all"
+                ? "Channel and member exclusions apply to every event. Role exclusions still apply only to message authors, because other events do not carry a role list."
+                : "These exclusions apply to message events. Switch to all events when channel and member exclusions should cover the rest of the log."}
+              {" "}Self mute, self deafen, streaming, and camera stay off until you enable them.
+            </p>
+            <div className="mb-3 flex gap-1">
+              {(["messages", "all"] as const).map((scope) => (
+                <button key={scope} type="button" className={`px-2 py-1 text-small ${ignoreScope === scope ? "bg-bg-2 text-fg-1 ring-1 ring-brand-400" : "text-fg-2 ring-1 ring-line"}`} onClick={() => onIgnoreScope?.(scope)}>
+                  {scope === "messages" ? "Message events" : "All events"}
+                </button>
+              ))}
+            </div>
             <Exclusions
               channels={textChannels}
               roles={roles}

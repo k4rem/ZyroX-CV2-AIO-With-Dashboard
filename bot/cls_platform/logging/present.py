@@ -14,6 +14,8 @@ CATEGORY_LABELS = {
     "channel_events": "Channels",
     "guild_events": "Server",
     "bot_actions": "Bot",
+    "automod": "Automod",
+    "security": "Security",
 }
 
 TITLES = {
@@ -35,9 +37,64 @@ TITLES = {
     "channel_create": "Channel created",
     "channel_update": "Channel updated",
     "channel_delete": "Channel deleted",
+    "member_bot_add": "Bot added",
+    "member_bot_remove": "Bot removed",
+    "member_boost": "Server boost started",
+    "member_boost_end": "Server boost ended",
+    "message_pin": "Message pinned",
+    "message_unpin": "Message unpinned",
+    "thread_create": "Thread created",
+    "thread_update": "Thread updated",
+    "thread_delete": "Thread deleted",
+    "invite_create": "Invite created",
+    "invite_delete": "Invite deleted",
+    "emoji_create": "Emoji created",
+    "emoji_update": "Emoji updated",
+    "emoji_delete": "Emoji deleted",
+    "sticker_create": "Sticker created",
+    "sticker_update": "Sticker updated",
+    "sticker_delete": "Sticker deleted",
+    "webhook_create": "Webhook created",
+    "webhook_update": "Webhook updated",
+    "webhook_delete": "Webhook deleted",
+    "scheduled_event_create": "Event created",
+    "scheduled_event_update": "Event updated",
+    "scheduled_event_delete": "Event deleted",
+    "channel_overwrite": "Channel permissions updated",
     "voice_join": "Member joined voice",
     "voice_leave": "Left voice",
     "voice_move": "Moved voice channel",
+    "voice_mod_move": "Moved by a moderator",
+    "voice_disconnect": "Disconnected by a moderator",
+    "voice_server_mute": "Server muted",
+    "voice_server_unmute": "Server unmuted",
+    "voice_server_deafen": "Server deafened",
+    "voice_server_undeafen": "Server undeafened",
+    "voice_self_mute": "Self muted",
+    "voice_self_unmute": "Self unmuted",
+    "voice_self_deafen": "Self deafened",
+    "voice_self_undeafen": "Self undeafened",
+    "voice_stream": "Started streaming",
+    "voice_camera": "Camera changed",
+    "moderation_command": "Moderation command used",
+    "automod.flood": "Message flood",
+    "automod.duplicate": "Duplicate messages",
+    "automod.caps": "Caps",
+    "automod.mentions": "Mentions",
+    "automod.emoji": "Emoji",
+    "automod.links": "Links",
+    "automod.invites": "Invites",
+    "automod.bad_words": "Bad words",
+    "automod.attachments": "Attachments",
+    "automod.keyword": "Keyword",
+    "security.incident_created": "Incident created",
+    "security.phishing_deleted": "Phishing deleted",
+    "security.honeypot_triggered": "Honeypot triggered",
+    "security.trust_granted": "Trust granted",
+    "security.trust_revoked": "Trust revoked",
+    "security.quarantine_released": "Quarantine released",
+    "security.maintenance_started": "Maintenance started",
+    "security.maintenance_ended": "Maintenance ended",
     "guild_update": "Server settings updated",
     "logging_test": "Logging test",
     "ticket_opened": "Ticket opened",
@@ -59,6 +116,8 @@ COLORS = {
     "channel_events": 0x4F6BED,
     "guild_events": 0x6B7280,
     "bot_actions": 0x6B7280,
+    "automod": 0x8B5CF6,
+    "security": 0xC44B4B,
 }
 
 def _category_for(event_type: str) -> str:
@@ -82,17 +141,69 @@ def _category_for(event_type: str) -> str:
 
 
 EVENT_GROUPS = (
-    ("message_events", "Messages", ("message_edit", "message_delete", "message_bulk_delete")),
-    ("join_leave_events", "Joins and leaves", ("member_join", "member_leave")),
+    (
+        "message_events",
+        "Messages",
+        ("message_edit", "message_delete", "message_bulk_delete", "message_pin", "message_unpin"),
+    ),
+    ("join_leave_events", "Joins and leaves", ("member_join", "member_leave", "member_bot_add", "member_bot_remove", "member_boost", "member_boost_end")),
     (
         "member_moderation",
         "Members",
-        ("member_kick", "member_ban", "member_unban", "member_timeout", "member_timeout_removed", "member_nickname"),
+        (
+            "member_kick",
+            "member_ban",
+            "member_unban",
+            "member_timeout",
+            "member_timeout_removed",
+            "member_nickname",
+            "moderation_command",
+        ),
     ),
     ("role_events", "Roles", ("member_roles", "role_create", "role_update", "role_delete")),
-    ("channel_events", "Channels", ("channel_create", "channel_update", "channel_delete")),
-    ("voice_events", "Voice", ("voice_join", "voice_leave", "voice_move")),
-    ("guild_events", "Server", ("guild_update",)),
+    ("channel_events", "Channels", ("channel_create", "channel_update", "channel_delete", "channel_overwrite", "thread_create", "thread_update", "thread_delete")),
+    (
+        "voice_events",
+        "Voice",
+        (
+            "voice_join",
+            "voice_leave",
+            "voice_move",
+            "voice_mod_move",
+            "voice_disconnect",
+            "voice_server_mute",
+            "voice_server_unmute",
+            "voice_server_deafen",
+            "voice_server_undeafen",
+            "voice_self_mute",
+            "voice_self_unmute",
+            "voice_self_deafen",
+            "voice_self_undeafen",
+            "voice_stream",
+            "voice_camera",
+        ),
+    ),
+    (
+        "guild_events",
+        "Server",
+        (
+            "guild_update",
+            "invite_create",
+            "invite_delete",
+            "emoji_create",
+            "emoji_update",
+            "emoji_delete",
+            "sticker_create",
+            "sticker_update",
+            "sticker_delete",
+            "webhook_create",
+            "webhook_update",
+            "webhook_delete",
+            "scheduled_event_create",
+            "scheduled_event_update",
+            "scheduled_event_delete",
+        ),
+    ),
     (
         "bot_actions",
         "Bot actions",
@@ -108,7 +219,43 @@ EVENT_GROUPS = (
             "ticket_auto_closed",
         ),
     ),
+    (
+        "automod",
+        "Automod",
+        (
+            "automod.flood",
+            "automod.duplicate",
+            "automod.caps",
+            "automod.mentions",
+            "automod.emoji",
+            "automod.links",
+            "automod.invites",
+            "automod.bad_words",
+            "automod.attachments",
+            "automod.keyword",
+        ),
+    ),
+    (
+        "security",
+        "Security",
+        (
+            "security.incident_created",
+            "security.phishing_deleted",
+            "security.honeypot_triggered",
+            "security.trust_granted",
+            "security.trust_revoked",
+            "security.quarantine_released",
+            "security.maintenance_started",
+            "security.maintenance_ended",
+        ),
+    ),
 )
+
+
+def _noisy() -> frozenset:
+    from cls_platform.logging.pipeline import NOISY_DEFAULT_OFF
+
+    return NOISY_DEFAULT_OFF
 
 
 def category_for_event(event_type: str) -> str:
@@ -120,7 +267,7 @@ def category_for_event(event_type: str) -> str:
 
 def catalog() -> list[dict]:
     return [
-        {"id": key, "label": label, "category": _category_for(key)}
+        {"id": key, "label": label, "category": category_for_event(key)}
         for key, label in TITLES.items()
         if key != "logging_test"
     ]
@@ -131,7 +278,10 @@ def groups() -> list[dict]:
         {
             "category": category,
             "label": label,
-            "events": [{"id": event_id, "label": TITLES[event_id]} for event_id in events],
+            "events": [
+                {"id": event_id, "label": TITLES[event_id], "default_off": event_id in _noisy()}
+                for event_id in events
+            ],
         }
         for category, label, events in EVENT_GROUPS
     ]
@@ -230,8 +380,38 @@ def _base(event: dict, title: str, summary: str, fields: list[dict], change_line
         "identifiers": _identifiers(event),
         "jump_url": metadata.get("jump_url"),
         "incident_id": metadata.get("incident_id"),
+        "attribution": _attribution_label(event),
+        "source_module": metadata.get("source_module"),
+        "source_line": _source_line(event),
         "thumbnail": bool(actor and actor.get("avatar_url") and str(event.get("event_type", "")).startswith("member")),
     }
+
+
+def _attribution_label(event: dict) -> str:
+    metadata = event.get("metadata") or {}
+    note = metadata.get("attribution")
+    if note == "ambiguous":
+        return "Ambiguous"
+    if note == "self":
+        return "Self"
+    if metadata.get("source_module"):
+        return "CLS"
+    confidence = event.get("actor_confidence") or "unknown"
+    return {"certain": "Certain", "probable": "Probable"}.get(confidence, "Unknown")
+
+
+def _source_line(event: dict) -> str:
+    metadata = event.get("metadata") or {}
+    module = metadata.get("source_module")
+    if module:
+        return f"CLS SYSTEM · {module}"
+    if not event.get("actor_id"):
+        if metadata.get("audit_unavailable"):
+            return "Actor unknown · View Audit Log unavailable"
+        if metadata.get("attribution") == "ambiguous":
+            return "Actor unknown · Ambiguous"
+        return "Actor unknown"
+    return f"Attribution: {_attribution_label(event)}"
 
 
 def _actor_target(event: dict) -> tuple[str, str]:
@@ -258,8 +438,19 @@ def present_member_roles(event: dict) -> dict:
     after = {row.get("id"): row for row in _roles(event.get("after"))}
     added = [row for key, row in after.items() if key not in before]
     removed = [row for key, row in before.items() if key not in after]
-    actor, target = _actor_target(event)
-    summary = f"{actor} updated {target}'s roles" if event.get("actor_id") else f"{target}'s roles were updated"
+    _actor, target = _actor_target(event)
+    if len(added) == 1 and not removed:
+        summary = f"{target} received {added[0].get('name') or 'a role'}"
+        title = "Role added"
+    elif len(removed) == 1 and not added:
+        summary = f"{target} lost {removed[0].get('name') or 'a role'}"
+        title = "Role removed"
+    elif added or removed:
+        summary = f"{target}'s roles changed"
+        title = TITLES["member_roles"]
+    else:
+        summary = f"{target}'s roles were updated"
+        title = TITLES["member_roles"]
     bits = []
     if added:
         bits.append("+ " + ", ".join(row.get("name") or "role" for row in added))
@@ -275,7 +466,7 @@ def present_member_roles(event: dict) -> dict:
     if not fields:
         fields.append(_field("Roles", "No named role change was captured"))
     _moderator_fields(event, fields)
-    return _base(event, TITLES["member_roles"], summary, fields, " ".join(bits))
+    return _base(event, title, summary, fields, " ".join(bits))
 
 
 def present_message_edit(event: dict) -> dict:
@@ -407,6 +598,12 @@ def present_role_update(event: dict) -> dict:
     if before.get("color") != after.get("color") and (before.get("color") or after.get("color")):
         fields.append(_field("Color", f"{before.get('color') or 'none'} → {after.get('color') or 'none'}"))
         bits.append("color")
+    if "mentionable" in before or "mentionable" in after:
+        if bool(before.get("mentionable")) != bool(after.get("mentionable")):
+            previous = "On" if before.get("mentionable") else "Off"
+            current = "On" if after.get("mentionable") else "Off"
+            fields.append(_field("Mentionable", f"{previous} → {current}"))
+            bits.append("mentionable")
     diff = permission_diff(before.get("permissions"), after.get("permissions"))
     if diff["granted"]:
         fields.append(_field("Granted", ", ".join(diff["granted"])))
@@ -457,7 +654,11 @@ def present_channel_update(event: dict) -> dict:
         )
         bits.append(line["dashboard"])
     _moderator_fields(event, fields)
-    return _base(event, TITLES["channel_update"], f"#{name} was updated", fields, " · ".join(bits[:3]))
+    permission_only = any(field["name"] not in {"Channel", "Moderator", "Name", "Topic", "Slowmode"} for field in fields) and not any(
+        field["name"] in {"Name", "Topic", "Slowmode"} for field in fields
+    )
+    summary = f"#{name} permissions updated" if permission_only else f"#{name} was updated"
+    return _base(event, TITLES["channel_update"], summary, fields, " · ".join(bits[:3]))
 
 
 def present_voice(event: dict) -> dict:
@@ -465,7 +666,11 @@ def present_voice(event: dict) -> dict:
     before = (event.get("before") or {}).get("channel") if isinstance(event.get("before"), dict) else None
     after = (event.get("after") or {}).get("channel") if isinstance(event.get("after"), dict) else None
     kind = event.get("event_type")
+    sentence = (event.get("metadata") or {}).get("sentence")
     fields = [_field("Member", member, user_mention(_entity(event, "actor")), True)]
+    if sentence and kind not in {"voice_join", "voice_leave", "voice_move"}:
+        _moderator_fields(event, fields)
+        return _base(event, TITLES.get(kind, "Voice"), str(sentence), fields)
     if kind == "voice_move":
         fields.append(_field("From", f"#{(before or {}).get('name', 'voice')}", channel_mention(before), True))
         fields.append(_field("To", f"#{(after or {}).get('name', 'voice')}", channel_mention(after), True))
@@ -498,6 +703,8 @@ def present_guild(event: dict) -> dict:
         "afk_timeout": "AFK timeout",
         "afk_channel": "AFK channel",
         "system_channel": "System channel",
+        "icon": "Icon",
+        "banner": "Banner",
     }
     keys = [key for key in labels if before.get(key) != after.get(key) and (key in before or key in after)]
     for key in keys:
@@ -516,6 +723,28 @@ def present_test(event: dict) -> dict:
         _field("Note", "This is a test log from CLS OS."),
     ]
     return _base(event, "Logging test", f"Test log for {label}", fields, "Test")
+
+
+def present_recorded(event: dict) -> dict:
+    kind = str(event.get("event_type") or "")
+    metadata = event.get("metadata") or {}
+    title = TITLES.get(kind) or (kind.replace("_", " ").strip().capitalize() or "Server event")
+    sentence = str(metadata.get("sentence") or title)
+    fields = []
+    for change in metadata.get("changes") or []:
+        if isinstance(change, dict) and change.get("label"):
+            fields.append(_field(str(change["label"]), str(change.get("value") or "—")))
+    before = event.get("before") if isinstance(event.get("before"), dict) else {}
+    after = event.get("after") if isinstance(event.get("after"), dict) else {}
+    for key in list(dict.fromkeys([*before.keys(), *after.keys()])):
+        if before.get(key) == after.get(key):
+            continue
+        if isinstance(before.get(key), (dict, list)) or isinstance(after.get(key), (dict, list)):
+            continue
+        label = str(key).replace("_", " ").capitalize()
+        fields.append(_field(label, f"{before.get(key) if before.get(key) not in {None, ''} else '—'} → {after.get(key) if after.get(key) not in {None, ''} else '—'}"))
+    _moderator_fields(event, fields)
+    return _base(event, title, sentence, fields)
 
 
 HANDLERS = {
@@ -540,6 +769,18 @@ HANDLERS = {
     "voice_join": present_voice,
     "voice_leave": present_voice,
     "voice_move": present_voice,
+    "voice_mod_move": present_voice,
+    "voice_disconnect": present_voice,
+    "voice_server_mute": present_voice,
+    "voice_server_unmute": present_voice,
+    "voice_server_deafen": present_voice,
+    "voice_server_undeafen": present_voice,
+    "voice_self_mute": present_voice,
+    "voice_self_unmute": present_voice,
+    "voice_self_deafen": present_voice,
+    "voice_self_undeafen": present_voice,
+    "voice_stream": present_voice,
+    "voice_camera": present_voice,
     "guild_update": present_guild,
     "logging_test": present_test,
 }
@@ -555,8 +796,7 @@ def present(event: dict) -> dict:
         return _base(event, "Security", sentence, [])
     handler = HANDLERS.get(kind)
     if handler is None:
-        title = kind.replace("_", " ").strip().capitalize() or "Server event"
-        return _base(event, title, title, [])
+        return present_recorded(event)
     view = handler(event)
     # Primary lines never fall back to a bare snowflake.
     for key in ("summary", "change_line", "title"):

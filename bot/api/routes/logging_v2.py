@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from api.dependencies import get_bot
 from cls_platform.logging.entities import snapshot_user
 from cls_platform.logging.pipeline import delivery_state
+from cls_platform.logging.publish import recent_failures
 from cls_platform.logging.present import catalog, groups
 from cls_platform.logging.render import render_discord, sample_event
 from cls_platform.logging.store import (
@@ -63,6 +64,8 @@ class AppearanceBody(BaseModel):
     footer_mode: str | None = None
     footer_text: str | None = None
     colors: dict[str, str] | None = None
+    event_styles: dict | None = None
+    ignore_scope: str | None = None
 
 
 def _parse_time(value: str | None) -> datetime | None:
@@ -146,8 +149,11 @@ async def logging_home(
     until: str | None = None,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None),
+    confidence: str | None = None,
 ):
-    page = await list_events(
+    page_result = await list_events(
         guild_id,
         category=category,
         event_type=event_type,
@@ -157,8 +163,11 @@ async def logging_home(
         query=q,
         since=_parse_time(since),
         until=_parse_time(until),
-        cursor=cursor,
+        cursor=None if page is not None else cursor,
         limit=limit,
+        page=page,
+        page_size=page_size,
+        confidence=confidence,
     )
     return {
         "categories": list(CATEGORIES),
@@ -170,8 +179,65 @@ async def logging_home(
         "groups": groups(),
         "appearance": await appearance_for(guild_id),
         "ignores": _named_ignores(guild_id, await ignores_public(guild_id), _bot_or_none()),
-        **page,
+        "health": _logging_health(guild_id, _bot_or_none()),
+        **page_result,
     }
+
+
+def _logging_health(guild_id: int, bot) -> dict:
+    guild = bot.get_guild(guild_id) if bot is not None else None
+    me = getattr(guild, "me", None) if guild is not None else None
+    perms = getattr(me, "guild_permissions", None) if me is not None else None
+    audit = bool(perms.view_audit_log) if perms is not None else None
+    return {
+        "view_audit_log": audit,
+        "view_channel": bool(perms.view_channel) if perms is not None else None,
+        "send_messages": bool(perms.send_messages) if perms is not None else None,
+        "embed_links": bool(perms.embed_links) if perms is not None else None,
+        "attribution": "unavailable" if audit is False else ("available" if audit else "unchecked"),
+        "note": "Attribution may be unavailable" if audit is False else None,
+        "recent_failures": recent_failures(guild_id),
+    }
+
+
+def _export_row(event: dict) -> dict:
+    hidden = {"content", "token", "secret", "authorization"}
+
+    def scrub(value):
+        if isinstance(value, dict):
+            return {key: scrub(item) for key, item in value.items() if key not in hidden}
+        if isinstance(value, list):
+            return [scrub(item) for item in value]
+        return value
+
+    return scrub({key: event.get(key) for key in ("id", "event_type", "category", "occurred_at", "actor_id", "actor_confidence", "target_id", "channel_id", "before", "after", "metadata", "presentation")})
+
+
+@router.get("/{guild_id}/logging/v2/export")
+async def logging_export(
+    guild_id: int,
+    category: str | None = None,
+    event_type: str | None = None,
+    member_id: str | None = None,
+    q: str | None = None,
+    confidence: str | None = None,
+):
+    collected = []
+    for number in range(1, 5):
+        page_result = await list_events(
+            guild_id,
+            category=category,
+            event_type=event_type,
+            member_id=_snowflake(member_id),
+            query=q,
+            confidence=confidence,
+            page=number,
+            page_size=100,
+        )
+        collected.extend(_export_row(row) for row in page_result["events"])
+        if number >= page_result["pages"]:
+            break
+    return {"format": "json", "events": collected, "retention_days": EVENT_RETENTION_DAYS}
 
 
 @router.get("/{guild_id}/logging/v2/events/{event_id}")

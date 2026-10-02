@@ -138,6 +138,17 @@ class Warn(commands.Cog):
                 moderator_id=ctx.author.id,
                 reason=reason or "No reason provided",
             )
+            from cls_platform.logging.publish import log_moderation_command
+
+            await log_moderation_command(
+                guild_id=ctx.guild.id,
+                command="warn",
+                moderator_id=ctx.author.id,
+                target_id=user.id,
+                reason=reason or "No reason provided",
+                moderator_name=ctx.author.display_name,
+                target_name=user.display_name,
+            )
 
             
             reason_to_send = reason or "No reason provided"

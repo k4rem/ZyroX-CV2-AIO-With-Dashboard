@@ -57,7 +57,7 @@ def test_permission_diff_is_readable():
         [{"id": "9", "name": "Mod", "kind": "role", "allow": 0, "deny": 0}],
         [{"id": "9", "name": "Mod", "kind": "role", "allow": manage_messages, "deny": mention_everyone}],
     )
-    assert any(line["dashboard"] == "Manage Messages" for line in lines)
+    assert any("Manage Messages: Neutral → Allow" in line["dashboard"] for line in lines)
     assert any("Mention Everyone" in line["dashboard"] for line in lines)
     assert all(SNOW not in line["dashboard"] for line in lines)
 
@@ -80,8 +80,8 @@ def test_member_roles_and_message_edit_read_without_raw_ids():
             },
         }
     )
-    assert roles["title"] == "Member roles updated"
-    assert roles["summary"] == "Karim updated Ahmed's roles"
+    assert roles["title"] == "Role added"
+    assert roles["summary"] == "Ahmed received VIP"
     assert "+ VIP" in roles["change_line"]
     assert SNOW not in roles["summary"]
     assert SNOW not in roles["change_line"]
@@ -91,7 +91,7 @@ def test_member_roles_and_message_edit_read_without_raw_ids():
     assert "User ID" not in (roles["footer"] or "")
     assert SNOW not in roles["footer"]
     embed = render_discord({"event_type": "member_roles", "presentation": roles, "metadata": {}})
-    assert embed["title"] == "Member roles updated"
+    assert embed["title"] == "Role added"
     assert embed["author_name"] == "Ahmed"
     assert embed["author_icon"] == "https://cdn.example/a.png"
     assert any("<@&9>" in field["value"] for field in embed["fields"])

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from cls_platform.logging.store import record_event
+from cls_platform.logging.publish import publish
 
 
 async def security_event(
@@ -17,7 +17,7 @@ async def security_event(
 ) -> None:
     if confidence not in {"certain", "probable", "unknown"}:
         confidence = "unknown"
-    await record_event(
+    await publish(
         guild_id=guild_id,
         category="security",
         event_type=event_type,
@@ -25,5 +25,5 @@ async def security_event(
         actor_confidence=confidence if actor_id is not None else "unknown",
         target_id=target_id,
         channel_id=channel_id,
-        metadata={"sentence": sentence},
+        metadata={"sentence": sentence, "source_module": "Security Center"},
     )
