@@ -169,6 +169,8 @@ async def db_reset(postgres_ready):
             "role_menus",
             "role_automation_rules",
             "role_join_configs",
+            "config_import_snapshots",
+            "config_import_history",
         ):
             await session.execute(text(f"TRUNCATE {table} RESTART IDENTITY CASCADE"))
         await session.commit()

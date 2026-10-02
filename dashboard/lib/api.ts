@@ -244,6 +244,12 @@ export const api = {
       method: "DELETE",
     }),
 
+  getConfigPreview: (guildId: string) => request<{ groups: { id: string; label: string; modules: { id: string; label: string; summary: string }[] }[] }>(`/guilds/${guildId}/config-transfer/preview`),
+  exportConfig: (guildId: string, modules: string[]) => request<any>(`/guilds/${guildId}/config-transfer/export`, { method: "POST", body: JSON.stringify({ modules }) }),
+  validateConfig: (guildId: string, bundle: unknown) => request<any>(`/guilds/${guildId}/config-transfer/validate`, { method: "POST", body: JSON.stringify({ bundle }) }),
+  planConfig: (guildId: string, body: any) => request<any>(`/guilds/${guildId}/config-transfer/plan`, { method: "POST", body: JSON.stringify(body) }),
+  applyConfig: (guildId: string, body: any) => request<any>(`/guilds/${guildId}/config-transfer/apply`, { method: "POST", body: JSON.stringify(body) }),
+  configHistory: (guildId: string) => request<{ imports: any[] }>(`/guilds/${guildId}/config-transfer/history`),
   getRoleAutomation: (guildId: string) => request<{ join: any; rules: any[]; bot_position?: number }>(`/guilds/${guildId}/autorole/v2`),
   saveJoinRoles: (guildId: string, data: any) => request<any>(`/guilds/${guildId}/autorole/v2/join`, { method: "PUT", body: JSON.stringify(data) }),
   createRoleRule: (guildId: string, data: any) => request<any>(`/guilds/${guildId}/autorole/v2/rules`, { method: "POST", body: JSON.stringify(data) }),

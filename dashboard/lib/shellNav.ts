@@ -261,6 +261,14 @@ export const NAV_ITEMS: NavItemDef[] = [
     routes: [{ path: "/recovery", label: "Recovery" }],
   },
   {
+    id: "config-transfer",
+    label: "Backup & Transfer",
+    icon: "settings",
+    group: "system",
+    scope: "guild",
+    routes: [{ path: "/config-transfer", label: "Backup & Transfer" }],
+  },
+  {
     id: "settings",
     label: "Bot settings",
     icon: "settings",
@@ -323,7 +331,7 @@ export function parseDashboardPath(pathname: string): ParsedPath {
  */
 export function isFluidRoute(pathname: string): boolean {
   const { guildId, subpath } = parseDashboardPath(pathname);
-  return guildId !== null && (subpath === "" || subpath === "/tickets" || subpath.startsWith("/tickets/") || subpath === "/reactionroles" || subpath.startsWith("/reactionroles/") || subpath === "/autorole" || subpath.startsWith("/autorole/"));
+  return guildId !== null && (subpath === "" || subpath === "/tickets" || subpath.startsWith("/tickets/") || subpath === "/reactionroles" || subpath.startsWith("/reactionroles/") || subpath === "/autorole" || subpath.startsWith("/autorole/") || subpath === "/config-transfer");
 }
 
 export function guildBase(guildId: string): string {

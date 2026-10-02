@@ -60,6 +60,8 @@ def resolve_capability(method: str, suffix: Optional[str]) -> str:
         return "guild.view" if method == "GET" else "bot.settings"
     if path == "/emojis" or path.startswith("/emojis/"):
         return "guild.view"
+    if path == "/config-transfer" or path.startswith("/config-transfer/"):
+        return "guild.view" if method == "GET" else "bot.settings"
     mapping = {
         "/prefix": "bot.settings",
         "/automod": "moderation.config",

@@ -52,6 +52,7 @@ _GUILD_SUBROUTES = frozenset(
         "/reactionroles",
         "/reactionroles/v2",
         "/messages",
+        "/config-transfer",
         "/media",
         "/emojis",
     }
@@ -68,6 +69,7 @@ _GUILD_SUBROUTE_PREFIXES = (
     "/reactionroles/v2/",
     "/autorole/v2/",
     "/messages/",
+    "/config-transfer/",
     "/welcome/",
     "/media/",
     "/emojis/",
