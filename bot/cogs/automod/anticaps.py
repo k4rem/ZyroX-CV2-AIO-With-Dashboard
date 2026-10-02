@@ -74,6 +74,7 @@ class AntiCaps(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        return  # Automod V2 is the only enforcement listener.
         if len(message.content) < 45:
             return
             

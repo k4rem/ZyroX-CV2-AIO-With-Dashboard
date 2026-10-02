@@ -74,6 +74,7 @@ class AntiMassMention(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        return  # Automod V2 is the only enforcement listener.
         if message.author.bot:
             return
 

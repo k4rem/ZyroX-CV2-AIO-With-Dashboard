@@ -219,6 +219,19 @@ async def export_commands(guild_id: int, lookup) -> dict:
 
 
 async def export_automod(guild_id: int, lookup) -> dict:
+    from cls_platform.automod.store import get_config
+
+    config = await get_config(guild_id)
+    if config.get("schema_version") == 2 and (config.get("migrated") or config.get("enabled") or any(rule.get("enabled") for rule in config.get("rules") or [])):
+        return {
+            "schema_version": 2,
+            "enabled": config["enabled"],
+            "preset": config["preset"],
+            "exclusions": config["exclusions"],
+            "escalations": config["escalations"],
+            "strike_ttl_seconds": config["strike_ttl_seconds"],
+            "rules": config["rules"],
+        }
     try:
         async with aiosqlite.connect("db/automod.db") as db:
             enabled = await (await db.execute("SELECT enabled FROM automod WHERE guild_id = ?", (guild_id,))).fetchone()
@@ -270,8 +283,22 @@ def _id_list(values) -> list[int]:
     return [int(item) for item in values or [] if str(item).isdigit()]
 
 
+def _ref_ids(values) -> list[str]:
+    found = []
+    for item in values or []:
+        text = str(item.get("id") if isinstance(item, dict) else item)
+        if text.isdigit():
+            found.append(text)
+    return found
+
+
 def summary_of(module_id: str, body: dict) -> str:
-    if module_id in {"welcome", "welcome_dm", "goodbye", "j2c", "automod"}:
+    if module_id == "automod":
+        rules = [row for row in body.get("rules") or [] if row.get("enabled")]
+        if rules:
+            return f"{len(rules)} rules"
+        return "Configured" if body.get("enabled") or body.get("punishments") else "Not configured"
+    if module_id in {"welcome", "welcome_dm", "goodbye", "j2c"}:
         return "Configured" if body.get("enabled") or body.get("channel") or body.get("payload", {}).get("content") or body.get("punishments") or body.get("join_channel") else "Not configured"
     if module_id == "messages":
         count = len(body.get("templates") or [])
@@ -507,18 +534,48 @@ async def apply_commands(guild_id, body, *, strategy: str, **_):
 
 
 async def apply_automod(guild_id, body, **_):
-    async with aiosqlite.connect("db/automod.db") as db:
-        await db.execute("INSERT OR REPLACE INTO automod (guild_id, enabled) VALUES (?, ?)", (guild_id, 1 if body.get("enabled") else 0))
-        await db.execute("DELETE FROM automod_punishments WHERE guild_id = ?", (guild_id,))
-        for row in body.get("punishments") or []:
-            await db.execute("INSERT INTO automod_punishments (guild_id, event, punishment) VALUES (?, ?, ?)", (guild_id, row.get("event"), row.get("punishment")))
-        await db.execute("DELETE FROM automod_ignored WHERE guild_id = ?", (guild_id,))
-        for role_id in _id_list(body.get("ignored_roles")):
-            await db.execute("INSERT INTO automod_ignored (guild_id, type, id) VALUES (?, 'role', ?)", (guild_id, role_id))
-        for channel_id in _id_list(body.get("ignored_channels")):
-            await db.execute("INSERT INTO automod_ignored (guild_id, type, id) VALUES (?, 'channel', ?)", (guild_id, channel_id))
-        await db.execute("INSERT OR REPLACE INTO automod_logging (guild_id, log_channel) VALUES (?, ?)", (guild_id, _id(body.get("log_channel"))))
-        await db.commit()
+    """Write Automod V2. The legacy sqlite file is left unchanged."""
+    from cls_platform.automod.engine import fresh_config
+    from cls_platform.automod.migrate import _LEGACY, _MINUTES
+    from cls_platform.automod.store import save_config
+
+    if int(body.get("schema_version") or 0) == 2 and body.get("rules"):
+        await save_config(guild_id, body, notes=["Imported Automod V2."], migrated=True)
+        return
+    config = fresh_config("custom")
+    config["preset"] = "custom"
+    config["enabled"] = bool(body.get("enabled"))
+    by_id = {rule["id"]: rule for rule in config["rules"]}
+    for rule in config["rules"]:
+        rule["enabled"] = False
+        rule["member_action"] = "none"
+        rule["message_action"] = "keep"
+    notes = ["Imported a legacy Automod bundle into V2. The old database was not modified."]
+    for row in body.get("punishments") or []:
+        rule_id = _LEGACY.get(str(row.get("event") or "").strip().lower())
+        action = str(row.get("punishment") or "").strip().lower()
+        if rule_id is None or rule_id not in by_id:
+            notes.append(f"Left '{row.get('event')}' unmigrated.")
+            continue
+        if action == "warn":
+            notes.append(f"{rule_id} had Warn stored. It was not copied as a member action.")
+            continue
+        rule = by_id[rule_id]
+        if action == "delete":
+            rule["message_action"] = "delete"
+            rule["enabled"] = True
+        elif action in {"mute", "timeout"}:
+            rule["message_action"] = "delete"
+            rule["member_action"] = "timeout"
+            rule["timeout_seconds"] = _MINUTES.get(rule_id, 10) * 60
+            rule["enabled"] = True
+        elif action in {"kick", "ban"}:
+            rule["message_action"] = "delete"
+            rule["member_action"] = action
+            rule["enabled"] = True
+    config["exclusions"]["roles"] = _ref_ids(body.get("ignored_roles"))
+    config["exclusions"]["channels"] = _ref_ids(body.get("ignored_channels"))
+    await save_config(guild_id, config, notes=notes, migrated=True)
 
 
 async def apply_j2c(guild_id, body, **_):

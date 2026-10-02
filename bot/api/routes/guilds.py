@@ -111,46 +111,24 @@ async def update_guild_prefix(guild_id: int, data: PrefixUpdate):
 
 @router.get("/{guild_id}/automod", response_model=AutomodConfig, summary="Get AutoMod config", description="Retrieves active AutoMod rules, punishments, and ignored entities.")
 async def get_guild_automod(guild_id: int):
-    """
-    Retrieves the AutoMod configuration for a specific guild.
-    """
-    db = await db_manager.get_connection('db/automod.db')
-    # Check enabled status
-    cursor = await db.execute("SELECT enabled FROM automod WHERE guild_id = ?", (guild_id,))
-    enabled_row = await cursor.fetchone()
-    enabled = bool(enabled_row[0]) if enabled_row else False
+    """Legacy shape projected from Automod V2. It does not read the active sqlite config."""
+    from cls_platform.automod.store import ensure_config, legacy_projection
 
-    # Get punishments and expose only rules the runtime will enforce.
-    from cls_platform.automod_compat import effective_punishments
-
-    cursor = await db.execute("SELECT event, punishment FROM automod_punishments WHERE guild_id = ?", (guild_id,))
-    punishments = effective_punishments({row[0]: row[1] for row in await cursor.fetchall()})
-
-    # Get ignored items
-    cursor = await db.execute("SELECT type, id FROM automod_ignored WHERE guild_id = ?", (guild_id,))
-    ignored_items = await cursor.fetchall()
-    ignored_roles = [row[1] for row in ignored_items if row[0] == 'role']
-    ignored_channels = [row[1] for row in ignored_items if row[0] == 'channel']
-
-    # Get logging channel
-    cursor = await db.execute("SELECT log_channel FROM automod_logging WHERE guild_id = ?", (guild_id,))
-    logging_row = await cursor.fetchone()
-    logging_channel = logging_row[0] if logging_row else None
-
+    config = await ensure_config(guild_id)
+    view = legacy_projection(config)
     return AutomodConfig(
         guild_id=str(guild_id),
-        enabled=enabled,
-        punishments=punishments,
-        ignored_roles=snowflake_list_to_str(ignored_roles),
-        ignored_channels=snowflake_list_to_str(ignored_channels),
-        logging_channel=snowflake_to_str(logging_channel),
+        enabled=view["enabled"],
+        punishments=view["punishments"],
+        ignored_roles=view["ignored_roles"],
+        ignored_channels=view["ignored_channels"],
+        logging_channel=None,
     )
 
 @router.patch("/{guild_id}/automod", summary="Update AutoMod config", description="Partially updates the AutoMod configuration components.")
 async def patch_guild_automod(guild_id: int, data: AutomodUpdate):
-    """
-    Updates parts of the AutoMod configuration for a specific guild.
-    """
+    """Legacy writes do not change Automod V2."""
+    raise HTTPException(status_code=410, detail="Automod is managed from the CLS OS dashboard.")
     from cls_platform.automod_compat import apply_punishment_update, prepare_punishment_rows
 
     if data.punishments is not None:

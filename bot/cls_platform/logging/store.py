@@ -26,6 +26,7 @@ CATEGORIES = (
     "channel_events",
     "guild_events",
     "bot_actions",
+    "automod",
 )
 EVENT_RETENTION_DAYS = 90
 MESSAGE_RETENTION_DAYS = 30

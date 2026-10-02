@@ -110,7 +110,15 @@ class Automod(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.default_punishment = "Mute"
-        self.bot.loop.create_task(self.init_db())
+
+    async def cog_check(self, ctx):
+        await ctx.send("Automod is managed from the CLS OS dashboard.")
+        return False
+
+    async def cog_command_error(self, ctx, error):
+        if isinstance(error, commands.CheckFailure):
+            return
+        raise error
 
     async def get_exempt_roles_channels(self, guild_id):
         async with aiosqlite.connect("db/automod.db") as db:

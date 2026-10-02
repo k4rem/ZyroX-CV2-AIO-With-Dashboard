@@ -129,6 +129,15 @@ class Warn(commands.Cog):
             
             await self.add_warn(ctx.guild.id, user.id)
             total_warns = await self.get_total_warns(ctx.guild.id, user.id)
+            # F5: warn.db is still the number this reply shows. The strike below is the Automod V2 ledger.
+            from cls_platform.automod.runtime import record_manual_warning
+
+            await record_manual_warning(
+                guild_id=ctx.guild.id,
+                member_id=user.id,
+                moderator_id=ctx.author.id,
+                reason=reason or "No reason provided",
+            )
 
             
             reason_to_send = reason or "No reason provided"
@@ -170,6 +179,9 @@ class Warn(commands.Cog):
     async def clearwarns(self, ctx, user: discord.Member):
         try:
             await self.reset_warns(ctx.guild.id, user.id)
+            from cls_platform.automod.store import expire_member_strikes
+
+            await expire_member_strikes(ctx.guild.id, user.id)
             embed = discord.Embed(description=f"{TICK} | All warnings have been cleared for **{user}** in this guild.", color=self.color)
             embed.set_author(name=f"Warnings Cleared", icon_url=self.get_user_avatar(user))
             embed.set_footer(text=f"Requested by {ctx.author}", icon_url=self.get_user_avatar(ctx.author))

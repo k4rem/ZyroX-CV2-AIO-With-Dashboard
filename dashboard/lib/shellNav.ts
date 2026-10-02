@@ -207,7 +207,13 @@ export const NAV_ITEMS: NavItemDef[] = [
     icon: "automod",
     group: "moderation",
     scope: "guild",
-    routes: [{ path: "/automod", label: "Automod" }],
+    routes: [
+      { path: "/automod", label: "Overview" },
+      { path: "/automod/rules", label: "Rules" },
+      { path: "/automod/violations", label: "Violations" },
+      { path: "/automod/strikes", label: "Strikes" },
+      { path: "/automod/settings", label: "Settings" },
+    ],
   },
   {
     id: "logging",
@@ -328,7 +334,7 @@ export function parseDashboardPath(pathname: string): ParsedPath {
  */
 export function isFluidRoute(pathname: string): boolean {
   const { guildId, subpath } = parseDashboardPath(pathname);
-  return guildId !== null && (subpath === "" || subpath === "/tickets" || subpath.startsWith("/tickets/") || subpath === "/reactionroles" || subpath.startsWith("/reactionroles/") || subpath === "/autorole" || subpath.startsWith("/autorole/") || subpath === "/config-transfer");
+  return guildId !== null && (subpath === "" || subpath === "/tickets" || subpath.startsWith("/tickets/") || subpath === "/reactionroles" || subpath.startsWith("/reactionroles/") || subpath === "/autorole" || subpath.startsWith("/autorole/") || subpath === "/config-transfer" || subpath === "/automod" || subpath.startsWith("/automod/"));
 }
 
 export function guildBase(guildId: string): string {

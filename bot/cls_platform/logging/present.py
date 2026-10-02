@@ -547,6 +547,9 @@ HANDLERS = {
 
 def present(event: dict) -> dict:
     kind = str(event.get("event_type") or "")
+    if kind.startswith("automod."):
+        sentence = str((event.get("metadata") or {}).get("sentence") or "Automod event")
+        return _base(event, "Automod", sentence, [])
     handler = HANDLERS.get(kind)
     if handler is None:
         title = kind.replace("_", " ").strip().capitalize() or "Server event"

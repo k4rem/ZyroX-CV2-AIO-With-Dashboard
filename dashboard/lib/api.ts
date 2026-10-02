@@ -104,6 +104,23 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  getAutomodV2: (guildId: string) => request<import("@/lib/automodModel").AutomodV2Config>(`/guilds/${guildId}/automod/v2`),
+  saveAutomodV2: (guildId: string, data: import("@/lib/automodModel").AutomodV2Config) =>
+    request<import("@/lib/automodModel").AutomodV2Config>(`/guilds/${guildId}/automod/v2`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  getAutomodOverview: (guildId: string) => request<any>(`/guilds/${guildId}/automod/v2/overview`),
+  getAutomodPreset: (guildId: string, preset: string) => request<{ preset: string; rules: import("@/lib/automodModel").AutomodRule[] }>(`/guilds/${guildId}/automod/v2/presets/${preset}`),
+  getAutomodViolations: (guildId: string, query: string) => request<any>(`/guilds/${guildId}/automod/v2/violations${query}`),
+  getAutomodViolation: (guildId: string, id: string) => request<any>(`/guilds/${guildId}/automod/v2/violations/${id}`),
+  markAutomodFalsePositive: (guildId: string, id: string) =>
+    request<any>(`/guilds/${guildId}/automod/v2/violations/${id}/false-positive`, { method: "POST" }),
+  applyAutomodFollowup: (guildId: string, id: string, body: { confirm: boolean; kind: string; value: string }) =>
+    request<any>(`/guilds/${guildId}/automod/v2/violations/${id}/follow-up`, { method: "POST", body: JSON.stringify(body) }),
+  getAutomodStrikes: (guildId: string) => request<{ rows: any[] }>(`/guilds/${guildId}/automod/v2/strikes`),
+  testAutomodMessage: (guildId: string, content: string) =>
+    request<{ matches: any[] }>(`/guilds/${guildId}/automod/v2/test`, { method: "POST", body: JSON.stringify({ content }) }),
 
   getTickets: (guildId: string) => request<TicketConfig>(`/guilds/${guildId}/tickets`),
   getTicketsV2: (guildId: string) => request<any>(`/guilds/${guildId}/tickets/v2`),

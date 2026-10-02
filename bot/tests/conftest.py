@@ -179,10 +179,20 @@ async def db_reset(postgres_ready):
             "role_join_configs",
             "config_import_snapshots",
             "config_import_history",
+            "automod_v2_violations",
+            "automod_v2_strikes",
+            "automod_v2_rules",
+            "automod_v2_configs",
         ):
             await session.execute(text(f"TRUNCATE {table} RESTART IDENTITY CASCADE"))
         await session.commit()
+    from cls_platform.automod import store as automod_store
+    from cls_platform.automod.runtime import reset_runtime_state
+
+    reset_runtime_state()
+    automod_store._CACHE.clear()
     yield
+    automod_store._CACHE.clear()
     await close_database()
 
 
