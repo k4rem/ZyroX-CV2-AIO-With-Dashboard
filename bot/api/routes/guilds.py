@@ -179,11 +179,14 @@ async def patch_guild_automod(guild_id: int, data: AutomodUpdate):
                 (guild_id, snowflake_str_to_int(channel_id)),
             )
 
-    if data.logging_channel is not None:
-        await db.execute(
-            "INSERT OR REPLACE INTO automod_logging (guild_id, log_channel) VALUES (?, ?)",
-            (guild_id, snowflake_str_to_int(data.logging_channel)),
-        )
+    if "logging_channel" in data.model_fields_set:
+        if data.logging_channel is None:
+            await db.execute("DELETE FROM automod_logging WHERE guild_id = ?", (guild_id,))
+        else:
+            await db.execute(
+                "INSERT OR REPLACE INTO automod_logging (guild_id, log_channel) VALUES (?, ?)",
+                (guild_id, snowflake_str_to_int(data.logging_channel)),
+            )
 
     await db.commit()
     

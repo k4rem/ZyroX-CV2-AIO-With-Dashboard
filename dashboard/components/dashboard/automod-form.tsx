@@ -1,17 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Zap,
   Type,
   Link as LinkIcon,
   MessageSquare,
   UserMinus,
-  Gavel,
   RefreshCcw,
   Save,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ChannelPicker, RolePicker, type ChannelOption } from "@/components/discord/channel-picker";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -43,6 +43,13 @@ interface AutomodFormProps {
 export function AutomodForm({ initialConfig, guildId }: AutomodFormProps) {
   const [config, setConfig] = useState<AutomodConfig>(initialConfig);
   const [saving, setSaving] = useState(false);
+  const [channels, setChannels] = useState<ChannelOption[]>([]);
+  const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    api.getChannels(guildId).then((body) => setChannels(Array.isArray(body) ? body : [])).catch(() => setChannels([]));
+    api.getRoles(guildId).then((body) => setRoles(Array.isArray(body) ? body : [])).catch(() => setRoles([]));
+  }, [guildId]);
 
   const handleToggleMaster = () => {
     setConfig({ ...config, enabled: !config.enabled });
@@ -58,6 +65,9 @@ export function AutomodForm({ initialConfig, guildId }: AutomodFormProps) {
       await api.updateAutomod(guildId, {
         enabled: config.enabled,
         punishments: config.punishments,
+        ignored_channels: config.ignored_channels,
+        ignored_roles: config.ignored_roles,
+        logging_channel: config.logging_channel,
       });
       toast.success("Automod settings saved");
     } catch {
@@ -81,14 +91,41 @@ export function AutomodForm({ initialConfig, guildId }: AutomodFormProps) {
         <p className="text-caption text-fg-2" dir="auto">Turn on the master control to change rule settings.</p>
       )}
 
-      {config.logging_channel && (
-        <p className="text-caption text-fg-2">
-          Log channel ID:{" "}
-          <span className="font-mono text-fg-1" dir="ltr">
-            {config.logging_channel}
-          </span>
-        </p>
-      )}
+      <div className="grid grid-cols-1 gap-3 border border-line bg-surface-1 p-3 md:grid-cols-3">
+        <div className="space-y-2">
+          <p className="text-caption text-fg-3">Log channel</p>
+          <ChannelPicker channels={channels} value={config.logging_channel || ""} onChange={(id) => setConfig({ ...config, logging_channel: id })} />
+          {config.logging_channel ? (
+            <button type="button" className="text-caption text-fg-3" onClick={() => setConfig({ ...config, logging_channel: null })}>Clear log channel</button>
+          ) : null}
+        </div>
+        <div className="space-y-2">
+          <p className="text-caption text-fg-3">Ignored channels</p>
+          <ChannelPicker
+            channels={channels}
+            value=""
+            onChange={(id) => setConfig({ ...config, ignored_channels: config.ignored_channels.includes(id) ? config.ignored_channels : [...config.ignored_channels, id] })}
+          />
+          {config.ignored_channels.map((id) => (
+            <button key={id} type="button" className="block text-caption text-fg-2" onClick={() => setConfig({ ...config, ignored_channels: config.ignored_channels.filter((item) => item !== id) })}>
+              #{channels.find((channel) => channel.id === id)?.name || "Unknown channel"} · remove
+            </button>
+          ))}
+        </div>
+        <div className="space-y-2">
+          <p className="text-caption text-fg-3">Ignored roles</p>
+          <RolePicker
+            roles={roles}
+            value=""
+            onChange={(id) => setConfig({ ...config, ignored_roles: config.ignored_roles.includes(id) ? config.ignored_roles : [...config.ignored_roles, id] })}
+          />
+          {config.ignored_roles.map((id) => (
+            <button key={id} type="button" className="block text-caption text-fg-2" onClick={() => setConfig({ ...config, ignored_roles: config.ignored_roles.filter((item) => item !== id) })}>
+              {roles.find((role) => role.id === id)?.name || "Unknown role"} · remove
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="space-y-3">
         {RULES.map((rule) => {
