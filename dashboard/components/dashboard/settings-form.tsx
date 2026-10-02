@@ -18,12 +18,14 @@ export function SettingsForm({ initialPrefix, guildId }: SettingsFormProps) {
   const [saved, setSaved] = useState(initialPrefix);
   const [prefix, setPrefix] = useState(initialPrefix);
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const handleSave = async () => {
     if (!prefix || prefix.length > 10) {
-      toast.error("Prefix must be between 1 and 10 characters.");
+      setFieldErrors({ prefix: "Prefix must be between 1 and 10 characters." });
       return;
     }
+    setFieldErrors({});
     setSaving(true);
     try {
       await api.updatePrefix(guildId, prefix);
@@ -52,12 +54,20 @@ export function SettingsForm({ initialPrefix, guildId }: SettingsFormProps) {
             <Input
               id="command-prefix"
               value={prefix}
-              onChange={(e) => setPrefix(e.target.value)}
+              onChange={(e) => {
+                setPrefix(e.target.value);
+                setFieldErrors({});
+              }}
               placeholder=">"
               maxLength={10}
               className="font-mono"
               dir="ltr"
+              aria-invalid={fieldErrors.prefix ? true : undefined}
+              aria-describedby={fieldErrors.prefix ? "command-prefix-error" : undefined}
             />
+            {fieldErrors.prefix ? (
+              <p id="command-prefix-error" className="pt-1 text-caption text-danger">{fieldErrors.prefix}</p>
+            ) : null}
           </SettingRow>
           <p className="pt-2 font-mono text-small text-fg-3" dir="ltr">
             {shown}help
@@ -68,8 +78,12 @@ export function SettingsForm({ initialPrefix, guildId }: SettingsFormProps) {
         dirty={prefix !== saved}
         saving={saving}
         error={null}
+        fieldErrors={fieldErrors}
         onSave={() => void handleSave()}
-        onDiscard={() => setPrefix(saved)}
+        onDiscard={() => {
+          setPrefix(saved);
+          setFieldErrors({});
+        }}
       />
     </form>
   );

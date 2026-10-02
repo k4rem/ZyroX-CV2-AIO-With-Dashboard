@@ -8,6 +8,8 @@ import { SettingRow } from "@/components/settings/setting-row";
 import { SettingsInstrument } from "@/components/settings/settings-instrument";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { HealthBadge, HealthPanel } from "@/components/platform/health";
+import type { ModuleHealth } from "@/lib/platformHealth";
 import { StatusLabel } from "@/components/ui/status";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
@@ -20,7 +22,7 @@ export type SecuritySummary = {
   effective_bot_mode: string;
   enforce_locked: boolean;
   version: number;
-  permission_health: string;
+  permission_health: ModuleHealth;
   policies: Array<{
     action_class: string;
     enabled: boolean;
@@ -167,7 +169,10 @@ export function SecurityPanel({
       </SettingGroup>
 
       <SettingGroup id="security-health" label="Health">
-        <p className="text-small text-fg-2">Permission health: {data.permission_health}. View Audit Log is observability only.</p>
+        <div className="mb-2 flex items-center gap-2">
+          <HealthBadge status={data.permission_health.status} />
+        </div>
+        <HealthPanel health={data.permission_health} />
         <p className="text-small text-fg-2">
           Maintenance: {data.maintenance ? `${data.maintenance.reason} until ${data.maintenance.ends_at}` : "none"}
         </p>

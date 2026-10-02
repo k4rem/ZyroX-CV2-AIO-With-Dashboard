@@ -48,7 +48,8 @@
   --cls-danger-fill: 201 52 58;
   --cls-danger-fill-hover: 217 58 64;
   --cls-danger-fill-active: 176 45 51;
-  --cls-info: 77 179 240;
+  --cls-info: 156 148 188;
+  --cls-locked: 120 132 148;
   --cls-neutral: 139 135 154;
 
   /* Security severity + chart palette (§4.5, §4.6) — defined now, consumed in later phases */
@@ -264,6 +265,21 @@
   :focus-visible {
     outline: 2px solid rgb(var(--cls-brand-400));
     outline-offset: 2px;
+  }
+
+  /* Decorative media must not spawn the native drag ghost.
+     Intentional drag sources and the config-transfer drop zone stay interactive. */
+  img,
+  svg,
+  video,
+  [data-decorative] {
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+  [data-drag-handle],
+  [draggable="true"] {
+    -webkit-user-drag: element;
+    user-select: auto;
   }
 
   /* Arabic rules (§5.4): no uppercase or tracking, more leading, never italic. */

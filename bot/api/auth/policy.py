@@ -88,6 +88,7 @@ def resolve_capability(method: str, suffix: Optional[str]) -> str:
         "/channels": "guild.view",
         "/commands": "bot.settings",
         "/roles": "guild.view",
+        "/runtime-health": "guild.view",
     }
     for prefix, cap in mapping.items():
         if path == prefix or path.startswith(prefix + "/"):

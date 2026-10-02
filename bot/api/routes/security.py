@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
@@ -19,6 +19,8 @@ from cls_platform.security.models import (
     SecurityQuarantine,
     SecurityTrustedActor,
 )
+from api.dependencies import get_bot
+from cls_platform.health.contract import runtime_snapshot
 from cls_platform.security.response_protocol import EnforceUnavailable
 
 router = APIRouter()
@@ -39,7 +41,7 @@ def _root(request: Request) -> None:
 
 
 @router.get("/{guild_id}/security")
-async def security_summary(guild_id: int):
+async def security_summary(guild_id: int, bot=Depends(get_bot)):
     await ensure_guild_config(guild_id)
     async with session_scope() as session:
         config = (
@@ -100,7 +102,7 @@ async def security_summary(guild_id: int):
         "effective_bot_mode": "OBSERVE" if config.bot_mode == "ENFORCE" else config.bot_mode,
         "enforce_locked": True,
         "version": config.version,
-        "permission_health": "observability_only",
+        "permission_health": runtime_snapshot(bot.get_guild(int(guild_id)) if bot is not None else None),
         "policies": [
             {
                 "action_class": row.action_class,

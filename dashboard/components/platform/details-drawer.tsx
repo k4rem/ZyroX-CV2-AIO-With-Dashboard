@@ -1,0 +1,93 @@
+"use client";
+
+import { useState, type ReactNode } from "react";
+import { X } from "lucide-react";
+import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+type Tab = "summary" | "evidence" | "developer";
+
+export function DetailsDrawer({
+  open,
+  onOpenChange,
+  title,
+  summary,
+  evidence,
+  ids,
+  raw,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  summary: ReactNode;
+  evidence?: ReactNode;
+  ids?: Record<string, string>;
+  raw?: unknown;
+}) {
+  const [tab, setTab] = useState<Tab>("summary");
+  const tabs: Array<{ id: Tab; label: string }> = [
+    { id: "summary", label: "Summary" },
+    { id: "evidence", label: "Evidence" },
+    { id: "developer", label: "Developer" },
+  ];
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent side="end" title={title} width="min(440px, 100vw)" className="bg-canvas">
+        <header className="flex items-center justify-between gap-3 border-b border-line px-3 py-2">
+          <h2 className="text-section text-fg-1">{title}</h2>
+          <DrawerClose asChild>
+            <Button type="button" variant="ghost" size="icon" aria-label="Close">
+              <X className="size-4" />
+            </Button>
+          </DrawerClose>
+        </header>
+        <div className="flex gap-1 border-b border-line px-3 py-2" role="tablist">
+          {tabs.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.id}
+              className={cn(
+                "h-7 rounded-xs px-2 text-small",
+                tab === item.id ? "bg-surface-3 text-fg-1" : "text-fg-3 hover:text-fg-1",
+              )}
+              onClick={() => setTab(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto px-3 py-3 text-small text-fg-2" role="tabpanel">
+          {tab === "summary" ? summary : null}
+          {tab === "evidence" ? evidence ?? <p className="text-fg-3">No evidence recorded.</p> : null}
+          {tab === "developer" ? (
+            <div className="space-y-3">
+              {ids ? (
+                <dl className="space-y-1 font-mono text-caption">
+                  {Object.entries(ids).map(([key, value]) => (
+                    <div key={key} className="flex justify-between gap-3">
+                      <dt className="text-fg-3">{key}</dt>
+                      <dd className="text-fg-1" dir="ltr">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+              <pre className="overflow-auto border border-line bg-surface-well p-2 text-caption text-fg-2" dir="ltr">
+                {JSON.stringify(raw ?? {}, null, 2)}
+              </pre>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void navigator.clipboard.writeText(JSON.stringify(raw ?? {}, null, 2))}
+              >
+                Copy JSON
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </DrawerContent>
+    </Drawer>
+  );
+}

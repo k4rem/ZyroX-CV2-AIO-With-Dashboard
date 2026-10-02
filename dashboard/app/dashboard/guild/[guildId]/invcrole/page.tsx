@@ -24,8 +24,8 @@ import { SettingGroup } from "@/components/settings/setting-group";
 import { SettingRow } from "@/components/settings/setting-row";
 import { SettingsInstrument } from "@/components/settings/settings-instrument";
 import { api } from "@/lib/api";
-import { draftsDiffer, roleSwatch } from "@/lib/modulePayloads";
-import { Combobox } from "@/components/ui/combobox";
+import { draftsDiffer } from "@/lib/modulePayloads";
+import { RolePicker } from "@/components/discord/channel-picker";
 import { Switch } from "@/components/ui/switch";
 
 export default function InvcRolePage({ params }: { params: { guildId: string } }) {
@@ -33,19 +33,22 @@ export default function InvcRolePage({ params }: { params: { guildId: string } }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [roles, setRoles] = useState<any[]>([]);
+  const [botRole, setBotRole] = useState<{ top_role_id: string; top_role_position: number; manage_roles: boolean } | null>(null);
   const [saved, setSaved] = useState<any>({ role_id: null, enabled: false });
   const [config, setConfig] = useState<any>({ role_id: null, enabled: false });
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [configData, rolesData] = await Promise.all([
+      const [configData, rolesData, health] = await Promise.all([
         api.getInvcRole(params.guildId),
         api.getRoles(params.guildId),
+        api.getRuntimeHealth(params.guildId).catch(() => null),
       ]);
       setConfig(configData);
       setSaved({ role_id: configData?.role_id ?? null, enabled: Boolean(configData?.enabled) });
       setRoles(rolesData);
+      setBotRole(health?.bot ?? null);
     } catch (error) {
       console.error("Failed to fetch InvcRole data:", error);
       toast.error("Failed to load Voice Role configuration");
@@ -104,20 +107,20 @@ export default function InvcRolePage({ params }: { params: { guildId: string } }
         />
       </SettingRow>
       <SettingRow label="Assigned role" description="Must sit below the bot role." htmlFor="invc-role">
-        <Combobox
-          id="invc-role"
-          value={config.role_id ? String(config.role_id) : null}
-          onValueChange={(value) => setConfig({ ...config, role_id: value })}
-          options={[
-            { value: "", label: "No role" },
-            ...filteredRoles.map((role) => ({
-              value: String(role.id),
-              label: role.name,
-              swatch: roleSwatch(role.color),
-            })),
-          ]}
-          placeholder="Select a role"
-          searchLabel="Search roles"
+        <RolePicker
+          roles={filteredRoles.map((role) => ({
+            id: String(role.id),
+            name: role.name,
+            position: role.position,
+            managed: Boolean(role.managed),
+          }))}
+          value={config.role_id ? String(config.role_id) : ""}
+          onChange={(id) => setConfig({ ...config, role_id: id || null })}
+          botPosition={botRole?.top_role_position ?? null}
+          botRoleId={botRole?.top_role_id ?? null}
+          manageRoles={botRole?.manage_roles ?? null}
+          intent="mutate"
+          allowEmpty
         />
       </SettingRow>
       </SettingGroup>

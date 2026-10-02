@@ -61,9 +61,13 @@ export const metadata: Metadata = {
     type: "website",
   },
   icons: {
-    icon: [{ url: "/brand/cls-mark-128.png", sizes: "128x128", type: "image/png" }],
-    apple: [{ url: "/brand/cls-mark-128.png", sizes: "128x128", type: "image/png" }],
+    icon: [
+      { url: "/brand/cls-icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "32x32" },
+    ],
+    apple: [{ url: "/brand/cls-apple-icon.png", sizes: "180x180", type: "image/png" }],
   },
+  manifest: "/manifest.webmanifest",
 };
 
 export const viewport: Viewport = {

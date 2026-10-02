@@ -44,6 +44,7 @@ _GUILD_SUBROUTES = frozenset(
         "/channels",
         "/commands",
         "/roles",
+        "/runtime-health",
         "/autoreact",
         "/autoreact/v2",
         "/invcrole",

@@ -154,7 +154,7 @@ export function ConfigTransfer({ guildId }: { guildId: string }) {
               <li key={label} className={index === step ? "rounded-md bg-surface-3 px-2 py-1 text-fg-1" : "rounded-md px-2 py-1 text-muted"}>{index + 1}. {label}</li>
             ))}
           </ol>
-          <label className="block rounded-md border border-dashed border-line bg-surface-1 p-4 text-sm" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files?.[0]; if (file) readFile(file); }}>
+          <label data-dropzone className="block rounded-md border border-dashed border-line bg-surface-1 p-4 text-sm" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files?.[0]; if (file) readFile(file); }}>
             Drop a CLS backup here, or choose a file.
             <input className="mt-2 block text-sm" type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) readFile(file); }} />
           </label>

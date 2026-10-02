@@ -84,6 +84,12 @@ export const api = {
   getGuildDetails: (guildId: string) => request<GuildDetails>(`/guilds/${guildId}`),
   getChannels: (guildId: string) => request<DiscordChannel[]>(`/guilds/${guildId}/channels`),
   getRoles: (guildId: string) => request<DiscordRole[]>(`/guilds/${guildId}/roles`),
+  getRuntimeHealth: (guildId: string) =>
+    request<import("@/lib/platformHealth").ModuleHealth & {
+      bot: { top_role_id: string; top_role_position: number; manage_roles: boolean } | null;
+      roles: Record<string, { position: number | null; managed: boolean; status: string }>;
+      channels: Record<string, import("@/lib/platformHealth").ChannelCapabilities>;
+    }>(`/guilds/${guildId}/runtime-health`),
 
   getPrefix: (guildId: string) => request<PrefixConfig>(`/guilds/${guildId}/prefix`),
   updatePrefix: (guildId: string, prefix: string) =>

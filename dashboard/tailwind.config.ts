@@ -78,6 +78,7 @@ const config: Config = {
           "fill-active": rgb("danger-fill-active"),
         },
         info: rgb("info"),
+        locked: rgb("locked"),
         neutral: rgb("neutral"),
         sev: {
           critical: rgb("danger"),
