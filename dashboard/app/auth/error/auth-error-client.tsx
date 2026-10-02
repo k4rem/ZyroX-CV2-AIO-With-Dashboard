@@ -60,6 +60,7 @@ export function AuthErrorClient({ code }: { code: string | null }) {
       }
     >
       <p>{copy.body}</p>
+      <p className="mt-3 text-small text-fg-3">What you can do next: try Discord sign-in again, or go back and wait.</p>
       {copy.reference ? <p className="mt-4 font-mono text-caption text-fg-3">{copy.reference}</p> : null}
     </AuthLayout>
   );

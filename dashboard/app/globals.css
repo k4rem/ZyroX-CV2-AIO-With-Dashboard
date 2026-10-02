@@ -834,14 +834,20 @@
   .cls-depth-mid { --cls-amp: 10px; }
   .cls-depth-bg { --cls-amp: 4px; }
   .cls-hero {
-    overflow-x: clip;
+    overflow: visible;
   }
   .cls-hero-glow {
-    background: radial-gradient(
-      440px circle at var(--cls-glow-x, 68%) var(--cls-glow-y, 42%),
-      rgb(var(--cls-brand-600) / 0.16),
-      transparent 64%
-    );
+    position: absolute;
+    width: min(280px, 46vw);
+    height: min(280px, 46vw);
+    left: var(--cls-glow-x, 68%);
+    top: var(--cls-glow-y, 42%);
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    background: radial-gradient(circle, rgb(var(--cls-brand-600) / 0.2), transparent 68%);
+  }
+  .cls-perimeter-core {
+    background: radial-gradient(circle, rgb(var(--cls-brand-500) / 0.22), transparent 70%);
   }
   .cls-hero-settle {
     transform: translate3d(0, calc(var(--cls-scroll, 0) * -18px), 0);
@@ -849,33 +855,34 @@
   }
   .cls-hero-visual {
     position: relative;
-    isolation: isolate;
   }
-  .cls-hero-visual::after {
+  .cls-inside {
+    position: relative;
+  }
+  .cls-inside::before {
     content: "";
     position: absolute;
-    inset: 16% 8%;
-    z-index: 2;
+    left: 0;
+    right: 0;
+    top: -7rem;
+    height: 9rem;
     pointer-events: none;
-    background: linear-gradient(
-      108deg,
-      transparent 40%,
-      rgb(var(--cls-brand-400) / 0.1) 50%,
-      transparent 60%
-    );
-    transform: translate3d(-70%, 0, 0);
-    animation: cls-hero-sweep 11s ease-in-out 0.8s infinite;
+    background: radial-gradient(55% 100% at 72% 100%, rgb(var(--cls-brand-600) / 0.14), transparent 72%);
   }
-  [data-sweep="off"] .cls-hero-visual::after,
-  [data-depth-paused="true"] .cls-hero-visual::after {
-    animation-play-state: paused;
-    opacity: 0;
+  .cls-auth-ambient {
+    position: absolute;
+    left: 50%;
+    top: 34%;
+    width: min(420px, 90vw);
+    height: min(420px, 90vw);
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    background: radial-gradient(circle, rgb(var(--cls-brand-600) / 0.22), transparent 68%);
+    animation: cls-auth-breathe 6s ease-in-out infinite;
   }
-  @keyframes cls-hero-sweep {
-    0%, 18% { transform: translate3d(-70%, 0, 0); opacity: 0; }
-    32% { opacity: 1; }
-    58% { transform: translate3d(70%, 0, 0); opacity: 0; }
-    100% { transform: translate3d(70%, 0, 0); opacity: 0; }
+  @keyframes cls-auth-breathe {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
   }
   .cls-domain-rise {
     animation: cls-domain-rise 420ms var(--cls-ease-out);
@@ -892,13 +899,11 @@
     .cls-perimeter-edge-label,
     .cls-perimeter-core-glow,
     .cls-domain-rise,
-    .cls-hero-visual::after {
+    .cls-auth-ambient {
       animation: none !important;
-      opacity: 1 !important;
-      transform: none !important;
     }
-    .cls-hero-visual::after {
-      opacity: 0 !important;
+    .cls-auth-ambient {
+      opacity: 0.7 !important;
     }
     .cls-depth-fg,
     .cls-depth-ui,

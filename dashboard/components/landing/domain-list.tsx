@@ -14,13 +14,8 @@ const ICONS: Record<PerimeterDomain, LucideIcon> = {
   Automation: Workflow,
 };
 
-export function DomainList({
-  activeDomain,
-  onActiveDomain,
-}: {
-  activeDomain: PerimeterDomain;
-  onActiveDomain: (domain: PerimeterDomain) => void;
-}) {
+export function DomainList() {
+  const [activeDomain, setActiveDomain] = React.useState<PerimeterDomain>("Security");
   const sectionRef = React.useRef<HTMLElement>(null);
   const [risen, setRisen] = React.useState(false);
   const buttons = React.useRef<Record<string, HTMLButtonElement | null>>({});
@@ -53,12 +48,12 @@ export function DomainList({
         : event.key === "End"
           ? LANDING_DOMAINS[LANDING_DOMAINS.length - 1].id
           : neighborDomain(activeDomain, event.key === "ArrowDown" ? 1 : -1);
-    onActiveDomain(next);
+    setActiveDomain(next);
     buttons.current[next]?.focus();
   }
 
   return (
-    <section id="inside-cls-os" ref={sectionRef} className={cn("cls-public-container border-t border-line-subtle pb-16 pt-10", risen && "cls-domain-rise")}>
+    <section id="inside-cls-os" ref={sectionRef} className={cn("cls-inside cls-public-container pb-16 pt-6", risen && "cls-domain-rise")}>
       <h2 className="cls-overline mb-6 text-fg-3">What runs inside</h2>
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
         <div role="tablist" aria-label="What runs inside" aria-orientation="vertical" className="flex flex-col gap-1" onKeyDown={onKeyDown}>
@@ -83,10 +78,10 @@ export function DomainList({
                   selected ? "bg-surface-2 text-fg-1 ring-1 ring-inset ring-brand-400/40" : "text-fg-2 hover:bg-surface-1 hover:text-fg-1",
                 )}
                 onPointerEnter={(event) => {
-                  if (event.pointerType === "mouse") onActiveDomain(item.id);
+                  if (event.pointerType === "mouse") setActiveDomain(item.id);
                 }}
-                onFocus={() => onActiveDomain(item.id)}
-                onClick={() => onActiveDomain(item.id)}
+                onFocus={() => setActiveDomain(item.id)}
+                onClick={() => setActiveDomain(item.id)}
               >
                 <Icon className={cn("mt-0.5 size-4 shrink-0", selected ? "text-brand-400" : "text-fg-3")} strokeWidth={1.5} aria-hidden="true" />
                 <span className="min-w-0">
@@ -106,10 +101,15 @@ export function DomainList({
         >
           <p className="text-section text-fg-1">{domain.name}</p>
           <p className="mt-2 max-w-[62ch] text-body text-fg-2">{domain.summary}</p>
+          <ul className="mt-4 space-y-1">
+            {domain.capabilities.map((row) => (
+              <li key={row} className="text-small text-fg-1">{row}</li>
+            ))}
+          </ul>
           <div className="mt-4 overflow-hidden rounded-sm border border-line bg-void">
-            <div className="border-b border-line-subtle px-3 py-2 text-caption text-fg-3">{domain.name}</div>
+            <div className="border-b border-line-subtle px-3 py-2 text-caption text-fg-3">{domain.previewTitle}</div>
             <ul>
-              {domain.capabilities.map((row) => (
+              {domain.previewRows.map((row) => (
                 <li key={row} className="border-b border-line-subtle px-3 py-2.5 text-small text-fg-1 last:border-b-0">
                   {row}
                 </li>

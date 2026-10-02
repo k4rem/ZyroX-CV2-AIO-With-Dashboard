@@ -1,5 +1,5 @@
 import * as React from "react";
-import { CircleAlert, Info, Lock, OctagonAlert, TriangleAlert, type LucideIcon } from "lucide-react";
+import { CircleAlert, CircleCheck, Info, Lock, OctagonAlert, TriangleAlert, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -43,12 +43,14 @@ export function NoPermissionState(props: Omit<StateBlockProps, "icon">) {
   return <EmptyState icon={Lock} {...props} />;
 }
 
-type Tone = "danger" | "warning" | "info" | "neutral";
+type Tone = "danger" | "warning" | "info" | "neutral" | "ok" | "locked";
 
 const TONES: Record<Tone, { icon: LucideIcon; box: string; glyph: string }> = {
   danger: { icon: OctagonAlert, box: "border-danger/30 bg-danger/[0.08]", glyph: "text-danger" },
   warning: { icon: TriangleAlert, box: "border-warn/30 bg-warn/[0.08]", glyph: "text-warn" },
   info: { icon: Info, box: "border-info/30 bg-info/[0.08]", glyph: "text-info" },
+  ok: { icon: CircleCheck, box: "border-ok/30 bg-ok/[0.08]", glyph: "text-ok" },
+  locked: { icon: Lock, box: "border-locked/40 bg-locked/[0.08]", glyph: "text-locked" },
   neutral: { icon: CircleAlert, box: "border-line-strong bg-surface-2", glyph: "text-fg-3" },
 };
 

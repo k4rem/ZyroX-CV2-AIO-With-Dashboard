@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { DISCORD_ENTRY, LANDING_DOMAINS, PERIMETER_DOMAINS, neighborDomain } from "./landingDomains.ts";
-import { LANDING_DEPTH, motionPolicy } from "./landingMotion.ts";
+import { HERO_CYCLE_MS, LANDING_DEPTH, heroShouldAdvance, motionPolicy } from "./landingMotion.ts";
 
 test("landing domains are the six real modules", () => {
   assert.deepEqual(PERIMETER_DOMAINS, ["Security", "Tickets", "Logging", "Messaging", "Roles", "Automation"]);
@@ -14,6 +14,8 @@ test("landing domains are the six real modules", () => {
     assert.equal(text.includes("uptime"), false);
     assert.equal(text.includes("testimonial"), false);
     assert.equal(text.includes("99.9"), false);
+    assert.equal(text.includes("antinuke"), false);
+    assert.ok(domain.previewRows.length >= 3 && domain.previewRows.length <= 4);
   }
 });
 
@@ -29,6 +31,27 @@ test("discord entry stays the only sign-in route", () => {
   assert.equal(DISCORD_ENTRY.label, "Sign in with Discord");
 });
 
+test("public surfaces keep the hero, auth, and favicon contracts", () => {
+  const hero = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.equal(hero.includes("cls-hero-sweep"), false);
+  assert.match(hero, /--cls-info: 156 148 188/);
+  assert.equal(hero.includes("77 179 240"), false);
+  const layout = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
+  assert.match(layout, /cls-icon\.svg/);
+  assert.equal(layout.includes("cls-mark-128"), false);
+  const noAccess = readFileSync(new URL("../app/auth/no-access/page.tsx", import.meta.url), "utf8");
+  assert.match(noAccess, /CheckAgainButton/);
+  assert.match(noAccess, /Awaiting access grant/);
+  const check = readFileSync(new URL("../components/auth/check-again-button.tsx", import.meta.url), "utf8");
+  assert.match(check, /Check again/);
+  assert.match(check, /\/auth\/continue/);
+  const nav = readFileSync(new URL("../components/landing/landing-nav.tsx", import.meta.url), "utf8");
+  assert.equal(nav.includes("hidden sm:block"), false);
+  const banner = readFileSync(new URL("../components/ui/state.tsx", import.meta.url), "utf8");
+  assert.match(banner, /locked:/);
+  assert.match(banner, /border-info/);
+});
+
 test("domain index stacks on small screens and splits beside the detail on desktop", () => {
   const source = readFileSync(new URL("../components/landing/domain-list.tsx", import.meta.url), "utf8");
   assert.match(source, /grid-cols-1/);
@@ -37,13 +60,18 @@ test("domain index stacks on small screens and splits beside the detail on deskt
   assert.match(source, /role="tabpanel"/);
 });
 
-test("reduced motion removes parallax and the sweep", () => {
+test("reduced motion removes parallax, the sweep, and hero cycling", () => {
   const reduced = motionPolicy({ reduce: true, finePointer: true, tablet: false });
   assert.equal(reduced.pointer, false);
   assert.equal(reduced.sweep, false);
   assert.equal(reduced.entry, false);
   assert.equal(reduced.scroll, false);
   assert.equal(reduced.scale, 0);
+  assert.equal(reduced.cycle, false);
+  assert.equal(heroShouldAdvance({ reduce: true, paused: false }), false);
+  assert.equal(heroShouldAdvance({ reduce: false, paused: true }), false);
+  assert.equal(heroShouldAdvance({ reduce: false, paused: false }), true);
+  assert.equal(HERO_CYCLE_MS, 4000);
 });
 
 test("touch keeps a simpler scroll settle and no cursor depth", () => {

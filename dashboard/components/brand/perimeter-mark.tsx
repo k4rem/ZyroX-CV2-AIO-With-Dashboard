@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { LifeBuoy, MessageSquare, ScrollText, ShieldAlert, UserRound, Workflow, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ClsMark } from "@/components/brand/cls-mark";
 import {
@@ -21,7 +22,17 @@ export interface PerimeterMarkProps {
   className?: string;
   showLabels?: boolean;
   parallax?: boolean;
+  onDomainSelect?: (domain: PerimeterDomain) => void;
 }
+
+const DOMAIN_ICONS: Record<PerimeterDomain, LucideIcon> = {
+  Security: ShieldAlert,
+  Tickets: LifeBuoy,
+  Logging: ScrollText,
+  Messaging: MessageSquare,
+  Roles: UserRound,
+  Automation: Workflow,
+};
 
 const CX = 100;
 const CY = 100;
@@ -131,6 +142,7 @@ export function PerimeterMark({
   className,
   showLabels = true,
   parallax = false,
+  onDomainSelect,
 }: PerimeterMarkProps) {
   const [gap, setGap] = React.useState(0.03);
   const [markPx, setMarkPx] = React.useState(72);
@@ -194,7 +206,7 @@ export function PerimeterMark({
     >
       <div
         className={cn(
-          "pointer-events-none absolute inset-[14%] rounded-full bg-brand-600/[0.12] blur-2xl cls-perimeter-core-glow",
+          "cls-perimeter-core pointer-events-none absolute left-1/2 top-1/2 h-[46%] w-[46%] -translate-x-1/2 -translate-y-1/2 rounded-full cls-perimeter-core-glow",
           parallax && "cls-depth-bg",
         )}
         aria-hidden="true"
@@ -230,23 +242,31 @@ export function PerimeterMark({
       </div>
 
       {showLabels && variant === "hero" ? (
-        <div className="pointer-events-none absolute inset-0 max-md:hidden" aria-hidden="true">
-          {labelPositions.map(({ label, lx, ly, nx, ny, active }) => (
-            <span
-              key={label}
-              className={cn(
-                "cls-perimeter-edge-label absolute text-[12px] leading-none",
-                active ? "text-fg-1" : "text-fg-3",
-              )}
-              style={{
-                left: `${(lx / VIEW) * 100}%`,
-                top: `${(ly / VIEW) * 100}%`,
-                transform: `translate(-50%, -50%) translate(${nx * 4}px, ${ny * 4}px)`,
-              }}
-            >
-              {label}
-            </span>
-          ))}
+        <div className="absolute inset-0">
+          {labelPositions.map(({ label, lx, ly, active }) => {
+            const Icon = DOMAIN_ICONS[label];
+            return (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={active}
+                className={cn(
+                  "cls-perimeter-edge-label absolute flex items-center gap-1 rounded-sm border px-1.5 py-1 text-[11px] leading-none outline-none",
+                  "focus-visible:ring-2 focus-visible:ring-brand-400",
+                  active ? "border-brand-400/50 bg-brand-600/15 text-brand-300" : "border-line bg-void/80 text-fg-3 hover:text-fg-1",
+                )}
+                style={{
+                  left: `${(lx / VIEW) * 100}%`,
+                  top: `${(ly / VIEW) * 100}%`,
+                  transform: "translate(-50%, -50%)",
+                }}
+                onClick={() => onDomainSelect?.(label)}
+              >
+                <Icon className="size-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                <span className="max-sm:sr-only">{label}</span>
+              </button>
+            );
+          })}
         </div>
       ) : null}
 

@@ -56,7 +56,7 @@ test("label registry hides raw ids from the title", () => {
   assert.equal(label.title, "Destructive burst");
   assert.equal(label.title.includes("aggregate"), false);
   assert.equal(labelFor("sequence.cls_impairment").tone, "warning");
-  assert.equal(labelFor("DEVELOPMENT_PROPOSAL").title, "Development proposal");
+  assert.equal(labelFor("DEVELOPMENT_PROPOSAL").title, "Provisional threshold");
 });
 
 test("data table pagination contract", () => {

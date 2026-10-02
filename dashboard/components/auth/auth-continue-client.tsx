@@ -17,6 +17,7 @@ export function AuthContinueClient({ destination }: { destination: string }) {
   return (
     <AuthLayout title="Access confirmed" perimeterOpen={open}>
       <p className="text-center">Opening CLS OS…</p>
+      <p className="mt-3 text-small text-fg-3">What happens next: your granted servers open.</p>
     </AuthLayout>
   );
 }

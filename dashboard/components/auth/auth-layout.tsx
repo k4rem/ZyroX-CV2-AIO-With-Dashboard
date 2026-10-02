@@ -10,15 +10,18 @@ export function AuthLayout({
   children,
   actions,
   perimeterOpen,
+  ambient,
 }: {
   title: string;
   children: React.ReactNode;
   actions?: React.ReactNode;
   perimeterOpen?: boolean;
+  ambient?: boolean;
 }) {
   return (
     <div className="cls-gateway relative flex min-h-[100svh] flex-col bg-void text-fg-1">
       <LatticeBackground />
+      {ambient ? <div className="cls-auth-ambient pointer-events-none" aria-hidden="true" /> : null}
       <header className="relative z-10 border-b border-transparent">
         <div className="cls-public-container flex h-topbar items-center">
           <Link

@@ -78,8 +78,8 @@ export function useLandingDepth<T extends HTMLElement>() {
       const py = (event.clientY - rect.top) / rect.height;
       tx = Math.max(-1, Math.min(1, (px - 0.5) * 2));
       ty = Math.max(-1, Math.min(1, (py - 0.5) * 2));
-      targetGlowX = Math.max(8, Math.min(92, px * 100));
-      targetGlowY = Math.max(8, Math.min(92, py * 100));
+      targetGlowX = Math.max(28, Math.min(72, px * 100));
+      targetGlowY = Math.max(24, Math.min(76, py * 100));
       kick();
     };
 

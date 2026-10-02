@@ -30,9 +30,7 @@ export function LandingNav({ onSignInLock }: { onSignInLock?: () => void }) {
         >
           <Wordmark markHeight={28} />
         </Link>
-        <div className="hidden sm:block">
-          <SignInButton emphasis="nav" onLock={onSignInLock} />
-        </div>
+        <SignInButton emphasis="nav" onLock={onSignInLock} />
       </div>
     </header>
   );

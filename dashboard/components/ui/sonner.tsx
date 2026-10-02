@@ -33,6 +33,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
           cancelButton: "group-[.toast]:bg-surface-3 group-[.toast]:text-fg-2",
           success: "group-[.toaster]:border-ok/40",
           error: "group-[.toaster]:border-danger/40",
+          warning: "group-[.toaster]:border-warn/40",
+          info: "group-[.toaster]:border-info/40",
           loading: "group-[.toaster]:border-line-strong",
         },
       }}
