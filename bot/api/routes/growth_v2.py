@@ -11,11 +11,13 @@ from cls_platform.giveaways_runtime import sync_message
 from cls_platform.growth import (
     archive_giveaway,
     create_giveaway,
+    invite_member,
+    invite_overview,
+    set_invite_log_channel,
     end_giveaway,
     entry_user_ids,
     giveaway_for,
     giveaway_history,
-    invite_history,
     reroll_giveaway,
     update_giveaway,
 )
@@ -58,9 +60,42 @@ def _optional_id(value: str | None) -> int | None:
     return None
 
 
+class InviteSettingsBody(BaseModel):
+    log_channel_id: str | None = None
+
+
+def _people(guild_id: int, rows: list[dict], id_key: str = "user_id") -> list[dict]:
+    bot = get_bot()
+    guild = bot.get_guild(guild_id) if bot is not None else None
+    for row in rows:
+        user_id = row.get(id_key)
+        member = guild.get_member(int(user_id)) if guild is not None and user_id else None
+        row["name"] = member.display_name if member is not None else "Former member"
+    return rows
+
+
 @router.get("/{guild_id}/invites/v2")
 async def invites_v2(guild_id: int):
-    return {"joins": await invite_history(guild_id), "legacy_counts": False}
+    overview = await invite_overview(guild_id)
+    overview["members"] = _people(guild_id, overview["members"])
+    overview["legacy_counts"] = False
+    return overview
+
+
+@router.get("/{guild_id}/invites/v2/members/{user_id}")
+async def invites_member(guild_id: int, user_id: int):
+    detail = await invite_member(guild_id, user_id)
+    detail["joins"] = _people(guild_id, detail["joins"])
+    bot = get_bot()
+    guild = bot.get_guild(guild_id) if bot is not None else None
+    member = guild.get_member(user_id) if guild is not None else None
+    detail["name"] = member.display_name if member is not None else "Former member"
+    return detail
+
+
+@router.put("/{guild_id}/invites/v2/settings")
+async def invites_settings(guild_id: int, body: InviteSettingsBody, request: Request):
+    return await set_invite_log_channel(guild_id, _optional_id(body.log_channel_id), actor_id=_actor(request))
 
 
 def _named(guild_id: int, rows: list[dict]) -> list[dict]:

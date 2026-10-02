@@ -17,7 +17,9 @@ from cls_platform.growth import (
     entry_user_ids,
     giveaway_for,
     leave_giveaway,
+    invite_log_channel,
     note_join,
+    note_leave,
     promote_scheduled,
     sync_codes,
     unpublished_giveaways,
@@ -134,9 +136,35 @@ class GrowthV2(commands.Cog):
         before = dict(self._uses.get(member.guild.id, {}))
         after = await self._refresh(member.guild)
         if not before:
-            await note_join(member.guild.id, member.id, after, after)
+            recorded = await note_join(member.guild.id, member.id, after, after)
+        else:
+            recorded = await note_join(member.guild.id, member.id, before, after)
+        await self._invite_log(member, recorded)
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member):
+        if member.bot:
             return
-        await note_join(member.guild.id, member.id, before, after)
+        await note_leave(member.guild.id, member.id)
+
+    async def _invite_log(self, member: discord.Member, recorded: dict) -> None:
+        channel_id = await invite_log_channel(member.guild.id)
+        if not channel_id:
+            return
+        channel = member.guild.get_channel(channel_id)
+        if channel is None:
+            return
+        status = {"certain": "Confirmed", "ambiguous": "Ambiguous", "unknown": "Unknown"}.get(recorded.get("status"), "Unknown")
+        if status == "Confirmed" and recorded.get("code"):
+            text = f"{member.mention} joined. Attribution: Confirmed, invite `{recorded['code']}`."
+        elif status == "Ambiguous":
+            text = f"{member.mention} joined. Attribution: Ambiguous. More than one invite changed, so nobody was credited."
+        else:
+            text = f"{member.mention} joined. Attribution: Unknown. Discord did not show which invite was used."
+        try:
+            await channel.send(text)
+        except discord.HTTPException:
+            logger.exception("invite log failed")
 
 
 async def setup(bot):

@@ -55,7 +55,7 @@ test("active detection: exact for overview, prefix for modules, grouped routes s
   assert.deepEqual(at("/dashboard/guild/7/antinuke"), ["antinuke"]);
   assert.deepEqual(at("/dashboard/guild/7/welcome"), ["welcome"]);
   assert.deepEqual(at("/dashboard/guild/7/invcrole"), ["roles"]);
-  assert.deepEqual(at("/dashboard/guild/7/tracking"), ["invites"]);
+  assert.deepEqual(at("/dashboard/guild/7/invites"), ["invites"]);
   assert.deepEqual(at("/dashboard/guild/7/verification"), []);
 });
 

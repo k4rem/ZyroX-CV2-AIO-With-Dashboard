@@ -10,11 +10,15 @@ from cls_platform.growth import (
     enter_giveaway,
     entry_block,
     invite_history,
+    invite_member,
+    invite_overview,
     leave_giveaway,
     message_body,
     note_join,
+    note_leave,
     reroll_giveaway,
     select_winners,
+    sync_codes,
 )
 
 GUILD = 100000000000000100
@@ -94,3 +98,21 @@ async def test_duplicate_entry_and_leave(db_reset):
     assert await enter_giveaway(GUILD, created["id"], USER) == "duplicate"
     assert await leave_giveaway(GUILD, created["id"], USER) == "left"
     assert await leave_giveaway(GUILD, created["id"], USER) == "absent"
+
+
+async def test_invite_credit_ignores_uncertain_joins(db_reset):
+    await sync_codes(GUILD, [{"code": "sure", "uses": 2, "inviter_id": USER}])
+    await note_join(GUILD, USER + 1, {"sure": 1}, {"sure": 2})
+    await note_join(GUILD, USER + 2, {"sure": 1, "other": 1}, {"sure": 2, "other": 2})
+    await note_join(GUILD, USER + 3, {"sure": 2}, {"sure": 2})
+    assert await note_leave(GUILD, USER + 1) is True
+    overview = await invite_overview(GUILD)
+    row = next(item for item in overview["members"] if item["user_id"] == str(USER))
+    assert row["valid"] == 0
+    assert row["left"] == 1
+    assert overview["uncredited"]["ambiguous"] == 1
+    assert overview["uncredited"]["unknown"] == 1
+    detail = await invite_member(GUILD, USER)
+    assert detail["left"] == 1
+    assert detail["joins"][0]["code"] == "sure"
+    assert detail["joins"][0]["left_at"]

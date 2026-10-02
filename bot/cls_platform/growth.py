@@ -34,6 +34,14 @@ class InviteJoin(Base):
     code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class InviteSettings(Base):
+    __tablename__ = "invite_settings_v2"
+
+    guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    log_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 
 class Giveaway(Base):
@@ -118,9 +126,133 @@ async def invite_history(guild_id: int) -> list[dict]:
                 "code": row.code,
                 "status": row.status,
                 "joined_at": row.joined_at.isoformat(),
+                "left_at": row.left_at.isoformat() if row.left_at else None,
             }
             for row in rows
         ]
+
+
+async def note_leave(guild_id: int, user_id: int) -> bool:
+    async with session_scope() as session:
+        row = (
+            await session.execute(
+                select(InviteJoin)
+                .where(InviteJoin.guild_id == guild_id, InviteJoin.user_id == user_id, InviteJoin.left_at.is_(None))
+                .order_by(InviteJoin.joined_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return False
+        row.left_at = datetime.now(timezone.utc)
+        return True
+
+
+def _join_public(row: InviteJoin, inviter_id: int | None) -> dict:
+    return {
+        "user_id": snowflake_to_str(row.user_id),
+        "code": row.code,
+        "status": row.status,
+        "joined_at": row.joined_at.isoformat(),
+        "left_at": row.left_at.isoformat() if row.left_at else None,
+        "inviter_id": snowflake_to_str(inviter_id),
+    }
+
+
+async def invite_overview(guild_id: int) -> dict:
+    async with session_scope() as session:
+        joins = (
+            await session.execute(select(InviteJoin).where(InviteJoin.guild_id == guild_id).order_by(InviteJoin.joined_at.desc()))
+        ).scalars().all()
+        codes = (await session.execute(select(InviteCode).where(InviteCode.guild_id == guild_id))).scalars().all()
+        settings = await session.get(InviteSettings, guild_id)
+    inviter_by_code = {row.code: row.inviter_id for row in codes}
+    members: dict[int, dict] = {}
+    uncredited = {"ambiguous": 0, "unknown": 0, "no_inviter": 0}
+
+    def bucket(inviter_id: int) -> dict:
+        return members.setdefault(
+            inviter_id,
+            {"user_id": snowflake_to_str(inviter_id), "valid": 0, "left": 0, "codes": []},
+        )
+
+    for row in codes:
+        if row.inviter_id:
+            item = bucket(int(row.inviter_id))
+            if row.code not in item["codes"]:
+                item["codes"].append(row.code)
+    for row in joins:
+        if row.status != "certain" or not row.code:
+            key = row.status if row.status in {"ambiguous", "unknown"} else "unknown"
+            uncredited[key] += 1
+            continue
+        inviter_id = inviter_by_code.get(row.code)
+        if not inviter_id:
+            uncredited["no_inviter"] += 1
+            continue
+        item = bucket(int(inviter_id))
+        if row.left_at is None:
+            item["valid"] += 1
+        else:
+            item["left"] += 1
+    ranked = sorted(members.values(), key=lambda item: (-item["valid"], -item["left"], item["user_id"]))
+    return {
+        "members": ranked,
+        "uncredited": uncredited,
+        "log_channel_id": snowflake_to_str(settings.log_channel_id) if settings and settings.log_channel_id else None,
+    }
+
+
+async def invite_member(guild_id: int, user_id: int) -> dict:
+    async with session_scope() as session:
+        codes = (
+            await session.execute(select(InviteCode).where(InviteCode.guild_id == guild_id, InviteCode.inviter_id == user_id))
+        ).scalars().all()
+        code_names = [row.code for row in codes]
+        joins = (
+            await session.execute(
+                select(InviteJoin).where(InviteJoin.guild_id == guild_id, InviteJoin.code.in_(code_names or [""])).order_by(InviteJoin.joined_at.desc())
+            )
+        ).scalars().all() if code_names else []
+    credited = [_join_public(row, user_id) for row in joins if row.status == "certain"]
+    return {
+        "user_id": snowflake_to_str(user_id),
+        "codes": [{"code": row.code, "uses": row.uses, "vanity": row.vanity} for row in codes],
+        "joins": credited,
+        "valid": sum(1 for row in credited if row["left_at"] is None),
+        "left": sum(1 for row in credited if row["left_at"] is not None),
+    }
+
+
+async def invite_log_channel(guild_id: int) -> int | None:
+    async with session_scope() as session:
+        row = await session.get(InviteSettings, guild_id)
+        return int(row.log_channel_id) if row and row.log_channel_id else None
+
+
+async def set_invite_log_channel(guild_id: int, channel_id: int | None, *, actor_id: int | None = None) -> dict:
+    async with session_scope() as session:
+        row = await session.get(InviteSettings, guild_id)
+        if row is None:
+            row = InviteSettings(guild_id=guild_id, log_channel_id=channel_id)
+            session.add(row)
+        else:
+            row.log_channel_id = channel_id
+    try:
+        from cls_platform.logging.store import record_event
+
+        await record_event(
+            guild_id=guild_id,
+            category="bot_actions",
+            event_type="invite_log",
+            actor_id=actor_id,
+            actor_confidence="certain" if actor_id else "unknown",
+            channel_id=channel_id,
+            metadata={"summary": "Invite log channel updated"},
+        )
+    except Exception:
+        pass
+    return {"log_channel_id": snowflake_to_str(channel_id)}
 
 
 def entry_block(role_ids: set[int], *, required: int | None, blocked: int | None, is_bot: bool) -> str | None:

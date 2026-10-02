@@ -126,6 +126,7 @@ async def db_reset(postgres_ready):
             "giveaways_v2",
             "invite_joins_v2",
             "invite_codes_v2",
+            "invite_settings_v2",
             "command_policies",
             "security_center_settings",
             "log_events",

@@ -175,10 +175,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     icon: "invites",
     group: "engagement",
     scope: "guild",
-    routes: [
-      { path: "/tracking", label: "Tracking" },
-      { path: "/invites", label: "Invites" },
-    ],
+    routes: [{ path: "/invites", label: "Invites" }],
   },
   {
     id: "giveaways",

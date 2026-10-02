@@ -332,6 +332,9 @@ export const api = {
 
   getInvites: (guildId: string) => request<any>(`/guilds/${guildId}/invites`),
   getInvitesV2: (guildId: string) => request<any>(`/guilds/${guildId}/invites/v2`),
+  getInviteMember: (guildId: string, userId: string) => request<any>(`/guilds/${guildId}/invites/v2/members/${userId}`),
+  saveInviteSettings: (guildId: string, data: { log_channel_id: string | null }) =>
+    request<any>(`/guilds/${guildId}/invites/v2/settings`, { method: "PUT", body: JSON.stringify(data) }),
   getGiveaways: (guildId: string) => request<any>(`/guilds/${guildId}/giveaways`),
   createGiveaway: (guildId: string, data: Record<string, unknown>) =>
     request<any>(`/guilds/${guildId}/giveaways`, { method: "POST", body: JSON.stringify(data) }),
