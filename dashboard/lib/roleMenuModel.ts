@@ -18,3 +18,17 @@ export function menuTypeLabel(value: string): string {
 export function menuModeLabel(value: string): string {
   return MENU_MODES.find((item) => item.value === value)?.label || "Toggle";
 }
+
+export const BUTTON_STYLES = [
+  { value: "pair", label: "Add / Remove buttons", hint: "Each role gets an Enable button and a Disable button." },
+  { value: "toggle", label: "Single Toggle", hint: "One button per role. The label says it toggles." },
+] as const;
+
+export function buttonStyleLabel(value: string): string {
+  return BUTTON_STYLES.find((item) => item.value === value)?.label || "Single Toggle";
+}
+
+export function buttonOptionLimit(style: string, linkButtons = 0): number {
+  const room = 25 - Math.max(0, linkButtons);
+  return Math.max(0, Math.floor(room / (style === "pair" ? 2 : 1)));
+}

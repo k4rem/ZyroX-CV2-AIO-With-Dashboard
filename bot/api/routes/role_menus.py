@@ -33,6 +33,7 @@ class MenuBody(BaseModel):
     channel_id: str | None = None
     max_roles: int | None = None
     payload: dict | None = None
+    button_style: str | None = None
     options: list[OptionBody] = Field(default_factory=list)
 
 
@@ -45,6 +46,7 @@ class MenuPatch(BaseModel):
     channel_id: str | None = None
     clear_channel: bool = False
     payload: dict | None = None
+    button_style: str | None = None
     options: list[OptionBody] | None = None
 
 
@@ -195,6 +197,7 @@ async def menus_create(guild_id: int, body: MenuBody):
             max_roles=body.max_roles,
             payload=body.payload,
             options=_options(body.options) or [],
+            button_style=body.button_style,
         )
     except MenuError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -226,9 +229,11 @@ async def menus_update(guild_id: int, menu_id: str, body: MenuPatch, bot=Depends
             channel_set=body.clear_channel or body.channel_id is not None,
             payload=body.payload,
             options=_options(body.options),
+            button_style=body.button_style,
         )
     except MenuError as exc:
-        raise HTTPException(status_code=404, detail="Menu not found") from exc
+        status = 404 if str(exc) == "missing" else 422
+        raise HTTPException(status_code=status, detail=str(exc) if status == 422 else "Menu not found") from exc
     if body.enabled is True:
         await _audit(guild_id, "role_menu_enabled", f"Role menu {saved['name']} enabled")
     elif body.enabled is False:

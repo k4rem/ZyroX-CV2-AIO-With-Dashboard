@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import discord
 
-from cls_platform.messages.deliver import render_message
-from cls_platform.role_menus.logic import button_custom_id, emoji_identity, select_custom_id
+from cls_platform.messages.deliver import DeliveryError, render_message
+from cls_platform.role_menus.logic import button_custom_id, button_faces, button_option_limit, emoji_identity, select_custom_id
 
 
 def discord_emoji(token: str):
@@ -17,16 +17,33 @@ def discord_emoji(token: str):
     return text
 
 
+def assert_button_layout(menu: dict) -> None:
+    if menu.get("type") != "button":
+        return
+    style = menu.get("button_style") or "toggle"
+    links = len(((menu.get("payload") or {}).get("buttons") or []))
+    limit = button_option_limit(style, links)
+    count = len(menu.get("options") or [])
+    if count > limit:
+        suggestion = "Use Single Toggle or a select menu." if style == "pair" else "Remove options or link buttons."
+        raise DeliveryError(f"This layout needs {count} options but Discord allows {limit}. {suggestion}")
+
+
 def component_view(menu: dict, *, disabled: bool = False) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
     if menu.get("type") == "button":
-        for option in (menu.get("options") or [])[:25]:
-            view.add_item(discord.ui.Button(
-                label=(option.get("label") or "Role")[:80],
-                emoji=discord_emoji(option.get("emoji") or ""),
-                custom_id=button_custom_id(menu["id"], option["id"]),
-                disabled=disabled,
-            ))
+        style = menu.get("button_style") or "toggle"
+        assert_button_layout(menu)
+        for option in menu.get("options") or []:
+            name = option.get("label") or "Role"
+            for action, label in button_faces(style, name):
+                view.add_item(discord.ui.Button(
+                    label=label,
+                    emoji="🟢" if action == "add" else "🔴" if action == "remove" else discord_emoji(option.get("emoji") or "") or "🔔",
+                    style=discord.ButtonStyle.success if action == "add" else discord.ButtonStyle.danger if action == "remove" else discord.ButtonStyle.secondary,
+                    custom_id=button_custom_id(menu["id"], option["id"], action),
+                    disabled=disabled,
+                ))
     elif menu.get("type") == "select":
         choices = []
         for option in (menu.get("options") or [])[:25]:

@@ -7,6 +7,8 @@ import re
 _CUSTOM = re.compile(r"^<a?:([^:>]+):(\d+)>$")
 MODES = {"toggle", "add", "remove", "unique"}
 TYPES = {"reaction", "button", "select"}
+BUTTON_STYLES = {"pair", "toggle"}
+DISCORD_BUTTON_CAP = 25
 
 
 def emoji_token(value: str) -> str:
@@ -33,22 +35,41 @@ def custom_emoji_id(value: str) -> str | None:
     return match.group(2) if match else None
 
 
-def button_custom_id(menu_id: str, option_id: str) -> str:
-    return f"cls-rr:{menu_id}:{option_id}"
+def button_custom_id(menu_id: str, option_id: str, action: str | None = None) -> str:
+    base = f"cls-rr:{menu_id}:{option_id}"
+    if action in {"add", "remove"}:
+        return f"{base}:{action}"
+    return base
+
+
+def button_option_limit(style: str, link_buttons: int = 0) -> int:
+    """How many role options fit once message link buttons take their slots."""
+    room = DISCORD_BUTTON_CAP - max(0, int(link_buttons or 0))
+    per = 2 if style == "pair" else 1
+    return max(0, room // per)
+
+
+def button_faces(style: str, label: str) -> list[tuple[str | None, str]]:
+    name = (label or "Role").strip() or "Role"
+    if style == "pair":
+        return [("add", f"Enable {name}"[:80]), ("remove", f"Disable {name}"[:80])]
+    return [(None, f"Toggle {name}"[:80])]
 
 
 def select_custom_id(menu_id: str) -> str:
     return f"cls-rr:{menu_id}"
 
 
-def parse_custom_id(custom_id: str) -> tuple[str, str | None] | None:
+def parse_custom_id(custom_id: str) -> tuple[str, str | None, str | None] | None:
     if not custom_id.startswith("cls-rr:"):
         return None
     parts = custom_id.split(":")
     if len(parts) == 2:
-        return parts[1], None
+        return parts[1], None, None
     if len(parts) == 3:
-        return parts[1], parts[2]
+        return parts[1], parts[2], None
+    if len(parts) == 4 and parts[3] in {"add", "remove"}:
+        return parts[1], parts[2], parts[3]
     return None
 
 

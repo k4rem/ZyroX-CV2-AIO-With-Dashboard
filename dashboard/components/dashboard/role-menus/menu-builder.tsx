@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { MENU_MODES, MENU_TYPES, menuModeLabel, menuTypeLabel } from "@/lib/roleMenuModel";
+import { BUTTON_STYLES, MENU_MODES, MENU_TYPES, buttonOptionLimit, buttonStyleLabel, menuModeLabel, menuTypeLabel } from "@/lib/roleMenuModel";
 import { emptyMessage, type MessageDraft } from "@/lib/messagePayload";
 import { asMessageDraft } from "@/lib/welcomeState";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -49,6 +49,7 @@ export function MenuBuilder({
   const [name, setName] = useState(menu?.name || "Pick your color");
   const [type, setType] = useState(menu?.type || "reaction");
   const [mode, setMode] = useState(menu?.mode || "unique");
+  const [buttonStyle, setButtonStyle] = useState(menu?.button_style || (menu ? "toggle" : "pair"));
   const [maxRoles, setMaxRoles] = useState(menu?.max_roles ? String(menu.max_roles) : "");
   const [channelId, setChannelId] = useState(String(menu?.channel_id || ""));
   const [messageId, setMessageId] = useState(String(menu?.message_id || ""));
@@ -66,11 +67,14 @@ export function MenuBuilder({
     source: source || "created",
     type: effectiveType,
     mode,
+    button_style: effectiveType === "button" ? buttonStyle : "toggle",
     channel_id: channelId || null,
     max_roles: mode === "unique" || maxRoles === "" ? null : Number(maxRoles),
     payload: existing ? null : message,
     options,
-  }), [name, source, effectiveType, mode, channelId, maxRoles, message, options, existing]);
+  }), [name, source, effectiveType, mode, buttonStyle, channelId, maxRoles, message, options, existing]);
+  const optionLimit = effectiveType === "button" ? buttonOptionLimit(buttonStyle, message.buttons.length) : effectiveType === "reaction" ? 20 : 25;
+  const overLimit = options.length > optionLimit;
 
   function move(index: number, direction: -1 | 1) {
     const next = options.slice();
@@ -124,7 +128,7 @@ export function MenuBuilder({
     <div>
       <PageHeader title={name || "Role menu"} description={existing ? "Existing messages can use reactions only." : "Save keeps the draft. Publish sends it to Discord."}>
         <Button type="button" variant="secondary" disabled={busy} onClick={() => void persist(false)}>Save</Button>
-        <Button type="button" disabled={busy || !channelId || (existing && !messageId)} onClick={() => void persist(true)}>{menu?.message_id ? "Update" : "Publish"}</Button>
+        <Button type="button" disabled={busy || overLimit || !channelId || (existing && !messageId)} onClick={() => void persist(true)}>{menu?.message_id ? "Update" : "Publish"}</Button>
         {menu?.status === "Message missing" && menu?.source === "created" && <Button type="button" variant="ghost" disabled={busy} onClick={() => void api.republishRoleMenu(guildId, menu.id).then(() => router.refresh())}>Republish</Button>}
       </PageHeader>
       <p className="mb-3 text-small text-fg-3">{menu?.status || "Draft"}{menu?.warnings?.[0] ? ` · ${menu.warnings[0]}` : ""}</p>
@@ -132,6 +136,8 @@ export function MenuBuilder({
         <aside className="space-y-3 border border-line-subtle p-3">
           <Input value={name} aria-label="Menu name" onChange={(event) => setName(event.target.value)} />
           {!existing && <Select value={effectiveType} onValueChange={setType} options={MENU_TYPES.map((item) => ({ value: item.value, label: item.label }))} />}
+          {effectiveType === "button" && <Select value={buttonStyle} onValueChange={setButtonStyle} options={BUTTON_STYLES.map((item) => ({ value: item.value, label: item.label }))} />}
+          {effectiveType === "button" && <p className="text-caption text-fg-3">{BUTTON_STYLES.find((item) => item.value === buttonStyle)?.hint}</p>}
           <Select value={mode} onValueChange={setMode} options={MENU_MODES.map((item) => ({ value: item.value, label: item.label }))} />
           <p className="text-caption text-fg-3">{MENU_MODES.find((item) => item.value === mode)?.hint}</p>
           {mode !== "unique" && <Input value={maxRoles} aria-label="Maximum roles" placeholder="Max roles, optional" onChange={(event) => setMaxRoles(event.target.value)} />}
@@ -140,7 +146,7 @@ export function MenuBuilder({
           {existing && excerpt && <p className="text-caption text-fg-3">{excerpt}</p>}
           <div className="flex items-center justify-between">
             <p className="text-caption text-fg-3">Options</p>
-            <Button type="button" size="sm" variant="ghost" disabled={options.length >= (effectiveType === "reaction" ? 20 : 25)} onClick={() => setOptions([...options, { role_id: "", emoji: "", label: "Role", description: "" }])}>Add</Button>
+            <Button type="button" size="sm" variant="ghost" disabled={options.length >= optionLimit} onClick={() => setOptions([...options, { role_id: "", emoji: "", label: "Role", description: "" }])}>Add</Button>
           </div>
           {options.map((option, index) => {
             const role = roleName(option.role_id);
@@ -169,11 +175,15 @@ export function MenuBuilder({
           <p className="border border-line-subtle p-3 text-small text-fg-3">This menu uses the message you selected. CLS will add the reactions and will not change the message text.</p>
         )}
         <aside className="sticky top-3 border border-line-subtle p-3">
-          <p className="mb-2 text-caption uppercase tracking-wide text-fg-3">Preview · {menuTypeLabel(effectiveType)} · {menuModeLabel(mode)}</p>
+          {overLimit && <p className="text-caption text-fg-2">Discord allows {optionLimit} options here. Use Single Toggle or a select menu for more roles.</p>}
+          <p className="mb-2 text-caption uppercase tracking-wide text-fg-3">Preview · {menuTypeLabel(effectiveType)}{effectiveType === "button" ? ` · ${buttonStyleLabel(buttonStyle)}` : ""} · {menuModeLabel(mode)}</p>
           {!existing && <DiscordMessagePreview guildId={guildId} message={message} values={{}} />}
           {existing && <p className="text-small text-fg-2">{excerpt || "Choose a message to see it here."}</p>}
           {effectiveType === "reaction" && <p className="mt-2 text-small text-fg-1">{options.map((option) => option.emoji || "•").join("  ")}</p>}
-          {effectiveType === "button" && <div className="mt-2 flex flex-wrap gap-1">{options.map((option, index) => <span key={index} className="border border-line-subtle px-2 py-1 text-caption text-fg-1">{option.emoji} {option.label || "Role"}</span>)}</div>}
+          {effectiveType === "button" && <div className="mt-2 flex flex-wrap gap-1">{options.flatMap((option, index) => (buttonStyle === "pair"
+            ? [[`enable-${index}`, `🟢 Enable ${option.label || "Role"}`], [`disable-${index}`, `🔴 Disable ${option.label || "Role"}`]]
+            : [[`toggle-${index}`, `${option.emoji || "🔔"} Toggle ${option.label || "Role"}`]]
+          ).map(([key, text]) => <span key={key} className="border border-line-subtle px-2 py-1 text-caption text-fg-1">{text}</span>))}</div>}
           {effectiveType === "select" && <div className="mt-2 border border-line-subtle px-2 py-1 text-small text-fg-2">{options[0] ? `${options[0].emoji} ${options[0].label}` : "Choose a role"}</div>}
         </aside>
       </div>

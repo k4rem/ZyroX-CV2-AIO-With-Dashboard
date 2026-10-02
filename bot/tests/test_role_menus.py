@@ -8,6 +8,8 @@ from api.routes.role_menus import _health
 from cls_platform.role_menus.deliver import component_view, reaction_targets
 from cls_platform.role_menus.logic import (
     button_custom_id,
+    button_faces,
+    button_option_limit,
     emoji_identity,
     emoji_token,
     parse_custom_id,
@@ -67,8 +69,10 @@ def test_modes_limits_and_emoji_identity():
     custom = button_custom_id(menu_id, option_id)
     assert custom == f"cls-rr:{menu_id}:{option_id}"
     assert len(custom) <= 100
-    assert parse_custom_id(custom) == (menu_id, option_id)
-    assert parse_custom_id(select_custom_id(menu_id)) == (menu_id, None)
+    assert parse_custom_id(custom) == (menu_id, option_id, None)
+    assert parse_custom_id(button_custom_id(menu_id, option_id, "add")) == (menu_id, option_id, "add")
+    assert len(button_custom_id(menu_id, option_id, "remove")) <= 100
+    assert parse_custom_id(select_custom_id(menu_id)) == (menu_id, None, None)
 
 
 def test_component_ids_survive_a_rebuild():
@@ -79,6 +83,12 @@ def test_component_ids_survive_a_rebuild():
     }
     view = component_view(menu)
     assert view.children[0].custom_id == button_custom_id(menu["id"], menu["options"][0]["id"])
+    assert view.children[0].label == "Toggle Announcements"
+    pair = component_view({**menu, "button_style": "pair"})
+    assert [item.label for item in pair.children] == ["Enable Announcements", "Disable Announcements"]
+    assert pair.children[0].custom_id.endswith(":add")
+    assert button_faces("pair", "Announcements")[1][1] == "Disable Announcements"
+    assert button_option_limit("pair", 0) == 12
     select = component_view({**menu, "type": "select", "options": [{**menu["options"][0], "label": "EU", "description": "Europe"}]})
     assert select.children[0].custom_id == select_custom_id(menu["id"])
     assert select.children[0].options[0].value == menu["options"][0]["id"]

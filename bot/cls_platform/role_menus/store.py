@@ -13,7 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from cls_platform.database import session_scope
 from cls_platform.discord_types import snowflake_to_str
 from cls_platform.models import Base
-from cls_platform.role_menus.logic import MODES, TYPES, emoji_token
+from cls_platform.role_menus.logic import BUTTON_STYLES, MODES, TYPES, button_option_limit, emoji_token
 
 class MenuError(Exception):
     pass
@@ -30,6 +30,7 @@ class RoleMenu(Base):
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="created")
     menu_type: Mapped[str] = mapped_column(String(16), nullable=False, default="reaction")
     mode: Mapped[str] = mapped_column(String(16), nullable=False, default="toggle")
+    button_style: Mapped[str] = mapped_column(String(16), nullable=False, default="toggle")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     max_roles: Mapped[int | None] = mapped_column(Integer, nullable=True)
     payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -75,6 +76,7 @@ def _menu(row: RoleMenu, options: list[RoleMenuOption]) -> dict:
         "source": row.source,
         "type": row.menu_type,
         "mode": row.mode,
+        "button_style": row.button_style or "toggle",
         "enabled": row.enabled,
         "max_roles": row.max_roles,
         "payload": row.payload,
@@ -132,11 +134,32 @@ async def get_menu(guild_id: int, menu_id: str) -> dict:
         return _menu(row, options)
 
 
-async def create_menu(*, guild_id: int, name: str, source: str, menu_type: str, mode: str, channel_id: int | None = None, max_roles: int | None = None, payload: dict | None = None, options: list[dict] | None = None) -> dict:
+def _style(menu_type: str, button_style: str | None) -> str:
+    if menu_type != "button":
+        return "toggle"
+    style = button_style or "pair"
+    if style not in BUTTON_STYLES:
+        raise MenuError("invalid")
+    return style
+
+
+def _guard_buttons(menu_type: str, button_style: str, payload: dict | None, options: list[dict] | None) -> None:
+    if menu_type != "button":
+        return
+    links = len(((payload or {}).get("buttons") or []))
+    limit = button_option_limit(button_style, links)
+    count = len([item for item in (options or []) if str(item.get("role_id") or "").isdigit()])
+    if count > limit:
+        raise MenuError(f"Discord allows {limit} options for this button style. Use Single Toggle or a select menu.")
+
+
+async def create_menu(*, guild_id: int, name: str, source: str, menu_type: str, mode: str, channel_id: int | None = None, max_roles: int | None = None, payload: dict | None = None, options: list[dict] | None = None, button_style: str | None = None) -> dict:
     if menu_type not in TYPES or mode not in MODES or source not in {"created", "existing"}:
         raise MenuError("invalid")
     if source == "existing" and menu_type != "reaction":
         raise MenuError("existing_reactions_only")
+    style = _style(menu_type, button_style)
+    _guard_buttons(menu_type, style, payload, options)
     now = datetime.now(timezone.utc)
     async with session_scope() as session:
         row = RoleMenu(
@@ -145,6 +168,7 @@ async def create_menu(*, guild_id: int, name: str, source: str, menu_type: str, 
             source=source,
             menu_type=menu_type,
             mode=mode,
+            button_style=style,
             channel_id=channel_id,
             max_roles=None if mode == "unique" else max_roles,
             payload=payload,
@@ -161,7 +185,7 @@ async def create_menu(*, guild_id: int, name: str, source: str, menu_type: str, 
         return _menu(loaded, saved)
 
 
-async def update_menu(*, guild_id: int, menu_id: str, name: str | None = None, mode: str | None = None, menu_type: str | None = None, enabled: bool | None = None, max_roles: int | None = None, max_roles_set: bool = False, channel_id: int | None = None, channel_set: bool = False, payload: dict | None = None, options: list[dict] | None = None) -> dict:
+async def update_menu(*, guild_id: int, menu_id: str, name: str | None = None, mode: str | None = None, menu_type: str | None = None, enabled: bool | None = None, max_roles: int | None = None, max_roles_set: bool = False, channel_id: int | None = None, channel_set: bool = False, payload: dict | None = None, options: list[dict] | None = None, button_style: str | None = None) -> dict:
     async with session_scope() as session:
         row, current = await _load(session, guild_id, menu_id)
         if name is not None:
@@ -174,6 +198,10 @@ async def update_menu(*, guild_id: int, menu_id: str, name: str | None = None, m
             if menu_type not in TYPES or (row.source == "existing" and menu_type != "reaction"):
                 raise MenuError("existing_reactions_only")
             row.menu_type = menu_type
+        if button_style is not None:
+            if button_style not in BUTTON_STYLES:
+                raise MenuError("invalid")
+            row.button_style = button_style
         if enabled is not None:
             row.enabled = enabled
         if max_roles_set:
@@ -184,6 +212,10 @@ async def update_menu(*, guild_id: int, menu_id: str, name: str | None = None, m
             row.channel_id = channel_id
         if payload is not None:
             row.payload = payload
+        next_options = options if options is not None else [
+            {"role_id": str(item.role_id), "emoji": item.emoji, "label": item.label, "description": item.description} for item in current
+        ]
+        _guard_buttons(row.menu_type, row.button_style or "toggle", payload if payload is not None else row.payload, next_options)
         if options is not None:
             for option in current:
                 await session.delete(option)
@@ -214,6 +246,7 @@ async def duplicate_menu(*, guild_id: int, menu_id: str) -> dict:
         source="created",
         menu_type=source["type"],
         mode=source["mode"],
+        button_style=source.get("button_style") or "toggle",
         max_roles=source["max_roles"],
         payload=source["payload"],
         options=source["options"],

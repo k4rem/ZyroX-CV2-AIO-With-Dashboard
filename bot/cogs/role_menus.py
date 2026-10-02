@@ -168,7 +168,7 @@ class RoleMenus(commands.Cog):
                 except discord.HTTPException:
                     pass
 
-    def explain(self, guild, member: discord.Member, menu: dict, target: int, intent: str) -> str:
+    def explain(self, guild, member: discord.Member, menu: dict, target: int, intent: str, mode: str | None = None) -> str:
         role = guild.get_role(int(target)) if guild else None
         me = guild.me if guild else None
         block = role_block(
@@ -181,21 +181,25 @@ class RoleMenus(commands.Cog):
             return block
         held = {item.id for item in member.roles}
         menu_roles = {int(option["role_id"]) for option in menu["options"]}
-        plan = plan_change(mode=menu["mode"], intent=intent, held=held, target=int(target), menu_roles=menu_roles, max_roles=menu.get("max_roles"))
+        plan = plan_change(mode=mode or menu["mode"], intent=intent, held=held, target=int(target), menu_roles=menu_roles, max_roles=menu.get("max_roles"))
         if plan["error"]:
             return plan["error"]
         if plan.get("unchanged"):
             return f"You already have {role.name}."
         return plan
 
-    async def apply(self, guild, member: discord.Member, menu: dict, target: int, intent: str) -> str:
+    async def apply(self, guild, member: discord.Member, menu: dict, target: int, intent: str, *, action: str | None = None, label: str = "Role") -> str:
         if not menu.get("enabled"):
             return "This menu is turned off."
         me = guild.me if guild else None
         if me and me.top_role and member.top_role >= me.top_role:
             return "CLS cannot change roles for a member above it."
-        planned = self.explain(guild, member, menu, target, intent)
+        mode = "unique" if action == "add" and menu.get("mode") == "unique" else "add" if action == "add" else "remove" if action == "remove" else None
+        use_intent = "grant" if action == "add" else "press" if action == "remove" else intent
+        planned = self.explain(guild, member, menu, target, use_intent, mode)
         if isinstance(planned, str):
+            if action == "add" and planned.startswith("You already have"):
+                return f"{label} is already enabled."
             return planned
         added = [guild.get_role(role_id) for role_id in planned["add"]]
         removed = [guild.get_role(role_id) for role_id in planned["remove"]]
@@ -213,6 +217,10 @@ class RoleMenus(commands.Cog):
             await self._log(guild.id, "role_menu_added", member.id, channel_id, f"{member.display_name} took {role.name}")
         for role in removed:
             await self._log(guild.id, "role_menu_removed", member.id, channel_id, f"{member.display_name} lost {role.name}")
+        if action == "add":
+            return f"✓ {label} enabled" if added else f"{label} is already enabled."
+        if action == "remove":
+            return f"✓ {label} disabled" if removed else f"{label} is already off."
         if added and not removed:
             return f"Role added: {added[0].name}"
         if removed and not added:
@@ -263,7 +271,7 @@ class RoleMenus(commands.Cog):
         parsed = parse_custom_id(custom_id)
         if parsed is None or not isinstance(interaction.user, discord.Member):
             return
-        menu_id, option_id = parsed
+        menu_id, option_id, action = parsed
         try:
             menu = await get_menu(interaction.guild.id, menu_id)
         except MenuError:
@@ -274,7 +282,7 @@ class RoleMenus(commands.Cog):
         option = next((item for item in menu["options"] if item["id"] == option_id), None)
         if option is None:
             return
-        text = await self.apply(interaction.guild, interaction.user, menu, int(option["role_id"]), "press")
+        text = await self.apply(interaction.guild, interaction.user, menu, int(option["role_id"]), "press", action=action, label=option.get("label") or "Role")
         if interaction.response.is_done():
             await interaction.followup.send(text, ephemeral=True)
         else:
