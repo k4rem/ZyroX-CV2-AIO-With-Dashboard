@@ -23,6 +23,8 @@ const LABELS: Record<string, string> = {
   channel_events: "Channels",
   guild_events: "Server",
   bot_actions: "Bot actions",
+  automod: "Automod",
+  security: "Security",
 };
 
 const EVENT_TITLES: Record<string, string> = {

@@ -21,6 +21,19 @@ from datetime import timedelta
 import asyncio
 from utils.guild_allowlist import filter_allowed_guilds
 
+
+async def _audit_global(ctx, action: str, user_id: int, count: int) -> None:
+    """Two-step confirmation plus an audit record. Re-authentication is later work."""
+    from cls_platform.services.audit import record_audit
+
+    await record_audit(
+        action=action,
+        actor_user_id=ctx.author.id,
+        target=str(user_id),
+        after_state={"scope": "allowed mutual guilds", "target_count": count},
+    )
+
+
 class Global(commands.Cog):
     def __init__(self, client):
         self.client = client
@@ -59,6 +72,11 @@ class Global(commands.Cog):
             view.clear_items()
             await interaction.response.edit_message(view=view)
             await ctx.send(f"Processing global ban for {user.name}...")
+            try:
+                await _audit_global(ctx, "security.global_ban.confirm", user.id, mutual_count)
+            except Exception:
+                await ctx.send("Global ban was not started. The audit record could not be written.")
+                return
             success, failure = [], []
             for guild in mutual_guilds:
                 try:
@@ -137,6 +155,11 @@ class Global(commands.Cog):
             view.clear_items()
             await interaction.response.edit_message(view=view)
             await ctx.send(f"Processing global kick for {user.name}...")
+            try:
+                await _audit_global(ctx, "security.global_kick.confirm", user.id, mutual_count)
+            except Exception:
+                await ctx.send("Global kick was not started. The audit record could not be written.")
+                return
             success, failure = [], []
             for guild in mutual_guilds:
                 try:
@@ -215,6 +238,11 @@ class Global(commands.Cog):
             view.clear_items()
             await interaction.response.edit_message(view=view)
             await ctx.send(f"Processing global timeout for {user.name}...")
+            try:
+                await _audit_global(ctx, "security.global_timeout.confirm", user.id, mutual_count)
+            except Exception:
+                await ctx.send("Global timeout was not started. The audit record could not be written.")
+                return
             success, failure = [], []
             
             for guild in mutual_guilds:

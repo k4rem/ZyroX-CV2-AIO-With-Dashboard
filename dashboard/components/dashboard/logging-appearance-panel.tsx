@@ -25,6 +25,8 @@ const FALLBACK: Record<string, string> = {
   channel_events: "#4F6BED",
   guild_events: "#6B7280",
   bot_actions: "#6B7280",
+  automod: "#8B5CF6",
+  security: "#C44B4B",
 };
 
 const LABELS: Record<string, string> = {
@@ -36,6 +38,8 @@ const LABELS: Record<string, string> = {
   channel_events: "Channels",
   guild_events: "Server",
   bot_actions: "Bot actions",
+  automod: "Automod",
+  security: "Security",
 };
 
 const SWATCHES = ["#4F6BED", "#2F9E6B", "#C44B4B", "#C4A15A", "#8B5CF6", "#6B7280", "#E8E4DC", "#111111"];

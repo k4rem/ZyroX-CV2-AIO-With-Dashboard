@@ -41,6 +41,7 @@ async def grant_trust(
     scopes: list[str],
     actor_user_id: int,
     expires_at: Optional[datetime] = None,
+    reason: Optional[str] = None,
 ) -> SecurityTrustedActor:
     _require_root(actor_user_id)
     if kind not in {"human", "bot"}:
@@ -68,6 +69,7 @@ async def grant_trust(
             existing.scopes = list(scopes)
             existing.kind = kind
             existing.expires_at = expires_at
+            existing.reason = (reason or "").strip() or None
             row = existing
         else:
             row = SecurityTrustedActor(
@@ -76,6 +78,7 @@ async def grant_trust(
                 kind=kind,
                 scopes=list(scopes),
                 expires_at=expires_at,
+                reason=(reason or "").strip() or None,
                 created_by=actor_user_id,
             )
             session.add(row)
@@ -95,7 +98,17 @@ async def grant_trust(
         guild_id=guild,
         target=str(subject),
         before_state=before,
-        after_state={"scopes": list(scopes), "kind": kind, "trust_id": str(trust_id)},
+        after_state={"scopes": list(scopes), "kind": kind, "trust_id": str(trust_id), "reason": (reason or "").strip() or None},
+    )
+    from cls_platform.security.logbridge import security_event
+
+    await security_event(
+        guild_id=guild,
+        event_type="security.trust_granted",
+        sentence="CLS granted trust.",
+        actor_id=actor_user_id,
+        target_id=subject,
+        confidence="certain",
     )
     async with session_scope() as session:
         return (
@@ -133,6 +146,16 @@ async def revoke_trust(*, guild_id: int, subject_id: int, actor_user_id: int) ->
         target=str(subject),
         before_state=before,
         after_state={"revoked": True},
+    )
+    from cls_platform.security.logbridge import security_event
+
+    await security_event(
+        guild_id=guild,
+        event_type="security.trust_revoked",
+        sentence="CLS revoked trust.",
+        actor_id=actor_user_id,
+        target_id=subject,
+        confidence="certain",
     )
 
 

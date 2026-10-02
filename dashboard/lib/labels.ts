@@ -25,11 +25,17 @@ const REGISTRY: Record<string, LabelEntry> = {
     tone: "warning",
   },
   DEVELOPMENT_PROPOSAL: {
-    title: "Development proposal",
-    description: "A change proposed from the development workflow.",
+    title: "Provisional threshold",
+    description: "This threshold is not production validated.",
     icon: "file-text",
-    tone: "info",
+    tone: "warning",
   },
+  "channel.delete": { title: "Channel deletion", description: "Channels removed inside the time window.", tone: "danger" },
+  "role.delete": { title: "Role deletion", description: "Roles removed inside the time window.", tone: "danger" },
+  "member.ban_or_kick": { title: "Moderation burst", description: "Bans or kicks landed inside one window.", tone: "danger" },
+  phishing: { title: "Phishing message", description: "A message matched the phishing patterns CLS watches.", tone: "danger" },
+  human_honeypot: { title: "Human honeypot", description: "Someone posted in the visible honeypot channel.", tone: "warning" },
+  bot_trap: { title: "Bot trap", description: "An untrusted bot posted in the bot trap channel.", tone: "warning" },
 };
 
 export function labelFor(id: string): LabelEntry {

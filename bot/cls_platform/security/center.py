@@ -33,6 +33,7 @@ class SecurityCenterSettings(Base):
     dashboard_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     phishing_action: Mapped[str] = mapped_column(String(32), nullable=False, default="delete_timeout")
     trap_channel_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False, default=list)
+    honeypot_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -58,11 +59,13 @@ async def get_settings(guild_id: int) -> dict:
                 "dashboard_locked": False,
                 "phishing_action": "delete_timeout",
                 "trap_channel_ids": [],
+                "honeypot_channel_id": None,
             }
         return {
             "dashboard_locked": bool(row.dashboard_locked),
             "phishing_action": row.phishing_action,
             "trap_channel_ids": [snowflake_to_str(item) for item in (row.trap_channel_ids or [])],
+            "honeypot_channel_id": snowflake_to_str(row.honeypot_channel_id) if row.honeypot_channel_id else None,
         }
 
 
@@ -72,6 +75,8 @@ async def save_settings(
     dashboard_locked: bool | None = None,
     phishing_action: str | None = None,
     trap_channel_ids: list[int] | None = None,
+    honeypot_channel_id: int | None = None,
+    honeypot_set: bool = False,
 ) -> dict:
     if phishing_action is not None and phishing_action not in PHISHING_ACTIONS:
         raise ValueError("invalid_phishing_action")
@@ -86,6 +91,8 @@ async def save_settings(
             row.phishing_action = phishing_action
         if trap_channel_ids is not None:
             row.trap_channel_ids = trap_channel_ids
+        if honeypot_set:
+            row.honeypot_channel_id = honeypot_channel_id
         row.updated_at = datetime.now(timezone.utc)
     return await get_settings(guild_id)
 
@@ -96,21 +103,22 @@ async def dashboard_is_locked(guild_id: int) -> bool:
 
 
 async def is_trusted(guild_id: int, subject_id: int) -> bool:
-    async with session_scope() as session:
-        row = (
-            await session.execute(
-                select(SecurityTrustedActor.id).where(
-                    SecurityTrustedActor.guild_id == guild_id,
-                    SecurityTrustedActor.subject_id == subject_id,
-                    SecurityTrustedActor.revoked_at.is_(None),
-                )
-            )
-        ).first()
-        return row is not None
+    from cls_platform.security.trust import active_trust
+
+    return await active_trust(guild_id, subject_id) is not None
 
 
-async def note_signal(*, guild_id: int, subject_id: int, engine: str, kind: str, detail: str) -> str:
+async def note_signal(
+    *,
+    guild_id: int,
+    subject_id: int,
+    engine: str,
+    kind: str,
+    detail: str,
+    extra: dict | None = None,
+) -> str:
     now = datetime.now(timezone.utc)
+    created = False
     async with session_scope() as session:
         incident = (
             await session.execute(
@@ -135,18 +143,55 @@ async def note_signal(*, guild_id: int, subject_id: int, engine: str, kind: str,
             )
             session.add(incident)
             await session.flush()
+            created = True
         else:
             incident.last_activity_at = now
+        payload = {"detail": detail, "subject_id": snowflake_to_str(subject_id)}
+        if extra:
+            payload.update(extra)
         session.add(
             SecurityIncidentEvent(
                 incident_id=incident.id,
                 guild_id=guild_id,
                 kind=kind,
-                payload={"detail": detail, "subject_id": snowflake_to_str(subject_id)},
+                payload=payload,
             )
         )
         incident_id = str(incident.id)
     from cls_platform.logging.store import record_event
+    from cls_platform.security.logbridge import security_event
+    from cls_platform.security.product import detector_title
+
+    outcome = (extra or {}).get("action_result", {}).get("outcome")
+    if kind == "phishing":
+        sentence = (
+            "CLS deleted a phishing message."
+            if outcome == "succeeded"
+            else "CLS could not delete a phishing message."
+        )
+        await security_event(
+            guild_id=guild_id,
+            event_type="security.phishing_deleted",
+            sentence=sentence,
+            actor_id=subject_id,
+            confidence="certain",
+        )
+    elif kind == "human_honeypot":
+        await security_event(
+            guild_id=guild_id,
+            event_type="security.honeypot_triggered",
+            sentence="Someone posted in the human honeypot.",
+            actor_id=subject_id,
+            confidence="certain",
+        )
+    if created:
+        await security_event(
+            guild_id=guild_id,
+            event_type="security.incident_created",
+            sentence=f"CLS opened an incident: {detector_title(kind)}.",
+            actor_id=subject_id,
+            confidence="certain",
+        )
 
     await record_event(
         guild_id=guild_id,

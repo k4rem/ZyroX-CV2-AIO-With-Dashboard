@@ -258,10 +258,27 @@ export const api = {
       body: JSON.stringify(data),
     }),
   releaseQuarantine: (guildId: string, userId: string) =>
-    request<{ status: string }>(`/guilds/${guildId}/security/quarantine/${userId}/release`, { method: "POST" }),
+    request<any>(`/guilds/${guildId}/security/quarantine/${userId}/release`, { method: "POST" }),
+  getSecurityIncidents: (guildId: string, query: string) =>
+    request<any>(`/guilds/${guildId}/security/incidents${query}`),
   getSecurityIncident: (guildId: string, incidentId: string) =>
     request<any>(`/guilds/${guildId}/security/incidents/${incidentId}`),
-  updateSecurityCenter: (guildId: string, data: { phishing_action?: string; trap_channel_ids?: string[] }) =>
+  closeSecurityIncident: (guildId: string, incidentId: string, data: { closure: string; note?: string }) =>
+    request<any>(`/guilds/${guildId}/security/incidents/${incidentId}/close`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  grantSecurityTrust: (guildId: string, data: { subject_id: string; kind: string; scopes: string[]; expires_at?: string | null; reason?: string }) =>
+    request<any>(`/guilds/${guildId}/security/trust`, { method: "POST", body: JSON.stringify(data) }),
+  revokeSecurityTrust: (guildId: string, subjectId: string) =>
+    request<any>(`/guilds/${guildId}/security/trust/revoke`, { method: "POST", body: JSON.stringify({ subject_id: subjectId }) }),
+  startSecurityMaintenance: (guildId: string, data: { reason: string; duration_s: number }) =>
+    request<any>(`/guilds/${guildId}/security/maintenance`, { method: "POST", body: JSON.stringify(data) }),
+  endSecurityMaintenance: (guildId: string, reason: string) =>
+    request<any>(`/guilds/${guildId}/security/maintenance/end`, { method: "POST", body: JSON.stringify({ reason }) }),
+  testSecurityAlert: (guildId: string) =>
+    request<any>(`/guilds/${guildId}/security/alerts/test`, { method: "POST" }),
+  updateSecurityCenter: (guildId: string, data: { phishing_action?: string; trap_channel_ids?: string[]; honeypot_channel_id?: string | null; honeypot_set?: boolean }) =>
     request<any>(`/guilds/${guildId}/security/center`, { method: "PUT", body: JSON.stringify(data) }),
   setDashboardLock: (guildId: string, locked: boolean) =>
     request<any>(`/guilds/${guildId}/security/lock`, { method: "POST", body: JSON.stringify({ locked }) }),

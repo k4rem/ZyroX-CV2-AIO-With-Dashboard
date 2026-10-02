@@ -252,7 +252,15 @@ export const NAV_ITEMS: NavItemDef[] = [
     icon: "antinuke",
     group: "security",
     scope: "guild",
-    routes: [{ path: "/antinuke", label: "Protection" }],
+    routes: [
+      { path: "/antinuke", label: "Overview" },
+      { path: "/antinuke/incidents", label: "Incidents" },
+      { path: "/antinuke/detectors", label: "Detectors" },
+      { path: "/antinuke/trust", label: "Trust" },
+      { path: "/antinuke/traps", label: "Traps & Phishing" },
+      { path: "/antinuke/quarantine", label: "Quarantine & Recovery" },
+      { path: "/antinuke/settings", label: "Settings" },
+    ],
   },
   {
     id: "recovery",
@@ -334,7 +342,7 @@ export function parseDashboardPath(pathname: string): ParsedPath {
  */
 export function isFluidRoute(pathname: string): boolean {
   const { guildId, subpath } = parseDashboardPath(pathname);
-  return guildId !== null && (subpath === "" || subpath === "/tickets" || subpath.startsWith("/tickets/") || subpath === "/reactionroles" || subpath.startsWith("/reactionroles/") || subpath === "/autorole" || subpath.startsWith("/autorole/") || subpath === "/config-transfer" || subpath === "/automod" || subpath.startsWith("/automod/"));
+  return guildId !== null && (subpath === "" || subpath === "/tickets" || subpath.startsWith("/tickets/") || subpath === "/reactionroles" || subpath.startsWith("/reactionroles/") || subpath === "/autorole" || subpath.startsWith("/autorole/") || subpath === "/config-transfer" || subpath === "/automod" || subpath.startsWith("/automod/") || subpath === "/antinuke" || subpath.startsWith("/antinuke/"));
 }
 
 export function guildBase(guildId: string): string {

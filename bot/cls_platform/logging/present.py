@@ -550,6 +550,9 @@ def present(event: dict) -> dict:
     if kind.startswith("automod."):
         sentence = str((event.get("metadata") or {}).get("sentence") or "Automod event")
         return _base(event, "Automod", sentence, [])
+    if kind.startswith("security."):
+        sentence = str((event.get("metadata") or {}).get("sentence") or "Security event")
+        return _base(event, "Security", sentence, [])
     handler = HANDLERS.get(kind)
     if handler is None:
         title = kind.replace("_", " ").strip().capitalize() or "Server event"

@@ -62,6 +62,15 @@ async def start_window(
         target=str(window_id),
         after_state={"reason": reason.strip(), "duration_s": duration_s, "effective_mode": "OBSERVE"},
     )
+    from cls_platform.security.logbridge import security_event
+
+    await security_event(
+        guild_id=guild_id,
+        event_type="security.maintenance_started",
+        sentence="CLS started a maintenance window. Enforcement stays in observe.",
+        actor_id=actor_user_id,
+        confidence="certain",
+    )
     await enqueue_alert(
         guild_id=guild_id,
         incident_id=None,
@@ -104,6 +113,15 @@ async def end_window(
         target=str(window_id),
         after_state={"reason": reason.strip(), "end": "manual"},
     )
+    from cls_platform.security.logbridge import security_event
+
+    await security_event(
+        guild_id=guild_id,
+        event_type="security.maintenance_ended",
+        sentence="CLS ended a maintenance window.",
+        actor_id=actor_user_id,
+        confidence="certain",
+    )
     await enqueue_alert(
         guild_id=guild_id,
         incident_id=None,
@@ -143,6 +161,15 @@ async def active_window(guild_id: int, now: datetime | None = None) -> SecurityM
             guild_id=guild_id,
             target=str(window_id),
             after_state={"reason": reason, "end": "expired"},
+        )
+        from cls_platform.security.logbridge import security_event
+
+        await security_event(
+            guild_id=guild_id,
+            event_type="security.maintenance_ended",
+            sentence="A maintenance window reached its end.",
+            actor_id=int(actor_id),
+            confidence="certain",
         )
         await enqueue_alert(
             guild_id=guild_id,

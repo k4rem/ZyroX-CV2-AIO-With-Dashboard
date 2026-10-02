@@ -9,7 +9,8 @@ from sqlalchemy import select
 
 from cls_platform.database import session_scope
 from cls_platform.security.enforce_lock import arm_enforce_session, enforce_unlocked
-from cls_platform.security.models import SecurityQuarantine, SecurityResponseAction
+from cls_platform.discord_types import snowflake_to_str
+from cls_platform.security.models import SecurityIncidentEvent, SecurityQuarantine, SecurityResponseAction
 from cls_platform.security.response_protocol import EnforceUnavailable
 
 OPEN = ("APPLYING", "ACTIVE", "PARTIAL_QUARANTINE")
@@ -215,3 +216,101 @@ async def _record(guild_id, user_id, outcome, action_class, mutated, mode, token
                 explanation=outcome,
             )
         )
+
+
+def _became_unsafe(role, prior_perms: dict | None) -> bool:
+    permissions = getattr(role, "permissions", None)
+    if permissions is None or not getattr(permissions, "administrator", False):
+        return False
+    if not prior_perms:
+        return False
+    prior = prior_perms.get(str(role.id)) or prior_perms.get(role.id) or {}
+    return not bool(prior.get("administrator"))
+
+
+async def restore_quarantine(
+    *,
+    guild_id: int,
+    user_id: int,
+    member,
+    actor_is_root: bool,
+    roles: list,
+    bot_top_position: int,
+) -> dict:
+    """Restore prior roles while ENFORCE stays locked. Does not write containment outcomes."""
+    if not actor_is_root:
+        raise EnforceUnavailable("Quarantine release is Root only")
+    by_id = {int(role.id): role for role in roles}
+    async with session_scope() as session:
+        row = await _open_row(session, guild_id, user_id)
+        if row is None:
+            raise ValueError("No open quarantine for this member")
+        role_ids = list(row.removed_role_ids or row.prior_role_ids or [])
+        prior_perms = row.prior_role_perms if isinstance(row.prior_role_perms, dict) else None
+        incident_id = row.incident_id
+        quarantine_id = row.id
+    results = []
+    restorable = []
+    remaining = []
+    for role_id in role_ids:
+        role = by_id.get(int(role_id))
+        if role is None:
+            results.append({"outcome": "failed", "reason": "Role no longer exists", "context": snowflake_to_str(role_id)})
+            continue
+        if getattr(role, "managed", False):
+            results.append({"outcome": "skipped", "reason": "Managed roles are not restored", "context": snowflake_to_str(role.id)})
+            continue
+        if _became_unsafe(role, prior_perms):
+            results.append({"outcome": "skipped", "reason": "Role gained administrator since quarantine", "context": snowflake_to_str(role.id)})
+            continue
+        if int(getattr(role, "position", 0) or 0) >= int(bot_top_position):
+            results.append({"outcome": "failed", "reason": "CLS role is below this role", "context": snowflake_to_str(role.id)})
+            remaining.append(int(role.id))
+            continue
+        restorable.append(role)
+    if restorable and member is None:
+        for role in restorable:
+            results.append({"outcome": "failed", "reason": "Member is not in the server", "context": snowflake_to_str(role.id)})
+            remaining.append(int(role.id))
+        restorable = []
+    if restorable:
+        try:
+            await member.add_roles(*restorable, reason="CLS-SEC release")
+            for role in restorable:
+                results.append({"outcome": "succeeded", "reason": "Role restored", "context": snowflake_to_str(role.id)})
+        except Exception as exc:
+            detail = "Missing Manage Roles" if "forbidden" in type(exc).__name__.lower() or "50013" in str(exc) else "Role restore failed"
+            for role in restorable:
+                results.append({"outcome": "failed", "reason": detail, "context": snowflake_to_str(role.id), "discord_error": detail})
+                remaining.append(int(role.id))
+    closed = not remaining
+    status = "RELEASED" if closed else ("PARTIAL" if any(item["outcome"] == "succeeded" for item in results) else "BLOCKED")
+    async with session_scope() as session:
+        row = await _open_row(session, guild_id, user_id)
+        if row is not None:
+            row.residual = {"results": results}
+            if closed:
+                row.status = "RELEASED"
+                row.removed_role_ids = []
+            else:
+                row.removed_role_ids = remaining
+        if incident_id is not None:
+            session.add(
+                SecurityIncidentEvent(
+                    incident_id=incident_id,
+                    guild_id=guild_id,
+                    kind="quarantine_release",
+                    payload={"detail": status, "results": results, "quarantine_id": str(quarantine_id)},
+                )
+            )
+    from cls_platform.security.logbridge import security_event
+
+    await security_event(
+        guild_id=guild_id,
+        event_type="security.quarantine_released",
+        sentence="CLS reviewed a quarantine release." if status != "RELEASED" else "CLS restored the quarantined member's roles.",
+        actor_id=user_id,
+        target_id=user_id,
+        confidence="certain",
+    )
+    return {"status": status, "results": results, "closed": closed}
