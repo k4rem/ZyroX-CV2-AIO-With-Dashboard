@@ -43,9 +43,16 @@ class Giveaway(Base):
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     prize: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False, default="", server_default="")
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    winner_count: Mapped[int] = mapped_column(nullable=False, default=1, server_default="1")
     winner_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False, default=list)
+    required_role_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    blocked_role_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    host_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 
 class GiveawayEntry(Base):
@@ -116,56 +123,287 @@ async def invite_history(guild_id: int) -> list[dict]:
         ]
 
 
-async def create_giveaway(*, guild_id: int, channel_id: int | None, prize: str, ends_at: datetime) -> dict:
+def entry_block(role_ids: set[int], *, required: int | None, blocked: int | None, is_bot: bool) -> str | None:
+    if is_bot:
+        return "Bots can't enter this giveaway."
+    if required and int(required) not in role_ids:
+        return "You need the required role to enter."
+    if blocked and int(blocked) in role_ids:
+        return "Your roles can't enter this giveaway."
+    return None
+
+
+def select_winners(
+    entries: list[int],
+    previous: list[int],
+    count: int,
+    eligible: set[int] | None,
+    rng: random.Random,
+) -> list[int]:
+    blocked = {int(item) for item in previous}
+    seen: set[int] = set()
+    pool: list[int] = []
+    for raw in entries:
+        user_id = int(raw)
+        if user_id in seen or user_id in blocked:
+            continue
+        if eligible is not None and user_id not in eligible:
+            continue
+        seen.add(user_id)
+        pool.append(user_id)
+    chosen: list[int] = []
+    while pool and len(chosen) < max(0, int(count)):
+        chosen.append(pool.pop(rng.randrange(len(pool))))
+    return chosen
+
+
+def message_body(
+    *,
+    prize: str,
+    description: str,
+    winner_count: int,
+    ends_at: datetime,
+    host_id: int | None,
+    entry_count: int,
+    status: str,
+    winner_ids: list[int],
+) -> str:
+    unix = int(ends_at.timestamp())
+    lines = [f"**{prize}**"]
+    if description.strip():
+        lines.append(description.strip())
+    lines.append(f"Winners: {winner_count}")
+    if status == "ended":
+        shown = ", ".join(f"<@{item}>" for item in winner_ids) or "No eligible entries"
+        lines.append(f"Ended <t:{unix}:F>")
+        lines.append(f"Won by {shown}")
+    elif status == "archived":
+        lines.append("This giveaway was archived.")
+    else:
+        lines.append(f"Ends <t:{unix}:R> (<t:{unix}:F>)")
+    if host_id:
+        lines.append(f"Host: <@{host_id}>")
+    lines.append(f"Entries: {entry_count}")
+    return "\n".join(lines)
+
+
+def _public(row: Giveaway, entry_count: int = 0) -> dict:
+    return {
+        "id": str(row.id),
+        "guild_id": snowflake_to_str(row.guild_id),
+        "prize": row.prize,
+        "description": row.description or "",
+        "channel_id": snowflake_to_str(row.channel_id),
+        "status": row.status,
+        "ends_at": row.ends_at.isoformat(),
+        "starts_at": row.starts_at.isoformat() if row.starts_at else None,
+        "winner_count": int(row.winner_count or 1),
+        "winner_ids": [snowflake_to_str(item) for item in (row.winner_ids or [])],
+        "required_role_id": snowflake_to_str(row.required_role_id),
+        "blocked_role_id": snowflake_to_str(row.blocked_role_id),
+        "host_id": snowflake_to_str(row.host_id),
+        "message_id": snowflake_to_str(row.message_id),
+        "entry_count": entry_count,
+    }
+
+
+async def _log_giveaway(guild_id: int, actor_id: int | None, summary: str, channel_id: int | None = None) -> None:
+    try:
+        from cls_platform.logging.store import record_event
+
+        await record_event(
+            guild_id=guild_id,
+            category="bot_actions",
+            event_type="giveaway",
+            actor_id=actor_id,
+            actor_confidence="certain" if actor_id else "unknown",
+            channel_id=channel_id,
+            metadata={"summary": summary},
+        )
+    except Exception:
+        pass
+
+
+async def _counts(session, ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+    if not ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(GiveawayEntry.giveaway_id, func.count())
+            .where(GiveawayEntry.giveaway_id.in_(ids))
+            .group_by(GiveawayEntry.giveaway_id)
+        )
+    ).all()
+    return {giveaway_id: int(count) for giveaway_id, count in rows}
+
+
+async def create_giveaway(
+    *,
+    guild_id: int,
+    channel_id: int | None,
+    prize: str,
+    ends_at: datetime,
+    description: str = "",
+    winner_count: int = 1,
+    required_role_id: int | None = None,
+    blocked_role_id: int | None = None,
+    host_id: int | None = None,
+    starts_at: datetime | None = None,
+) -> dict:
+    now = datetime.now(timezone.utc)
+    status = "scheduled" if starts_at is not None and starts_at > now else "open"
     async with session_scope() as session:
-        row = Giveaway(guild_id=guild_id, channel_id=channel_id, prize=prize, ends_at=ends_at, winner_ids=[])
+        row = Giveaway(
+            guild_id=guild_id,
+            channel_id=channel_id,
+            prize=prize[:200],
+            description=description[:500],
+            ends_at=ends_at,
+            starts_at=starts_at,
+            status=status,
+            winner_count=max(1, min(int(winner_count or 1), 20)),
+            winner_ids=[],
+            required_role_id=required_role_id,
+            blocked_role_id=blocked_role_id,
+            host_id=host_id,
+        )
         session.add(row)
         await session.flush()
-        return {"id": str(row.id), "status": "open", "prize": prize}
+        payload = _public(row, 0)
+    await _log_giveaway(guild_id, host_id, f"Giveaway started: {prize[:80]}", channel_id)
+    return payload
 
 
-async def enter_giveaway(guild_id: int, giveaway_id: str, user_id: int) -> None:
+async def giveaway_for(guild_id: int, giveaway_id: str) -> dict | None:
     async with session_scope() as session:
         row = await session.get(Giveaway, uuid.UUID(giveaway_id))
-        if row is None or row.guild_id != guild_id or row.status != "open":
-            raise ValueError("closed")
+        if row is None or row.guild_id != guild_id:
+            return None
+        counts = await _counts(session, [row.id])
+        return _public(row, counts.get(row.id, 0))
+
+
+async def enter_giveaway(guild_id: int, giveaway_id: str, user_id: int) -> str:
+    async with session_scope() as session:
+        row = await session.get(Giveaway, uuid.UUID(giveaway_id))
+        if row is None or row.guild_id != guild_id:
+            return "missing"
+        if row.status != "open":
+            return "closed"
+        existing = await session.get(GiveawayEntry, (row.id, user_id))
+        if existing is not None:
+            return "duplicate"
+        session.add(GiveawayEntry(giveaway_id=row.id, user_id=user_id))
+        return "entered"
+
+
+async def leave_giveaway(guild_id: int, giveaway_id: str, user_id: int) -> str:
+    async with session_scope() as session:
+        row = await session.get(Giveaway, uuid.UUID(giveaway_id))
+        if row is None or row.guild_id != guild_id:
+            return "missing"
+        if row.status != "open":
+            return "closed"
         existing = await session.get(GiveawayEntry, (row.id, user_id))
         if existing is None:
-            session.add(GiveawayEntry(giveaway_id=row.id, user_id=user_id))
+            return "absent"
+        await session.delete(existing)
+        return "left"
 
 
-async def _choose(session, row: Giveaway, rng: random.Random) -> int | None:
-    entries = (
-        await session.execute(select(GiveawayEntry.user_id).where(GiveawayEntry.giveaway_id == row.id))
-    ).scalars().all()
-    pool = [int(user_id) for user_id in entries if int(user_id) not in set(row.winner_ids or [])]
-    if not pool:
-        return None
-    return int(rng.choice(pool))
+async def _entry_ids(session, giveaway_id: uuid.UUID) -> list[int]:
+    return list(
+        (await session.execute(select(GiveawayEntry.user_id).where(GiveawayEntry.giveaway_id == giveaway_id))).scalars().all()
+    )
 
 
-async def end_giveaway(guild_id: int, giveaway_id: str, *, rng: random.Random | None = None) -> dict:
+async def end_giveaway(
+    guild_id: int,
+    giveaway_id: str,
+    *,
+    rng: random.Random | None = None,
+    eligible: set[int] | None = None,
+    actor_id: int | None = None,
+) -> dict:
     rng = rng or random.SystemRandom()
     async with session_scope() as session:
         row = await session.get(Giveaway, uuid.UUID(giveaway_id))
         if row is None or row.guild_id != guild_id:
             raise ValueError("missing")
-        winner = await _choose(session, row, rng)
+        if row.status == "archived":
+            raise ValueError("archived")
+        winners = select_winners(await _entry_ids(session, row.id), [], int(row.winner_count or 1), eligible, rng)
         row.status = "ended"
-        row.winner_ids = [winner] if winner else []
-        return {"id": str(row.id), "status": row.status, "winner_ids": [snowflake_to_str(item) for item in row.winner_ids]}
+        row.winner_ids = winners
+        payload = _public(row, len(await _entry_ids(session, row.id)))
+    await _log_giveaway(guild_id, actor_id, f"Giveaway ended: {payload['prize']}", int(payload["channel_id"]) if payload["channel_id"] else None)
+    return payload
 
 
-async def reroll_giveaway(guild_id: int, giveaway_id: str, *, rng: random.Random | None = None) -> dict:
+async def reroll_giveaway(
+    guild_id: int,
+    giveaway_id: str,
+    *,
+    rng: random.Random | None = None,
+    eligible: set[int] | None = None,
+    actor_id: int | None = None,
+) -> dict:
     rng = rng or random.SystemRandom()
     async with session_scope() as session:
         row = await session.get(Giveaway, uuid.UUID(giveaway_id))
         if row is None or row.guild_id != guild_id or row.status != "ended":
             raise ValueError("not_ended")
-        winner = await _choose(session, row, rng)
-        if winner is not None:
-            row.winner_ids = list(row.winner_ids or []) + [winner]
-        return {"id": str(row.id), "winner_ids": [snowflake_to_str(item) for item in row.winner_ids]}
+        extra = select_winners(await _entry_ids(session, row.id), list(row.winner_ids or []), 1, eligible, rng)
+        if extra:
+            row.winner_ids = list(row.winner_ids or []) + extra
+        payload = _public(row, len(await _entry_ids(session, row.id)))
+    await _log_giveaway(guild_id, actor_id, f"Giveaway rerolled: {payload['prize']}", int(payload["channel_id"]) if payload["channel_id"] else None)
+    return payload
+
+
+async def update_giveaway(guild_id: int, giveaway_id: str, changes: dict) -> dict:
+    async with session_scope() as session:
+        row = await session.get(Giveaway, uuid.UUID(giveaway_id))
+        if row is None or row.guild_id != guild_id:
+            raise ValueError("missing")
+        if row.status in {"ended", "archived"}:
+            raise ValueError("closed")
+        if "prize" in changes and changes["prize"]:
+            row.prize = str(changes["prize"])[:200]
+        if "description" in changes:
+            row.description = str(changes["description"] or "")[:500]
+        if "ends_at" in changes and changes["ends_at"] is not None:
+            row.ends_at = changes["ends_at"]
+        if "winner_count" in changes and changes["winner_count"] is not None:
+            row.winner_count = max(1, min(int(changes["winner_count"]), 20))
+        if "required_role_id" in changes:
+            row.required_role_id = changes["required_role_id"]
+        if "blocked_role_id" in changes:
+            row.blocked_role_id = changes["blocked_role_id"]
+        if row.message_id is None and "channel_id" in changes:
+            row.channel_id = changes["channel_id"]
+        counts = await _counts(session, [row.id])
+        return _public(row, counts.get(row.id, 0))
+
+
+async def archive_giveaway(guild_id: int, giveaway_id: str, *, actor_id: int | None = None) -> dict:
+    async with session_scope() as session:
+        row = await session.get(Giveaway, uuid.UUID(giveaway_id))
+        if row is None or row.guild_id != guild_id:
+            raise ValueError("missing")
+        row.status = "archived"
+        counts = await _counts(session, [row.id])
+        payload = _public(row, counts.get(row.id, 0))
+    await _log_giveaway(guild_id, actor_id, f"Giveaway archived: {payload['prize']}", int(payload["channel_id"]) if payload["channel_id"] else None)
+    return payload
+
+
+async def attach_message(guild_id: int, giveaway_id: str, message_id: int) -> None:
+    async with session_scope() as session:
+        row = await session.get(Giveaway, uuid.UUID(giveaway_id))
+        if row is None or row.guild_id != guild_id:
+            return
+        row.message_id = message_id
 
 
 async def giveaway_history(guild_id: int) -> list[dict]:
@@ -173,16 +411,8 @@ async def giveaway_history(guild_id: int) -> list[dict]:
         rows = (
             await session.execute(select(Giveaway).where(Giveaway.guild_id == guild_id).order_by(Giveaway.ends_at.desc()))
         ).scalars().all()
-        return [
-            {
-                "id": str(row.id),
-                "prize": row.prize,
-                "status": row.status,
-                "ends_at": row.ends_at.isoformat(),
-                "winner_ids": [snowflake_to_str(item) for item in (row.winner_ids or [])],
-            }
-            for row in rows
-        ]
+        counts = await _counts(session, [row.id for row in rows])
+        return [_public(row, counts.get(row.id, 0)) for row in rows]
 
 
 async def close_due(now: datetime | None = None) -> int:
@@ -193,7 +423,47 @@ async def close_due(now: datetime | None = None) -> int:
             await session.execute(select(Giveaway).where(Giveaway.status == "open", Giveaway.ends_at <= moment))
         ).scalars().all()
         for row in rows:
-            winner = await _choose(session, row, rng)
+            winners = select_winners(await _entry_ids(session, row.id), [], int(row.winner_count or 1), None, rng)
             row.status = "ended"
-            row.winner_ids = [winner] if winner else []
+            row.winner_ids = winners
         return len(rows)
+
+
+async def entry_user_ids(giveaway_id: str) -> list[int]:
+    async with session_scope() as session:
+        return [int(item) for item in await _entry_ids(session, uuid.UUID(giveaway_id))]
+
+
+async def due_giveaways(now: datetime | None = None) -> list[dict]:
+    moment = now or datetime.now(timezone.utc)
+    async with session_scope() as session:
+        rows = (
+            await session.execute(select(Giveaway).where(Giveaway.status == "open", Giveaway.ends_at <= moment))
+        ).scalars().all()
+        counts = await _counts(session, [row.id for row in rows])
+        return [_public(row, counts.get(row.id, 0)) for row in rows]
+
+
+async def promote_scheduled(now: datetime | None = None) -> list[dict]:
+    moment = now or datetime.now(timezone.utc)
+    async with session_scope() as session:
+        rows = (
+            await session.execute(select(Giveaway).where(Giveaway.status == "scheduled", Giveaway.starts_at <= moment))
+        ).scalars().all()
+        promoted = []
+        for row in rows:
+            if row.ends_at <= moment:
+                continue
+            row.status = "open"
+            promoted.append(row)
+        counts = await _counts(session, [row.id for row in promoted])
+        return [_public(row, counts.get(row.id, 0)) for row in promoted]
+
+
+async def unpublished_giveaways() -> list[dict]:
+    async with session_scope() as session:
+        rows = (
+            await session.execute(select(Giveaway).where(Giveaway.status == "open", Giveaway.message_id.is_(None)))
+        ).scalars().all()
+        counts = await _counts(session, [row.id for row in rows])
+        return [_public(row, counts.get(row.id, 0)) for row in rows]

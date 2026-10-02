@@ -8,7 +8,20 @@ import logging
 import discord
 from discord.ext import commands
 
-from cls_platform.growth import close_due, note_join, sync_codes
+from cls_platform.giveaways_runtime import sync_message
+from cls_platform.growth import (
+    due_giveaways,
+    end_giveaway,
+    enter_giveaway,
+    entry_block,
+    entry_user_ids,
+    giveaway_for,
+    leave_giveaway,
+    note_join,
+    promote_scheduled,
+    sync_codes,
+    unpublished_giveaways,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +45,75 @@ class GrowthV2(commands.Cog):
             await self._refresh(guild)
         while True:
             try:
-                await close_due()
+                await self._giveaways()
             except Exception:
                 logger.exception("giveaway close failed")
-            await asyncio.sleep(30)
+            await asyncio.sleep(15)
+
+    async def _allowed(self, row: dict) -> set[int] | None:
+        guild = self.bot.get_guild(int(row["guild_id"]))
+        if guild is None:
+            return None
+        required = int(row["required_role_id"]) if row.get("required_role_id") else None
+        blocked = int(row["blocked_role_id"]) if row.get("blocked_role_id") else None
+        user_ids = await entry_user_ids(row["id"])
+        allowed: set[int] = set()
+        for user_id in user_ids:
+            member = guild.get_member(user_id)
+            if member is None:
+                try:
+                    member = await guild.fetch_member(user_id)
+                except (discord.NotFound, discord.HTTPException):
+                    continue
+            roles = {role.id for role in member.roles}
+            if entry_block(roles, required=required, blocked=blocked, is_bot=member.bot) is None:
+                allowed.add(member.id)
+        return allowed
+
+    async def _giveaways(self):
+        for row in await due_giveaways():
+            allowed = await self._allowed(row)
+            await end_giveaway(int(row["guild_id"]), row["id"], eligible=allowed)
+            await sync_message(self.bot, int(row["guild_id"]), row["id"])
+        await promote_scheduled()
+        for row in await unpublished_giveaways():
+            await sync_message(self.bot, int(row["guild_id"]), row["id"])
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        if interaction.type is not discord.InteractionType.component or interaction.guild is None:
+            return
+        custom_id = str((interaction.data or {}).get("custom_id") or "")
+        parts = custom_id.split(":")
+        if len(parts) != 4 or parts[0] != "cls" or parts[1] != "gw":
+            return
+        action, giveaway_id = parts[2], parts[3]
+        member = interaction.user
+        if not isinstance(member, discord.Member):
+            return
+        row = await giveaway_for(interaction.guild.id, giveaway_id)
+        if row is None or row["status"] != "open":
+            await interaction.response.send_message("This giveaway is closed.", ephemeral=True)
+            return
+        if action == "enter":
+            reason = entry_block(
+                {role.id for role in member.roles},
+                required=int(row["required_role_id"]) if row.get("required_role_id") else None,
+                blocked=int(row["blocked_role_id"]) if row.get("blocked_role_id") else None,
+                is_bot=member.bot,
+            )
+            if reason:
+                await interaction.response.send_message(reason, ephemeral=True)
+                return
+            result = await enter_giveaway(interaction.guild.id, giveaway_id, member.id)
+            text = "You're in." if result == "entered" else "You're already entered."
+        elif action == "leave":
+            result = await leave_giveaway(interaction.guild.id, giveaway_id, member.id)
+            text = "You left this giveaway." if result == "left" else "You weren't entered."
+        else:
+            return
+        await interaction.response.send_message(text, ephemeral=True)
+        await sync_message(self.bot, interaction.guild.id, giveaway_id)
 
     async def _refresh(self, guild: discord.Guild) -> dict[str, int]:
         try:
