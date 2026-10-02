@@ -300,6 +300,14 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  getAutoReactRules: (guildId: string) => request<{ rules: any[] }>(`/guilds/${guildId}/autoreact/v2`),
+  createAutoReactRule: (guildId: string, data: any) => request<any>(`/guilds/${guildId}/autoreact/v2`, { method: "POST", body: JSON.stringify(data) }),
+  updateAutoReactRule: (guildId: string, ruleId: string, data: any) =>
+    request<any>(`/guilds/${guildId}/autoreact/v2/${ruleId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  duplicateAutoReactRule: (guildId: string, ruleId: string) =>
+    request<any>(`/guilds/${guildId}/autoreact/v2/${ruleId}/duplicate`, { method: "POST" }),
+  deleteAutoReactRule: (guildId: string, ruleId: string) =>
+    request<any>(`/guilds/${guildId}/autoreact/v2/${ruleId}`, { method: "DELETE" }),
   getAutoReact: (guildId: string) => request<any>(`/guilds/${guildId}/autoreact`),
   updateAutoReact: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/autoreact`, {
