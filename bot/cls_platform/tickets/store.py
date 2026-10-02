@@ -24,6 +24,8 @@ class TicketCategory(Base):
     staff_role_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False, default=list)
     name_format: Mapped[str] = mapped_column(String(80), nullable=False, default="ticket-{number}")
     ping_staff: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    required_role_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False, default=list)
+    blocked_role_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False, default=list)
 
 
 class TicketPanel(Base):
@@ -42,6 +44,9 @@ class TicketPanel(Base):
     blocked_role_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False, default=list)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     publish_status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    button_emoji: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    button_style: Mapped[str] = mapped_column(String(16), nullable=False, default="primary")
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class TicketQuestion(Base):
@@ -78,6 +83,8 @@ class Ticket(Base):
     last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     activity_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     degraded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    opener_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    opener_avatar: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
 
 class TicketEvent(Base):
@@ -111,6 +118,7 @@ class TicketSettings(Base):
     auto_close_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     grace_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     transcript_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    name_format: Mapped[str] = mapped_column(String(80), nullable=False, default="ticket-{number}-{username}")
 
 
 class TicketBlacklist(Base):
@@ -119,6 +127,8 @@ class TicketBlacklist(Base):
     guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    actor_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 
 class TicketParticipant(Base):
@@ -174,7 +184,7 @@ def _sid(value: int | None) -> str | None:
     return snowflake_to_str(value) if value else None
 
 
-async def create_category(*, guild_id: int, name: str, discord_category_id: int | None, staff_role_ids: list[int], name_format: str | None = None, ping_staff: bool = True) -> dict:
+async def create_category(*, guild_id: int, name: str, discord_category_id: int | None, staff_role_ids: list[int], name_format: str | None = None, ping_staff: bool = True, required_role_ids: list[int] | None = None, blocked_role_ids: list[int] | None = None) -> dict:
     async with session_scope() as session:
         row = TicketCategory(
             guild_id=guild_id,
@@ -183,6 +193,8 @@ async def create_category(*, guild_id: int, name: str, discord_category_id: int 
             staff_role_ids=staff_role_ids,
             name_format=(name_format or "ticket-{number}")[:80],
             ping_staff=ping_staff,
+            required_role_ids=required_role_ids or [],
+            blocked_role_ids=blocked_role_ids or [],
         )
         session.add(row)
         await session.flush()
@@ -206,6 +218,7 @@ async def load_panel(panel_id: str) -> dict | None:
             "category_id": str(panel.category_id),
             "discord_category_id": category.discord_category_id if category else None,
             "title": panel.title,
+            "message": panel.message,
             "button_label": panel.button_label,
             "questions": [_question_dict(row) for row in questions],
             "staff_role_ids": [int(item) for item in (category.staff_role_ids or [])] if category else [],
@@ -218,6 +231,10 @@ async def load_panel(panel_id: str) -> dict | None:
             "payload": panel.payload,
             "published_message_id": panel.published_message_id,
             "publish_status": panel.publish_status,
+            "button_emoji": panel.button_emoji or "",
+            "button_style": panel.button_style or "primary",
+            "published_at": panel.published_at.isoformat() if panel.published_at else None,
+            "updated_at": panel.updated_at.isoformat() if panel.updated_at else None,
             "preview": panel_preview(panel.title, panel.message, panel.button_label, str(panel.id)),
         }
 
@@ -245,10 +262,12 @@ def _category_dict(row: TicketCategory) -> dict:
         "staff_role_ids": [snowflake_to_str(item) for item in (row.staff_role_ids or [])],
         "name_format": row.name_format,
         "ping_staff": row.ping_staff,
+        "required_role_ids": [snowflake_to_str(item) for item in (row.required_role_ids or [])],
+        "blocked_role_ids": [snowflake_to_str(item) for item in (row.blocked_role_ids or [])],
     }
 
 
-async def create_panel(*, guild_id: int, category_id: str, channel_id: int | None, title: str, message: str, button_label: str, questions: list[dict], required_role_ids: list[int] | None = None, blocked_role_ids: list[int] | None = None, payload: dict | None = None) -> dict:
+async def create_panel(*, guild_id: int, category_id: str, channel_id: int | None, title: str, message: str, button_label: str, questions: list[dict], required_role_ids: list[int] | None = None, blocked_role_ids: list[int] | None = None, payload: dict | None = None, button_emoji: str = "", button_style: str = "primary") -> dict:
     async with session_scope() as session:
         panel = TicketPanel(
             guild_id=guild_id,
@@ -260,6 +279,9 @@ async def create_panel(*, guild_id: int, category_id: str, channel_id: int | Non
             required_role_ids=required_role_ids or [],
             blocked_role_ids=blocked_role_ids or [],
             payload=payload,
+            button_emoji=(button_emoji or "")[:80],
+            button_style=button_style if button_style in {"primary", "secondary", "success", "danger"} else "primary",
+            updated_at=datetime.now(timezone.utc),
         )
         session.add(panel)
         await session.flush()
@@ -280,7 +302,7 @@ async def create_panel(*, guild_id: int, category_id: str, channel_id: int | Non
         return {"id": str(panel.id), "preview": preview}
 
 
-async def set_limits(*, guild_id: int, cooldown_seconds: int, max_open: int, auto_close_hours: int | None = None, grace_minutes: int | None = None, transcript_channel_id: int | None = None) -> dict:
+async def set_limits(*, guild_id: int, cooldown_seconds: int, max_open: int, auto_close_hours: int | None = None, grace_minutes: int | None = None, transcript_channel_id: int | None = None, name_format: str | None = None) -> dict:
     if cooldown_seconds < 0 or cooldown_seconds > 86400 or max_open < 1 or max_open > 10:
         raise TicketError("invalid_limits")
     if auto_close_hours is not None and not 0 <= auto_close_hours <= 720:
@@ -300,21 +322,36 @@ async def set_limits(*, guild_id: int, cooldown_seconds: int, max_open: int, aut
             row.grace_minutes = grace_minutes
         if transcript_channel_id is not None:
             row.transcript_channel_id = transcript_channel_id or None
+        if name_format is not None:
+            row.name_format = (name_format or "ticket-{number}-{username}")[:80]
         return {
             "cooldown_seconds": row.cooldown_seconds,
             "max_open": row.max_open,
             "auto_close_hours": row.auto_close_hours,
             "grace_minutes": row.grace_minutes,
             "transcript_channel_id": _sid(row.transcript_channel_id),
+            "name_format": row.name_format,
         }
 
 
-async def blacklist_user(*, guild_id: int, user_id: int) -> dict:
+async def blacklist_user(*, guild_id: int, user_id: int, reason: str = "", actor_id: int | None = None, display_name: str = "", avatar: str = "") -> dict:
     async with session_scope() as session:
         existing = await session.get(TicketBlacklist, (guild_id, user_id))
         if existing is None:
-            session.add(TicketBlacklist(guild_id=guild_id, user_id=user_id))
-        return {"user_id": snowflake_to_str(user_id)}
+            existing = TicketBlacklist(guild_id=guild_id, user_id=user_id)
+            session.add(existing)
+        if reason:
+            existing.reason = reason[:300]
+        if actor_id:
+            existing.actor_id = actor_id
+        return {
+            "user_id": snowflake_to_str(user_id),
+            "display_name": display_name,
+            "avatar": avatar,
+            "reason": existing.reason or "",
+            "actor_id": _sid(existing.actor_id),
+            "created_at": existing.created_at.isoformat() if existing.created_at else None,
+        }
 
 
 async def unblacklist_user(*, guild_id: int, user_id: int) -> None:
@@ -324,7 +361,7 @@ async def unblacklist_user(*, guild_id: int, user_id: int) -> None:
             await session.delete(row)
 
 
-async def open_ticket(*, guild_id: int, category_id: str, opener_id: int, answers: dict | None = None, channel_id: int | None = None, opener_name: str = "", panel_id: str | None = None, member_role_ids: list[int] | None = None) -> dict:
+async def open_ticket(*, guild_id: int, category_id: str, opener_id: int, answers: dict | None = None, channel_id: int | None = None, opener_name: str = "", opener_avatar: str = "", panel_id: str | None = None, member_role_ids: list[int] | None = None) -> dict:
     answers = answers or {}
     async with session_scope() as session:
         category = await session.get(TicketCategory, uuid.UUID(category_id))
@@ -343,6 +380,14 @@ async def open_ticket(*, guild_id: int, category_id: str, opener_id: int, answer
                     raise TicketError("required_role")
                 if blocked_roles.intersection(held):
                     raise TicketError("blocked_role")
+        if member_role_ids is not None:
+            required = {int(item) for item in (category.required_role_ids or [])}
+            blocked_roles = {int(item) for item in (category.blocked_role_ids or [])}
+            held = {int(item) for item in member_role_ids}
+            if required and not required.intersection(held):
+                raise TicketError("required_role")
+            if blocked_roles.intersection(held):
+                raise TicketError("blocked_role")
         settings = await session.get(TicketSettings, guild_id)
         cooldown_seconds = settings.cooldown_seconds if settings else 60
         max_open = settings.max_open if settings else 1
@@ -389,6 +434,8 @@ async def open_ticket(*, guild_id: int, category_id: str, opener_id: int, answer
             status="open",
             panel_id=uuid.UUID(panel_id) if panel_id else None,
             last_activity_at=datetime.now(timezone.utc),
+            opener_name=(opener_name or "")[:80],
+            opener_avatar=(opener_avatar or "")[:300],
         )
         session.add(ticket)
         await session.flush()
@@ -526,6 +573,8 @@ async def workspace(guild_id: int) -> dict:
                     "channel_id": _sid(row.channel_id),
                     "published_message_id": _sid(row.published_message_id),
                     "publish_status": row.publish_status,
+                    "published_at": row.published_at.isoformat() if row.published_at else None,
+                    "updated_at": row.updated_at.isoformat() if row.updated_at else None,
                     "required_role_ids": [snowflake_to_str(item) for item in (row.required_role_ids or [])],
                     "blocked_role_ids": [snowflake_to_str(item) for item in (row.blocked_role_ids or [])],
                     "preview": panel_preview(row.title, row.message, row.button_label, str(row.id)),
@@ -535,6 +584,7 @@ async def workspace(guild_id: int) -> dict:
             "auto_close_hours": settings.auto_close_hours if settings else None,
             "grace_minutes": settings.grace_minutes if settings else 60,
             "transcript_channel_id": _sid(settings.transcript_channel_id) if settings else None,
+            "name_format": settings.name_format if settings else "ticket-{number}-{username}",
             "degraded_open": int((
                 await session.execute(
                     select(func.count()).select_from(Ticket).where(Ticket.guild_id == guild_id, Ticket.status == "error")
@@ -824,6 +874,7 @@ async def update_panel_text(*, guild_id: int, panel_id: str, title: str | None, 
             panel.message = message
         if payload is not None:
             panel.payload = payload
+        panel.updated_at = datetime.now(timezone.utc)
         return {"id": str(panel.id), "title": panel.title, "message": panel.message}
 
 
@@ -834,6 +885,7 @@ async def guild_settings(guild_id: int) -> dict:
             "auto_close_hours": row.auto_close_hours if row else None,
             "grace_minutes": row.grace_minutes if row else 60,
             "transcript_channel_id": row.transcript_channel_id if row else None,
+            "name_format": row.name_format if row else "ticket-{number}-{username}",
         }
 
 
@@ -845,3 +897,257 @@ async def bump_generation(guild_id: int, ticket_id: str) -> int:
         ticket.activity_generation = int(ticket.activity_generation or 0) + 1
         ticket.last_activity_at = datetime.now(timezone.utc)
         return ticket.activity_generation
+
+
+def _style(value: str) -> str:
+    return value if value in {"primary", "secondary", "success", "danger"} else "primary"
+
+
+def _questions(panel_id, questions: list[dict]) -> list[TicketQuestion]:
+    rows = []
+    for index, question in enumerate((questions or [])[:5]):
+        rows.append(
+            TicketQuestion(
+                panel_id=panel_id,
+                label=str(question.get("label") or "Question")[:45],
+                kind="paragraph" if question.get("kind") in {"long", "paragraph"} else "short",
+                required=bool(question.get("required", True)),
+                position=index,
+                placeholder=str(question.get("placeholder") or "")[:100],
+                min_length=max(0, int(question.get("min_length") or 0)),
+                max_length=min(4000, max(1, int(question.get("max_length") or 1000))),
+            )
+        )
+    return rows
+
+
+async def update_category(*, guild_id: int, category_id: str, name: str | None = None, discord_category_id: int | None = None, staff_role_ids: list[int] | None = None, name_format: str | None = None, ping_staff: bool | None = None, required_role_ids: list[int] | None = None, blocked_role_ids: list[int] | None = None, discord_category_set: bool = False) -> dict:
+    async with session_scope() as session:
+        row = await session.get(TicketCategory, uuid.UUID(category_id))
+        if row is None or row.guild_id != guild_id:
+            raise TicketError("missing")
+        if name is not None:
+            row.name = name[:80]
+        if discord_category_set:
+            row.discord_category_id = discord_category_id
+        if staff_role_ids is not None:
+            row.staff_role_ids = staff_role_ids
+        if name_format is not None:
+            row.name_format = name_format[:80]
+        if ping_staff is not None:
+            row.ping_staff = ping_staff
+        if required_role_ids is not None:
+            row.required_role_ids = required_role_ids
+        if blocked_role_ids is not None:
+            row.blocked_role_ids = blocked_role_ids
+        return _category_dict(row)
+
+
+async def save_panel(*, guild_id: int, panel_id: str, category_id: str | None, channel_id: int | None, title: str | None, message: str | None, button_label: str | None, button_emoji: str | None, button_style: str | None, questions: list[dict] | None, required_role_ids: list[int] | None, blocked_role_ids: list[int] | None, payload: dict | None, channel_set: bool = False) -> dict:
+    async with session_scope() as session:
+        panel = await session.get(TicketPanel, uuid.UUID(panel_id))
+        if panel is None or panel.guild_id != guild_id:
+            raise TicketError("missing")
+        if category_id:
+            category = await session.get(TicketCategory, uuid.UUID(category_id))
+            if category is None or category.guild_id != guild_id:
+                raise TicketError("category_missing")
+            panel.category_id = category.id
+        if channel_set:
+            panel.channel_id = channel_id
+        if title is not None:
+            panel.title = title[:120]
+        if message is not None:
+            panel.message = message
+        if button_label is not None:
+            panel.button_label = (button_label or "Open ticket")[:40]
+        if button_emoji is not None:
+            panel.button_emoji = button_emoji[:80]
+        if button_style is not None:
+            panel.button_style = _style(button_style)
+        if required_role_ids is not None:
+            panel.required_role_ids = required_role_ids
+        if blocked_role_ids is not None:
+            panel.blocked_role_ids = blocked_role_ids
+        if payload is not None:
+            panel.payload = payload
+        if questions is not None:
+            existing = (await session.execute(select(TicketQuestion).where(TicketQuestion.panel_id == panel.id))).scalars().all()
+            for row in existing:
+                await session.delete(row)
+            for row in _questions(panel.id, questions):
+                session.add(row)
+        panel.updated_at = datetime.now(timezone.utc)
+        return {"id": str(panel.id)}
+
+
+async def duplicate_panel(*, guild_id: int, panel_id: str) -> dict:
+    source = await load_panel(panel_id)
+    if source is None or source["guild_id"] != guild_id:
+        raise TicketError("missing")
+    return await create_panel(
+        guild_id=guild_id,
+        category_id=source["category_id"],
+        channel_id=source.get("channel_id"),
+        title=f"{source['title']} copy"[:120],
+        message=source.get("message") or "",
+        button_label=source.get("button_label") or "Open ticket",
+        button_emoji=source.get("button_emoji") or "",
+        button_style=source.get("button_style") or "primary",
+        questions=source.get("questions") or [],
+        required_role_ids=source.get("required_role_ids") or [],
+        blocked_role_ids=source.get("blocked_role_ids") or [],
+        payload=source.get("payload"),
+    )
+
+
+async def delete_panel(*, guild_id: int, panel_id: str) -> dict:
+    async with session_scope() as session:
+        panel = await session.get(TicketPanel, uuid.UUID(panel_id))
+        if panel is None or panel.guild_id != guild_id:
+            raise TicketError("missing")
+        channel_id = panel.channel_id
+        message_id = panel.published_message_id
+        questions = (await session.execute(select(TicketQuestion).where(TicketQuestion.panel_id == panel.id))).scalars().all()
+        for row in questions:
+            await session.delete(row)
+        await session.delete(panel)
+        return {"channel_id": channel_id, "message_id": message_id}
+
+
+def _queue_row(ticket: Ticket, category: TicketCategory | None) -> dict:
+    status = "claimed" if ticket.status == "open" and ticket.assignee_id else ticket.status
+    return {
+        "id": str(ticket.id),
+        "number": ticket.number,
+        "status": status,
+        "raw_status": ticket.status,
+        "opener_id": snowflake_to_str(ticket.opener_id),
+        "opener_name": ticket.opener_name or "",
+        "opener_avatar": ticket.opener_avatar or "",
+        "assignee_id": _sid(ticket.assignee_id),
+        "category_id": str(ticket.category_id),
+        "category_name": category.name if category else "",
+        "close_reason": ticket.close_reason or "",
+        "opened_at": ticket.opened_at.isoformat() if ticket.opened_at else None,
+        "closed_at": ticket.closed_at.isoformat() if ticket.closed_at else None,
+        "last_activity_at": (ticket.last_activity_at or ticket.opened_at).isoformat() if (ticket.last_activity_at or ticket.opened_at) else None,
+        "degraded": bool(ticket.degraded),
+    }
+
+
+async def list_queue(guild_id: int) -> list[dict]:
+    async with session_scope() as session:
+        tickets = (
+            await session.execute(select(Ticket).where(Ticket.guild_id == guild_id).order_by(Ticket.number.desc()).limit(300))
+        ).scalars().all()
+        categories = {
+            row.id: row
+            for row in (await session.execute(select(TicketCategory).where(TicketCategory.guild_id == guild_id))).scalars().all()
+        }
+        return [_queue_row(ticket, categories.get(ticket.category_id)) for ticket in tickets]
+
+
+async def ticket_detail(guild_id: int, ticket_id: str) -> dict:
+    async with session_scope() as session:
+        ticket = await session.get(Ticket, uuid.UUID(ticket_id))
+        if ticket is None or ticket.guild_id != guild_id:
+            raise TicketError("missing")
+        category = await session.get(TicketCategory, ticket.category_id)
+        events = (
+            await session.execute(select(TicketEvent).where(TicketEvent.ticket_id == ticket.id).order_by(TicketEvent.created_at))
+        ).scalars().all()
+        messages = (
+            await session.execute(select(TicketMessage).where(TicketMessage.ticket_id == ticket.id).order_by(TicketMessage.created_at))
+        ).scalars().all()
+        people = (
+            await session.execute(select(TicketParticipant).where(TicketParticipant.ticket_id == ticket.id))
+        ).scalars().all()
+        opened = next((event for event in events if event.kind == "opened"), None)
+        answers = opened.payload if opened and isinstance(opened.payload, dict) else {}
+        return {
+            **_queue_row(ticket, category),
+            "channel_id": _sid(ticket.channel_id),
+            "answers": {str(key): str(value) for key, value in answers.items()},
+            "participants": [snowflake_to_str(row.user_id) for row in people],
+            "events": [
+                {
+                    "id": str(event.id),
+                    "kind": event.kind,
+                    "actor_id": _sid(event.actor_id),
+                    "payload": event.payload or {},
+                    "created_at": event.created_at.isoformat() if event.created_at else None,
+                }
+                for event in events
+            ],
+            "messages": [
+                {
+                    "id": str(row.id),
+                    "author_id": snowflake_to_str(row.author_id),
+                    "display_name": row.display_name or row.author_name or "Member",
+                    "avatar": row.avatar or "",
+                    "content": row.content or "",
+                    "attachments": row.attachments or [],
+                    "embeds": row.embeds or [],
+                    "reference_id": _sid(row.reference_id),
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                }
+                for row in messages
+            ],
+        }
+
+
+async def list_blacklist(guild_id: int) -> list[dict]:
+    async with session_scope() as session:
+        rows = (
+            await session.execute(select(TicketBlacklist).where(TicketBlacklist.guild_id == guild_id).order_by(TicketBlacklist.created_at.desc()))
+        ).scalars().all()
+        return [
+            {
+                "user_id": snowflake_to_str(row.user_id),
+                "reason": row.reason or "",
+                "actor_id": _sid(row.actor_id),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ]
+
+
+async def list_transcripts(guild_id: int) -> list[dict]:
+    async with session_scope() as session:
+        tickets = (
+            await session.execute(
+                select(Ticket).where(Ticket.guild_id == guild_id, Ticket.status.in_(("closed", "deleted"))).order_by(Ticket.closed_at.desc().nulls_last()).limit(300)
+            )
+        ).scalars().all()
+        categories = {
+            row.id: row
+            for row in (await session.execute(select(TicketCategory).where(TicketCategory.guild_id == guild_id))).scalars().all()
+        }
+        html_ids = set(
+            (
+                await session.execute(select(TicketHtml.ticket_id).where(TicketHtml.guild_id == guild_id))
+            ).scalars().all()
+        )
+        rows = []
+        for ticket in tickets:
+            row = _queue_row(ticket, categories.get(ticket.category_id))
+            row["has_transcript"] = ticket.id in html_ids
+            rows.append(row)
+        return rows
+
+
+async def category_counts(guild_id: int) -> dict[str, dict]:
+    async with session_scope() as session:
+        rows = (
+            await session.execute(
+                select(Ticket.category_id, Ticket.status, func.count()).where(Ticket.guild_id == guild_id).group_by(Ticket.category_id, Ticket.status)
+            )
+        ).all()
+    counts: dict[str, dict] = {}
+    for category_id, status, count in rows:
+        bucket = counts.setdefault(str(category_id), {"open": 0, "total": 0})
+        bucket["total"] += int(count)
+        if status == "open":
+            bucket["open"] += int(count)
+    return counts

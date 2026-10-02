@@ -93,10 +93,11 @@ test("parseDashboardPath handles trailing slashes and non-guild routes", () => {
   assert.deepEqual(parseDashboardPath("/dashboard/access"), { guildId: null, subpath: "" });
 });
 
-test("only the guild overview is a fluid route", () => {
+test("overview and tickets use the full workspace width", () => {
   assert.equal(isFluidRoute("/dashboard/guild/1543105121804615781"), true);
   assert.equal(isFluidRoute("/dashboard/guild/1543105121804615781/"), true);
-  assert.equal(isFluidRoute("/dashboard/guild/1543105121804615781/tickets"), false);
+  assert.equal(isFluidRoute("/dashboard/guild/1543105121804615781/tickets"), true);
+  assert.equal(isFluidRoute("/dashboard/guild/1543105121804615781/tickets/panels"), true);
   assert.equal(isFluidRoute("/dashboard/guilds"), false);
   assert.equal(isFluidRoute("/dashboard/access"), false);
 });

@@ -114,11 +114,17 @@ export const NAV_ITEMS: NavItemDef[] = [
   },
   {
     id: "tickets",
-    label: "Ticket setup",
+    label: "Tickets",
     icon: "tickets",
     group: "tickets",
     scope: "guild",
-    routes: [{ path: "/tickets", label: "Ticket setup" }],
+    routes: [
+      { path: "/tickets", label: "Queue" },
+      { path: "/tickets/panels", label: "Panels" },
+      { path: "/tickets/categories", label: "Categories & Teams" },
+      { path: "/tickets/settings", label: "Settings" },
+      { path: "/tickets/transcripts", label: "Transcripts" },
+    ],
   },
   {
     id: "welcome",
@@ -314,7 +320,7 @@ export function parseDashboardPath(pathname: string): ParsedPath {
  */
 export function isFluidRoute(pathname: string): boolean {
   const { guildId, subpath } = parseDashboardPath(pathname);
-  return guildId !== null && subpath === "";
+  return guildId !== null && (subpath === "" || subpath === "/tickets" || subpath.startsWith("/tickets/"));
 }
 
 export function guildBase(guildId: string): string {

@@ -200,7 +200,8 @@ class TicketsV2(commands.Cog):
                 guild_id=interaction.guild.id,
                 category_id=panel["category_id"],
                 opener_id=interaction.user.id,
-                opener_name=interaction.user.name,
+                opener_name=interaction.user.display_name,
+                opener_avatar=str(interaction.user.display_avatar.url) if interaction.user.display_avatar else "",
                 answers=answers,
                 panel_id=panel["id"],
                 member_role_ids=[role.id for role in interaction.user.roles],
@@ -478,6 +479,54 @@ def _bytes(html: str):
 
 async def setup(bot):
     await bot.add_cog(TicketsV2(bot))
+
+
+async def apply_dashboard_action(bot, *, guild_id: int, ticket_id: str, action: str, actor_id: int, reason: str | None = None, category_id: str | None = None, user_id: int | None = None) -> dict:
+    """Dashboard controls use the same claim, close, transfer, and permission paths as Discord."""
+    cog = bot.get_cog("TicketsV2")
+    if cog is None:
+        raise DeliveryError("Tickets are not running.")
+    guild = bot.get_guild(int(guild_id))
+    if guild is None:
+        raise DeliveryError("This server is not available to CLS right now.")
+    ticket = await load_ticket(guild_id, ticket_id)
+    if ticket is None:
+        raise TicketError("missing")
+    if action == "claim":
+        await claim_ticket(guild_id=guild_id, ticket_id=ticket_id, actor_id=actor_id)
+        await cog._log(guild_id, "ticket_claimed", actor_id, ticket.get("channel_id"), f"Ticket {ticket['number']} claimed")
+    elif action == "unclaim":
+        await unclaim_ticket(guild_id=guild_id, ticket_id=ticket_id, actor_id=actor_id)
+        await cog._log(guild_id, "ticket_unclaimed", actor_id, ticket.get("channel_id"), f"Ticket {ticket['number']} unclaimed")
+    elif action == "close":
+        await cog._finish_close(guild, ticket, actor_id, (reason or "").strip(), auto=False)
+    elif action == "reopen":
+        await reopen_ticket(guild_id=guild_id, ticket_id=ticket_id, actor_id=actor_id)
+        await cog._sync_access(guild, await load_ticket(guild_id, ticket_id))
+        await cog._log(guild_id, "ticket_reopened", actor_id, ticket.get("channel_id"), f"Ticket {ticket['number']} reopened")
+        await cog._arm(guild_id, ticket_id)
+    elif action == "transfer":
+        if not category_id:
+            raise TicketError("category_missing")
+        moved = await transfer_ticket(guild_id=guild_id, ticket_id=ticket_id, category_id=category_id, actor_id=actor_id)
+        await cog._sync_access(guild, await load_ticket(guild_id, ticket_id), moved)
+        await cog._log(guild_id, "ticket_transferred", actor_id, ticket.get("channel_id"), f"Ticket {ticket['number']} transferred to {moved['category_name']}")
+    elif action == "add":
+        if not user_id:
+            raise TicketError("missing")
+        await add_participant(guild_id=guild_id, ticket_id=ticket_id, user_id=user_id, actor_id=actor_id)
+        await cog._sync_access(guild, await load_ticket(guild_id, ticket_id))
+    elif action == "remove":
+        if not user_id:
+            raise TicketError("missing")
+        await remove_participant(guild_id=guild_id, ticket_id=ticket_id, user_id=user_id, actor_id=actor_id)
+        await cog._sync_access(guild, await load_ticket(guild_id, ticket_id))
+    else:
+        raise TicketError("missing")
+    if action != "close":
+        await cog._refresh_controls(guild, ticket_id)
+    fresh = await load_ticket(guild_id, ticket_id)
+    return fresh or ticket
 
 
 async def publish_from_api(bot, guild_id: int, panel: dict, mode: str):

@@ -106,14 +106,33 @@ export const api = {
   createTicketPanel: (guildId: string, data: any) =>
     request<any>(`/guilds/${guildId}/tickets/v2/panels`, { method: "POST", body: JSON.stringify(data) }),
   getTicketTranscript: (guildId: string, ticketId: string) => request<any>(`/guilds/${guildId}/tickets/v2/${ticketId}`),
-  updateTicketLimits: (guildId: string, data: { cooldown_seconds: number; max_open: number; auto_close_hours?: number | null; grace_minutes?: number; transcript_channel_id?: string | null }) =>
+  updateTicketLimits: (guildId: string, data: { cooldown_seconds: number; max_open: number; auto_close_hours?: number | null; grace_minutes?: number; transcript_channel_id?: string | null; name_format?: string }) =>
     request<any>(`/guilds/${guildId}/tickets/v2/settings`, { method: "PATCH", body: JSON.stringify(data) }),
   updateTicketPanel: (guildId: string, panelId: string, data: any) =>
     request<any>(`/guilds/${guildId}/tickets/v2/panels/${panelId}`, { method: "PATCH", body: JSON.stringify(data) }),
   publishTicketPanel: (guildId: string, panelId: string, data: any) =>
     request<any>(`/guilds/${guildId}/tickets/v2/panels/${panelId}/publish`, { method: "POST", body: JSON.stringify(data) }),
-  blacklistTicketUser: (guildId: string, userId: string) =>
-    request<any>(`/guilds/${guildId}/tickets/v2/blacklist`, { method: "POST", body: JSON.stringify({ user_id: userId }) }),
+  getTicketQueue: (guildId: string) => request<{ tickets: any[] }>(`/guilds/${guildId}/tickets/v2/queue`),
+  getTicketDetail: (guildId: string, ticketId: string) => request<any>(`/guilds/${guildId}/tickets/v2/${ticketId}/detail`),
+  actOnTicket: (guildId: string, ticketId: string, data: any) =>
+    request<any>(`/guilds/${guildId}/tickets/v2/${ticketId}/action`, { method: "POST", body: JSON.stringify(data) }),
+  getTicketPanel: (guildId: string, panelId: string) => request<any>(`/guilds/${guildId}/tickets/v2/panels/${panelId}`),
+  saveTicketPanel: (guildId: string, panelId: string, data: any) =>
+    request<any>(`/guilds/${guildId}/tickets/v2/panels/${panelId}`, { method: "PUT", body: JSON.stringify(data) }),
+  duplicateTicketPanel: (guildId: string, panelId: string) =>
+    request<any>(`/guilds/${guildId}/tickets/v2/panels/${panelId}/duplicate`, { method: "POST" }),
+  deleteTicketPanel: (guildId: string, panelId: string) =>
+    request<any>(`/guilds/${guildId}/tickets/v2/panels/${panelId}`, { method: "DELETE" }),
+  updateTicketCategory: (guildId: string, categoryId: string, data: any) =>
+    request<any>(`/guilds/${guildId}/tickets/v2/categories/${categoryId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  getTicketCategoryCounts: (guildId: string) => request<{ counts: Record<string, { open: number; total: number }> }>(`/guilds/${guildId}/tickets/v2/categories/summary`),
+  getTicketBlocklist: (guildId: string) => request<{ blocked: any[] }>(`/guilds/${guildId}/tickets/v2/blacklist`),
+  searchTicketMembers: (guildId: string, query: string) => request<{ members: any[] }>(`/guilds/${guildId}/tickets/v2/members?q=${encodeURIComponent(query)}`),
+  getTicketTranscripts: (guildId: string) => request<{ transcripts: any[] }>(`/guilds/${guildId}/tickets/v2/transcripts`),
+  blacklistTicketUser: (guildId: string, data: string | { user_id: string; reason?: string; display_name?: string; avatar?: string }) =>
+    request<any>(`/guilds/${guildId}/tickets/v2/blacklist`, { method: "POST", body: JSON.stringify(typeof data === "string" ? { user_id: data } : data) }),
+  unblacklistTicketUser: (guildId: string, userId: string) =>
+    request<any>(`/guilds/${guildId}/tickets/v2/blacklist/${userId}`, { method: "DELETE" }),
   updateTickets: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/tickets`, {
       method: "PATCH",

@@ -7,7 +7,12 @@ import discord
 from cls_platform.messages.deliver import DeliveryError, render_message
 from cls_platform.tickets.access import access_overwrites
 
-OPEN_STYLE = discord.ButtonStyle.primary
+_STYLES = {
+    "primary": discord.ButtonStyle.primary,
+    "secondary": discord.ButtonStyle.secondary,
+    "success": discord.ButtonStyle.success,
+    "danger": discord.ButtonStyle.danger,
+}
 
 
 def panel_payload(panel: dict) -> dict:
@@ -29,10 +34,20 @@ def panel_payload(panel: dict) -> dict:
     }
 
 
+def _button_emoji(value: str):
+    text = (value or "").strip()
+    if not text:
+        return None
+    if text.startswith("<") and text.endswith(">"):
+        return discord.PartialEmoji.from_str(text)
+    return text
+
+
 def open_button(panel: dict) -> discord.ui.Button:
     return discord.ui.Button(
         label=(panel.get("button_label") or "Open ticket")[:80],
-        style=OPEN_STYLE,
+        style=_STYLES.get(panel.get("button_style") or "primary", discord.ButtonStyle.primary),
+        emoji=_button_emoji(panel.get("button_emoji") or ""),
         custom_id=f"cls-ticket:open:{panel['id']}",
     )
 
