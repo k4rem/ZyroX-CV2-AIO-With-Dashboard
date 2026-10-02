@@ -129,6 +129,7 @@ async def db_reset(postgres_ready):
             "invite_settings_v2",
             "autoreact_rules_v2",
             "command_policies",
+            "command_module_states",
             "security_center_settings",
             "log_events",
             "log_message_content",

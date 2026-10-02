@@ -177,7 +177,13 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  getCommands: (guildId: string) => request<{ commands: any[] }>(`/guilds/${guildId}/commands`),
+  getCommands: (guildId: string, query = "") => request<any>(`/guilds/${guildId}/commands${query}`),
+  setCommandModule: (guildId: string, data: { module_id: string; enabled: boolean }) =>
+    request<any>(`/guilds/${guildId}/commands/modules`, { method: "POST", body: JSON.stringify(data) }),
+  bulkCommands: (guildId: string, data: Record<string, unknown>) =>
+    request<any>(`/guilds/${guildId}/commands/bulk`, { method: "POST", body: JSON.stringify(data) }),
+  checkCommandAccess: (guildId: string, data: { command_name: string; role_ids: string[]; channel_id: string }) =>
+    request<any>(`/guilds/${guildId}/commands/access`, { method: "POST", body: JSON.stringify(data) }),
   updateCommand: (
     guildId: string,
     data: {

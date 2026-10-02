@@ -75,6 +75,7 @@ _GUILD_SUBROUTE_PREFIXES = (
     "/messages/",
     "/config-transfer/",
     "/automod/v2/",
+    "/commands/",
     "/welcome/",
     "/media/",
     "/emojis/",

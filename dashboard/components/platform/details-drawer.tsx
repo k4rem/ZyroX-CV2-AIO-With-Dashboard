@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,11 @@ export function DetailsDrawer({
   sections?: Array<{ id: string; label: string; content: ReactNode }>;
 }) {
   const [tab, setTab] = useState<Tab>(sections?.[0]?.id || "summary");
+  useEffect(() => {
+    if (sections?.length && !sections.some((section) => section.id === tab)) {
+      setTab(sections[0].id);
+    }
+  }, [sections, tab]);
   const tabs: Array<{ id: Tab; label: string }> = sections
     ? sections.map((section) => ({ id: section.id, label: section.label }))
     : [

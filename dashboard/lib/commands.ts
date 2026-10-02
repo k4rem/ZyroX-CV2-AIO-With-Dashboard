@@ -28,7 +28,7 @@ export function restrictionSummary(row: Pick<CommandRow, "protected" | "enabled"
 }
 
 export function filterCommands(rows: CommandRow[], query: string, category: string, enabled: "all" | "on" | "off") {
-  const needle = query.trim().toLowerCase();
+    const needle = query.trim().toLowerCase().replace(/^\//, "");
   return rows.filter((row) => {
     if (category && category !== "all" && row.category !== category) return false;
     if (enabled === "on" && !row.enabled) return false;

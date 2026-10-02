@@ -83,6 +83,16 @@ class CommandPolicy(Base):
     blocked_channel_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False, default=list)
 
 
+class CommandModuleState(Base):
+    """Module master switch. Does not rewrite per-command policy rows."""
+
+    __tablename__ = "command_module_states"
+
+    guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    module_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
 def is_dangerous(name: str, cog: str | None) -> bool:
     head = name.split()[0].lower()
     return head in DANGEROUS_HEADS or (cog or "") in DANGEROUS_COGS
@@ -92,11 +102,64 @@ def _ids(values) -> list[int]:
     return [int(item) for item in (values or [])]
 
 
-async def decision(guild_id: int, qualified_name: str, role_ids: set[int], channel_id: int | None = None) -> str | None:
-    """None means the command may run. A string is the refusal the member should see."""
+async def module_states(guild_id: int) -> dict[str, bool]:
+    async with session_scope() as session:
+        rows = (
+            await session.execute(select(CommandModuleState).where(CommandModuleState.guild_id == guild_id))
+        ).scalars().all()
+    return {row.module_id: bool(row.enabled) for row in rows}
+
+
+async def module_is_enabled(guild_id: int, module_id: str) -> bool:
+    async with session_scope() as session:
+        row = await session.get(CommandModuleState, (guild_id, module_id))
+    if row is None:
+        return True
+    return bool(row.enabled)
+
+
+async def set_module_enabled(*, guild_id: int, module_id: str, enabled: bool, actor_id: int | None) -> dict:
+    async with session_scope() as session:
+        row = await session.get(CommandModuleState, (guild_id, module_id))
+        if row is None:
+            row = CommandModuleState(guild_id=guild_id, module_id=module_id, enabled=enabled)
+            session.add(row)
+        else:
+            row.enabled = enabled
+    await record_audit(
+        action="command.module",
+        actor_user_id=actor_id,
+        guild_id=guild_id,
+        target=module_id,
+        before_state=None,
+        after_state={"enabled": enabled},
+    )
+    return {"module_id": module_id, "enabled": enabled}
+
+
+async def access_decision(
+    guild_id: int,
+    qualified_name: str,
+    role_ids: set[int],
+    channel_id: int | None = None,
+    module_id: str | None = None,
+) -> dict:
+    """Single policy evaluation used by the runtime gate and the access checker."""
+    steps: list[dict] = []
     head = qualified_name.split()[0].lower()
     if head in PROTECTED:
-        return None
+        steps.append({"ok": True, "label": "Recovery command stays available"})
+        return {"allowed": True, "code": "allowed", "message": "Allowed", "steps": steps}
+    if module_id:
+        enabled = await module_is_enabled(guild_id, module_id)
+        steps.append({"ok": enabled, "label": "Module is enabled" if enabled else "Module is turned off"})
+        if not enabled:
+            return {
+                "allowed": False,
+                "code": "module_disabled",
+                "message": "This module is turned off by a server admin.",
+                "steps": steps,
+            }
     parts = qualified_name.split()
     names = [" ".join(parts[: index]) for index in range(1, len(parts) + 1)]
     async with session_scope() as session:
@@ -111,24 +174,81 @@ async def decision(guild_id: int, qualified_name: str, role_ids: set[int], chann
         if row is None:
             continue
         if not row.enabled:
-            return "This command is turned off in this server."
+            steps.append({"ok": False, "label": f"{name} is turned off"})
+            return {
+                "allowed": False,
+                "code": "command_disabled",
+                "message": "Command disabled by server admin.",
+                "steps": steps,
+            }
+        steps.append({"ok": True, "label": f"{name} is enabled"})
         blocked_roles = set(_ids(row.blocked_role_ids))
         if blocked_roles and role_ids.intersection(blocked_roles):
-            return "You can't use this command with your current roles."
+            steps.append({"ok": False, "label": "A blocked role matched"})
+            return {
+                "allowed": False,
+                "code": "blocked_role",
+                "message": "Your role is blocked from this command.",
+                "steps": steps,
+            }
+        if blocked_roles:
+            steps.append({"ok": True, "label": "No blocked role matched"})
         allowed_roles = set(_ids(row.allowed_role_ids))
         if allowed_roles and not role_ids.intersection(allowed_roles):
-            return "You can't use this command with your current roles."
+            steps.append({"ok": False, "label": "Required role is missing"})
+            return {
+                "allowed": False,
+                "code": "role_required",
+                "message": "You do not have a role allowed to use this command.",
+                "steps": steps,
+            }
+        if allowed_roles:
+            steps.append({"ok": True, "label": "An allowed role matched"})
         blocked_channels = set(_ids(row.blocked_channel_ids))
         allowed_channels = set(_ids(row.allowed_channel_ids))
         if channel_id is not None and channel_id in blocked_channels:
-            return "This command isn't available in this channel."
+            steps.append({"ok": False, "label": "This channel is blocked"})
+            return {
+                "allowed": False,
+                "code": "channel_blocked",
+                "message": "Not allowed in this channel.",
+                "steps": steps,
+            }
         if allowed_channels and channel_id not in allowed_channels:
-            return "This command isn't available in this channel."
-    return None
+            steps.append({"ok": False, "label": "This channel is not on the allowed list"})
+            return {
+                "allowed": False,
+                "code": "channel_required",
+                "message": "Not allowed in this channel.",
+                "steps": steps,
+            }
+        if blocked_channels or allowed_channels:
+            steps.append({"ok": True, "label": "Channel is allowed"})
+    if not any(by_name.get(name) for name in names):
+        steps.append({"ok": True, "label": "No extra command limits are set"})
+    return {"allowed": True, "code": "allowed", "message": "Allowed", "steps": steps}
 
 
-async def evaluate(guild_id: int, qualified_name: str, role_ids: set[int], channel_id: int | None = None) -> bool:
-    return await decision(guild_id, qualified_name, role_ids, channel_id) is None
+async def decision(
+    guild_id: int,
+    qualified_name: str,
+    role_ids: set[int],
+    channel_id: int | None = None,
+    module_id: str | None = None,
+) -> str | None:
+    """None means the command may run. A string is the refusal the member should see."""
+    result = await access_decision(guild_id, qualified_name, role_ids, channel_id, module_id=module_id)
+    return None if result["allowed"] else result["message"]
+
+
+async def evaluate(
+    guild_id: int,
+    qualified_name: str,
+    role_ids: set[int],
+    channel_id: int | None = None,
+    module_id: str | None = None,
+) -> bool:
+    return await decision(guild_id, qualified_name, role_ids, channel_id, module_id=module_id) is None
 
 
 async def policies_for(guild_id: int) -> dict[str, dict]:
@@ -292,13 +412,22 @@ def _cooldown(command) -> dict | None:
 def install_command_gate(bot) -> None:
     if getattr(bot, "_cls_command_gate", False):
         return
+    from cls_platform.commands.catalog import module_id_for_command, retire_unprofessional_aliases
+
+    retire_unprofessional_aliases(bot)
 
     async def prefix_check(ctx):
         if ctx.guild is None or ctx.command is None:
             return True
         roles = {role.id for role in getattr(ctx.author, "roles", [])}
         channel_id = getattr(getattr(ctx, "channel", None), "id", None)
-        reason = await decision(ctx.guild.id, ctx.command.qualified_name, roles, channel_id)
+        reason = await decision(
+            ctx.guild.id,
+            ctx.command.qualified_name,
+            roles,
+            channel_id,
+            module_id=module_id_for_command(ctx.command),
+        )
         if reason:
             raise CommandClosed(reason)
         return True
@@ -312,7 +441,13 @@ def install_command_gate(bot) -> None:
             return await previous(interaction)
         roles = {role.id for role in getattr(interaction.user, "roles", [])}
         channel_id = getattr(interaction, "channel_id", None)
-        reason = await decision(interaction.guild.id, interaction.command.qualified_name, roles, channel_id)
+        reason = await decision(
+            interaction.guild.id,
+            interaction.command.qualified_name,
+            roles,
+            channel_id,
+            module_id=module_id_for_command(interaction.command),
+        )
         if reason:
             try:
                 if not interaction.response.is_done():
