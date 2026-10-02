@@ -4,6 +4,7 @@ import * as React from "react";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { DiscordIcon } from "@/components/landing/discord-icon";
+import { DISCORD_ENTRY } from "@/lib/landingDomains";
 import { cn } from "@/lib/utils";
 
 export interface SignInButtonProps {
@@ -20,7 +21,7 @@ export function SignInButton({ onLock, className, emphasis = "primary" }: SignIn
     if (loading) return;
     setLoading(true);
     onLock?.();
-    void signIn("discord", { callbackUrl: "/auth/continue" });
+    void signIn(DISCORD_ENTRY.provider, { callbackUrl: DISCORD_ENTRY.callbackUrl });
   };
 
   if (emphasis === "nav") {
@@ -32,7 +33,7 @@ export function SignInButton({ onLock, className, emphasis = "primary" }: SignIn
         className={cn("text-fg-2", className)}
         loading={loading}
         onClick={handleClick}
-        aria-label="Sign in with Discord"
+        aria-label={DISCORD_ENTRY.label}
       >
         {!loading ? <DiscordIcon className="size-4 opacity-80" /> : null}
         {loading ? "Connecting…" : "Sign in"}
@@ -48,10 +49,10 @@ export function SignInButton({ onLock, className, emphasis = "primary" }: SignIn
       className={className}
       loading={loading}
       onClick={handleClick}
-      aria-label="Sign in with Discord"
+      aria-label={DISCORD_ENTRY.label}
     >
       {!loading ? <DiscordIcon className="size-5" /> : null}
-      {loading ? "Connecting to Discord…" : "Sign in with Discord"}
+      {loading ? "Connecting to Discord…" : DISCORD_ENTRY.label}
     </Button>
   );
 }

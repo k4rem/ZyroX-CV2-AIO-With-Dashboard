@@ -10,18 +10,9 @@ import {
   hexEdgeTick,
   hexVertices,
 } from "@/lib/hexGeometry";
-import { usePerimeterParallax } from "@/components/landing/use-parallax";
+import { PERIMETER_DOMAINS, type PerimeterDomain } from "@/lib/landingDomains";
 
-export const PERIMETER_DOMAINS = [
-  "Security",
-  "Support",
-  "Recovery",
-  "Automation",
-  "Moderation",
-  "Audit",
-] as const;
-
-export type PerimeterDomain = (typeof PERIMETER_DOMAINS)[number];
+export { PERIMETER_DOMAINS, type PerimeterDomain };
 
 export interface PerimeterMarkProps {
   variant?: "hero" | "auth" | "static";
@@ -141,23 +132,12 @@ export function PerimeterMark({
   showLabels = true,
   parallax = false,
 }: PerimeterMarkProps) {
-  const [parallaxOn, setParallaxOn] = React.useState(false);
   const [gap, setGap] = React.useState(0.03);
   const [markPx, setMarkPx] = React.useState(72);
+  const rootRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    const ok =
-      parallax &&
-      variant === "hero" &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
-      !window.matchMedia("(pointer: coarse)").matches;
-    setParallaxOn(ok);
-  }, [parallax, variant]);
-
-  const { ref: parallaxRef, offset } = usePerimeterParallax(parallaxOn);
-
-  React.useEffect(() => {
-    const el = parallaxRef.current;
+    const el = rootRef.current;
     if (!el || variant !== "hero") return;
     const ro = new ResizeObserver(([entry]) => {
       const h = entry.contentRect.height;
@@ -165,7 +145,7 @@ export function PerimeterMark({
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [variant, parallaxRef]);
+  }, [variant]);
 
   React.useEffect(() => {
     if (!locked) {
@@ -207,13 +187,16 @@ export function PerimeterMark({
 
   return (
     <div
-      ref={parallaxRef}
+      ref={rootRef}
       className={cn("relative mx-auto shrink-0", sizeClass, className)}
       data-perimeter-locked={locked || undefined}
       data-perimeter-variant={variant}
     >
       <div
-        className="pointer-events-none absolute inset-[14%] rounded-full bg-brand-600/[0.12] blur-2xl cls-perimeter-core-glow"
+        className={cn(
+          "pointer-events-none absolute inset-[14%] rounded-full bg-brand-600/[0.12] blur-2xl cls-perimeter-core-glow",
+          parallax && "cls-depth-bg",
+        )}
         aria-hidden="true"
       />
 
@@ -228,22 +211,20 @@ export function PerimeterMark({
             radius={OUTER_R}
             gap={gap}
             activeIndex={activeIndex}
-            className="cls-perimeter-outer transition-transform duration-emphasized ease-cls-in-out"
-            style={{ transform: `translate(${offset.ox}px, ${offset.oy}px)` }}
+            className={cn("cls-perimeter-outer", parallax && "cls-depth-ui")}
           />
           <ControlTicks
             radius={MID_R}
-            className="cls-perimeter-middle transition-transform duration-emphasized ease-cls-in-out"
-            style={{ transform: `translate(${offset.mx}px, ${offset.my}px)` }}
+            className={cn("cls-perimeter-middle", parallax && "cls-depth-mid")}
           />
           <InnerRing
             radius={INNER_R}
             gap={gap}
             className={cn(
-              "cls-perimeter-inner transition-transform duration-emphasized ease-cls-in-out",
+              "cls-perimeter-inner",
+              parallax && "cls-depth-mid",
               locked && "text-brand-500/50",
             )}
-            style={{ transform: `translate(${offset.ix}px, ${offset.iy}px)` }}
           />
         </svg>
       </div>
@@ -270,8 +251,10 @@ export function PerimeterMark({
       ) : null}
 
       <div
-        className="pointer-events-none absolute inset-0 flex items-center justify-center transition-transform duration-emphasized ease-cls-in-out"
-        style={{ transform: `translate(${offset.ix}px, ${offset.iy}px)` }}
+        className={cn(
+          "pointer-events-none absolute inset-0 flex items-center justify-center",
+          parallax && "cls-depth-fg",
+        )}
       >
         <ClsMark height={markHeight} priority={variant === "hero"} />
       </div>

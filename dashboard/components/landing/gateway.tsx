@@ -11,7 +11,7 @@ import { PerimeterHero } from "@/components/landing/perimeter-hero";
 
 export function Gateway({ notice }: { notice?: string | null }) {
   const [locked, setLocked] = React.useState(false);
-  const [activeDomain, setActiveDomain] = React.useState<PerimeterDomain | null>(null);
+  const [activeDomain, setActiveDomain] = React.useState<PerimeterDomain>("Security");
 
   return (
     <div className="cls-gateway relative min-h-[100svh] bg-void text-fg-1">
