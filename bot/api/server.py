@@ -25,7 +25,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from utils.config import *
 
 
-from api.routes import bot, guilds, admin, internal_sessions, access, system, security, snapshots, tickets_v2, logging_v2, commands_v2, growth_v2, messages, welcome
+from api.routes import bot, guilds, admin, internal_sessions, access, system, security, snapshots, tickets_v2, logging_v2, commands_v2, growth_v2, messages, welcome, role_menus
 from api.dependencies import limiter
 from api.auth.middleware import register_dashboard_auth_middleware
 from api.db_manager import db_manager
@@ -98,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(security.router, prefix="/api/v1/guilds", tags=["Security"])
     app.include_router(snapshots.router, prefix="/api/v1/guilds", tags=["Snapshots"])
     app.include_router(tickets_v2.router, prefix="/api/v1/guilds", tags=["Tickets V2"])
+    app.include_router(role_menus.router, prefix="/api/v1/guilds", tags=["Role Menus"])
     app.include_router(logging_v2.router, prefix="/api/v1/guilds", tags=["Logging V2"])
     app.include_router(messages.router, prefix="/api/v1/guilds", tags=["Messages"])
     app.include_router(welcome.router, prefix="/api/v1/guilds", tags=["Welcome"])

@@ -8,6 +8,7 @@ const UNICODE = [
   ["think", "🤔"], ["party", "🥳"], ["check", "✅"], ["cross", "❌"], ["warning", "⚠️"], ["fire", "🔥"],
   ["star", "⭐"], ["sparkle", "✨"], ["heart", "❤️"], ["purple", "💜"], ["thumb", "👍"], ["wave", "👋"],
   ["eyes", "👀"], ["pin", "📌"], ["book", "📖"], ["shield", "🛡️"], ["bell", "🔔"], ["link", "🔗"],
+  ["red", "🔴"], ["blue", "🔵"], ["green", "🟢"],
 ];
 
 export type GuildEmoji = { id: string; name: string; url: string; animated: boolean };
@@ -32,12 +33,17 @@ export function EmojiPicker({
     [emojis, needle],
   );
   const unicode = UNICODE.filter(([name]) => !needle || name.includes(needle));
+  const selected = emojis.find((emoji) => emojiToken(emoji) === value);
+  const missing = value.startsWith("<") && !selected;
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button type="button" className="flex h-8 min-w-8 items-center justify-center rounded-sm border border-line px-2 text-body" aria-label="Choose emoji">
-          {value || "😀"}
+          {selected ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={selected.url} alt={selected.name} className="size-5" />
+          ) : missing ? <span className="text-caption text-fg-3">Missing emoji</span> : (value || "😀")}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-2">

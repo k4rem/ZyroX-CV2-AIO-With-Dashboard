@@ -152,11 +152,14 @@ export const NAV_ITEMS: NavItemDef[] = [
   },
   {
     id: "reactionroles",
-    label: "Reaction roles",
+    label: "Role Menus",
     icon: "reactionroles",
     group: "engagement",
     scope: "guild",
-    routes: [{ path: "/reactionroles", label: "Reaction roles" }],
+    routes: [
+      { path: "/reactionroles", label: "Menus" },
+      { path: "/reactionroles/new", label: "Create" },
+    ],
   },
   {
     id: "autoreact",
@@ -320,7 +323,7 @@ export function parseDashboardPath(pathname: string): ParsedPath {
  */
 export function isFluidRoute(pathname: string): boolean {
   const { guildId, subpath } = parseDashboardPath(pathname);
-  return guildId !== null && (subpath === "" || subpath === "/tickets" || subpath.startsWith("/tickets/"));
+  return guildId !== null && (subpath === "" || subpath === "/tickets" || subpath.startsWith("/tickets/") || subpath === "/reactionroles" || subpath.startsWith("/reactionroles/"));
 }
 
 export function guildBase(guildId: string): string {

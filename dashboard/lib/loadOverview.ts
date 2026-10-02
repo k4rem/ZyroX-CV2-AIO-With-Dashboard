@@ -187,7 +187,7 @@ export async function loadOverview(opts: {
     settled(api.getJ2C(guildId)),
     settled(api.getLoggingV2(guildId)),
     settled(api.getAutoRole(guildId)),
-    settled(api.getRR(guildId)),
+    settled(api.getRoleMenus(guildId)),
     settled(api.getChannels(guildId)),
     settled(api.getPrefix(guildId)),
     isRoot ? settled(api.listAccessGrants(guildId)) : Promise.resolve({ ok: false as const, error: null }),
@@ -392,20 +392,20 @@ export async function loadOverview(opts: {
   } else modules.push(unavailableRow("autorole", "Auto roles", "engagement", `${base}/autorole`));
 
   if (rrRes.ok) {
-    const list = Array.isArray(rrRes.value) ? rrRes.value : rrRes.value?.panels ?? rrRes.value?.roles ?? [];
+    const list = rrRes.value?.menus ?? [];
     const count = Array.isArray(list) ? list.length : 0;
     const on = count > 0;
     modules.push({
       key: "reactionroles",
-      name: "Reaction roles",
+      name: "Role Menus",
       domain: "engagement",
       status: on ? "online" : "disabled",
       statusLabel: on ? "On" : "Off",
       bucket: on ? "on" : "off",
-      detail: on ? `${count} configured` : "No reaction roles set up",
+      detail: on ? `${count} menus` : "No role menus yet",
       href: `${base}/reactionroles`,
     });
-  } else modules.push(unavailableRow("reactionroles", "Reaction roles", "engagement", `${base}/reactionroles`));
+  } else modules.push(unavailableRow("reactionroles", "Role Menus", "engagement", `${base}/reactionroles`));
 
   let accessLabel = "Dashboard access";
   if (isRoot) accessLabel = "Root owner";

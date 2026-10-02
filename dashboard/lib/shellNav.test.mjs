@@ -98,6 +98,7 @@ test("overview and tickets use the full workspace width", () => {
   assert.equal(isFluidRoute("/dashboard/guild/1543105121804615781/"), true);
   assert.equal(isFluidRoute("/dashboard/guild/1543105121804615781/tickets"), true);
   assert.equal(isFluidRoute("/dashboard/guild/1543105121804615781/tickets/panels"), true);
+  assert.equal(isFluidRoute("/dashboard/guild/1543105121804615781/reactionroles/new"), true);
   assert.equal(isFluidRoute("/dashboard/guilds"), false);
   assert.equal(isFluidRoute("/dashboard/access"), false);
 });

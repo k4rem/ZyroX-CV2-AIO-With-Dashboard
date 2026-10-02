@@ -293,6 +293,15 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  getRoleMenus: (guildId: string) => request<{ menus: any[]; bot_position?: number }>(`/guilds/${guildId}/reactionroles/v2`),
+  getRoleMenu: (guildId: string, menuId: string) => request<any>(`/guilds/${guildId}/reactionroles/v2/${menuId}`),
+  createRoleMenu: (guildId: string, data: any) => request<any>(`/guilds/${guildId}/reactionroles/v2`, { method: "POST", body: JSON.stringify(data) }),
+  updateRoleMenu: (guildId: string, menuId: string, data: any) => request<any>(`/guilds/${guildId}/reactionroles/v2/${menuId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  duplicateRoleMenu: (guildId: string, menuId: string) => request<any>(`/guilds/${guildId}/reactionroles/v2/${menuId}/duplicate`, { method: "POST" }),
+  deleteRoleMenu: (guildId: string, menuId: string, removeReactions = false) => request<any>(`/guilds/${guildId}/reactionroles/v2/${menuId}?remove_reactions=${removeReactions ? "true" : "false"}`, { method: "DELETE" }),
+  publishRoleMenu: (guildId: string, menuId: string, data: any) => request<any>(`/guilds/${guildId}/reactionroles/v2/${menuId}/publish`, { method: "POST", body: JSON.stringify(data) }),
+  republishRoleMenu: (guildId: string, menuId: string) => request<any>(`/guilds/${guildId}/reactionroles/v2/${menuId}/republish`, { method: "POST" }),
+  getRoleMenuMessages: (guildId: string, channelId: string, link = "") => request<{ messages: any[] }>(`/guilds/${guildId}/reactionroles/v2/messages?channel_id=${encodeURIComponent(channelId)}&link=${encodeURIComponent(link)}`),
   getRR: (guildId: string) => request<any>(`/guilds/${guildId}/reactionroles`),
   updateRR: (guildId: string, data: any) =>
     request<{ status: string }>(`/guilds/${guildId}/reactionroles`, {
