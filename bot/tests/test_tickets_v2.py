@@ -91,3 +91,9 @@ async def test_ticket_flow_and_isolation(db_reset):
     except TicketError as exc:
         assert str(exc) == "blacklisted"
     assert again["status"] == "open"
+    await claim_ticket(guild_id=GUILD, ticket_id=again["id"], actor_id=USER)
+    try:
+        await claim_ticket(guild_id=GUILD, ticket_id=again["id"], actor_id=USER + 3)
+        assert False, "second claim"
+    except TicketError as exc:
+        assert str(exc) == "already_claimed"

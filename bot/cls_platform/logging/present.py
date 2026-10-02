@@ -40,6 +40,14 @@ TITLES = {
     "voice_move": "Moved voice channel",
     "guild_update": "Server settings updated",
     "logging_test": "Logging test",
+    "ticket_opened": "Ticket opened",
+    "ticket_claimed": "Ticket claimed",
+    "ticket_unclaimed": "Ticket unclaimed",
+    "ticket_transferred": "Ticket transferred",
+    "ticket_closed": "Ticket closed",
+    "ticket_reopened": "Ticket reopened",
+    "ticket_deleted": "Ticket deleted",
+    "ticket_auto_closed": "Ticket auto-closed",
 }
 
 COLORS = {
@@ -68,6 +76,8 @@ def _category_for(event_type: str) -> str:
         return "role_events"
     if event_type.startswith("channel"):
         return "channel_events"
+    if event_type.startswith("ticket_"):
+        return "bot_actions"
     return "guild_events"
 
 
@@ -83,7 +93,21 @@ EVENT_GROUPS = (
     ("channel_events", "Channels", ("channel_create", "channel_update", "channel_delete")),
     ("voice_events", "Voice", ("voice_join", "voice_leave", "voice_move")),
     ("guild_events", "Server", ("guild_update",)),
-    ("bot_actions", "Bot actions", ("logging_test",)),
+    (
+        "bot_actions",
+        "Bot actions",
+        (
+            "logging_test",
+            "ticket_opened",
+            "ticket_claimed",
+            "ticket_unclaimed",
+            "ticket_transferred",
+            "ticket_closed",
+            "ticket_reopened",
+            "ticket_deleted",
+            "ticket_auto_closed",
+        ),
+    ),
 )
 
 

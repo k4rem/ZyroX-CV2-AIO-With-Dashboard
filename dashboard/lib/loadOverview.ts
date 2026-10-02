@@ -182,7 +182,7 @@ export async function loadOverview(opts: {
     settled(api.getSystemHealth(guildId)),
     settled(api.getSecurity(guildId)),
     settled(api.getAutomod(guildId)),
-    settled(api.getTickets(guildId)),
+    settled(api.getTicketsV2(guildId)),
     settled(api.getWelcome(guildId)),
     settled(api.getJ2C(guildId)),
     settled(api.getLoggingV2(guildId)),
@@ -226,7 +226,17 @@ export async function loadOverview(opts: {
     : null;
   const loggingHome = loggingRes.ok ? loggingRes.value : null;
   const loggingRoutes = loggingHome?.routes ?? null;
-  const ticketsCfg = ticketsRes.ok ? ticketsRes.value : null;
+  const ticketsRaw = ticketsRes.ok ? ticketsRes.value : null;
+  const ticketsCfg = ticketsRaw
+    ? {
+        panel_channel: (ticketsRaw.panels || []).find((panel: { channel_id?: string | null }) => panel.channel_id)?.channel_id ?? null,
+        categories: (ticketsRaw.categories || []).map((category: { staff_role_ids?: string[] }) => ({
+          staff_roles: category.staff_role_ids || [],
+        })),
+        open_ticket_count: ticketsRaw.open_now ?? 0,
+        degraded_open: ticketsRaw.degraded_open ?? 0,
+      }
+    : null;
 
   const attention = rankAttention(
     deriveAttention({
@@ -301,6 +311,7 @@ export async function loadOverview(opts: {
     const st = checklistState(steps, "healthy", "Configured", "Not set up");
     const cats = ticketsCfg.categories?.length ?? 0;
     const open = ticketsCfg.open_ticket_count ?? 0;
+    const degraded = ticketsCfg.degraded_open ?? 0;
     const panel = channelName(ticketsCfg.panel_channel);
     const facts = [
       panel ? `#${panel}` : null,
@@ -311,8 +322,8 @@ export async function loadOverview(opts: {
       key: "tickets",
       name: "Tickets",
       domain: "tickets",
-      status: st.status,
-      statusLabel: st.label,
+      status: degraded > 0 ? "warning" : st.status,
+      statusLabel: degraded > 0 ? "Needs attention" : st.label,
       bucket: bucketFor(st.status),
       detail: stepsDone(steps) === 0 ? "No panel channel or categories yet" : facts.join(" · "),
       meter: stepsMeter(steps),

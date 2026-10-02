@@ -78,7 +78,13 @@ def _cog_specs() -> list[CogSpec]:
         CogSpec("cogs.commands.np", "NoPrefix", O),
         CogSpec("cogs.commands.filters", "FilterCog", O),
         CogSpec("cogs.commands.owner2", "Global", O),
-        CogSpec("cogs.commands.ticket", "TicketCog", R),
+        CogSpec(
+            "cogs.commands.ticket",
+            "TicketCog",
+            False,
+            skip=True,
+            skip_reason="Retired. Tickets V2 is the operational ticket system.",
+        ),
         CogSpec(
             "cogs.commands.logging",
             "Logging",

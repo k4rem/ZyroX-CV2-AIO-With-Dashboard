@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from api.dependencies import get_bot
+from cls_platform.messages.deliver import DeliveryError
 from cls_platform.tickets.store import (
     TicketError,
     blacklist_user,
@@ -12,11 +14,14 @@ from cls_platform.tickets.store import (
     close_ticket,
     create_category,
     create_panel,
+    load_panel,
     open_ticket,
     reopen_ticket,
     set_limits,
+    set_publish,
     transcript,
     unblacklist_user,
+    update_panel_text,
     workspace,
 )
 
@@ -27,6 +32,8 @@ class CategoryBody(BaseModel):
     name: str
     discord_category_id: str | None = None
     staff_role_ids: list[str] = Field(default_factory=list)
+    name_format: str | None = None
+    ping_staff: bool = True
 
 
 class PanelBody(BaseModel):
@@ -36,6 +43,9 @@ class PanelBody(BaseModel):
     message: str = ""
     button_label: str = "Open ticket"
     questions: list[dict] = Field(default_factory=list)
+    required_role_ids: list[str] = Field(default_factory=list)
+    blocked_role_ids: list[str] = Field(default_factory=list)
+    payload: dict | None = None
 
 
 class OpenBody(BaseModel):
@@ -52,6 +62,9 @@ class CloseBody(BaseModel):
 class LimitsBody(BaseModel):
     cooldown_seconds: int = 60
     max_open: int = 1
+    auto_close_hours: int | None = None
+    grace_minutes: int | None = None
+    transcript_channel_id: str | None = None
 
 
 class BlacklistBody(BaseModel):
@@ -73,7 +86,9 @@ async def tickets_category(guild_id: int, body: CategoryBody):
         guild_id=guild_id,
         name=body.name,
         discord_category_id=_int(body.discord_category_id),
-        staff_role_ids=[int(item) for item in body.staff_role_ids],
+        staff_role_ids=[int(item) for item in body.staff_role_ids if item.isdigit()],
+        name_format=body.name_format,
+        ping_staff=body.ping_staff,
     )
 
 
@@ -87,15 +102,70 @@ async def tickets_panel(guild_id: int, body: PanelBody):
         message=body.message,
         button_label=body.button_label,
         questions=body.questions,
+        required_role_ids=[int(item) for item in body.required_role_ids if str(item).isdigit()],
+        blocked_role_ids=[int(item) for item in body.blocked_role_ids if str(item).isdigit()],
+        payload=body.payload,
     )
 
 
 @router.patch("/{guild_id}/tickets/v2/settings")
 async def tickets_settings(guild_id: int, body: LimitsBody):
+    provided = body.model_dump(exclude_unset=True)
     try:
-        return await set_limits(guild_id=guild_id, cooldown_seconds=body.cooldown_seconds, max_open=body.max_open)
+        return await set_limits(
+            guild_id=guild_id,
+            cooldown_seconds=body.cooldown_seconds,
+            max_open=body.max_open,
+            auto_close_hours=body.auto_close_hours if "auto_close_hours" in provided else None,
+            grace_minutes=body.grace_minutes if "grace_minutes" in provided else None,
+            transcript_channel_id=_int(body.transcript_channel_id) if "transcript_channel_id" in provided else None,
+        )
     except TicketError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class PanelTextBody(BaseModel):
+    title: str | None = None
+    message: str | None = None
+    payload: dict | None = None
+
+
+class PublishBody(BaseModel):
+    channel_id: str | None = None
+    mode: str = "publish"
+
+
+@router.patch("/{guild_id}/tickets/v2/panels/{panel_id}")
+async def tickets_panel_text(guild_id: int, panel_id: str, body: PanelTextBody):
+    try:
+        return await update_panel_text(guild_id=guild_id, panel_id=panel_id, title=body.title, message=body.message, payload=body.payload)
+    except TicketError as exc:
+        raise HTTPException(status_code=404, detail="Panel not found") from exc
+
+
+@router.post("/{guild_id}/tickets/v2/panels/{panel_id}/publish")
+async def tickets_publish(guild_id: int, panel_id: str, body: PublishBody, bot=Depends(get_bot)):
+    panel = await load_panel(panel_id)
+    if panel is None or panel["guild_id"] != guild_id:
+        raise HTTPException(status_code=404, detail="Panel not found")
+    if body.channel_id and str(body.channel_id).isdigit():
+        panel["channel_id"] = int(body.channel_id)
+    from cogs.tickets_v2 import publish_from_api
+
+    mode = body.mode if body.mode in {"publish", "update", "resend"} else "publish"
+    try:
+        message = await publish_from_api(bot, guild_id, panel, "publish" if mode == "resend" else mode)
+    except DeliveryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if message is None:
+        return await set_publish(guild_id=guild_id, panel_id=panel_id, channel_id=None, message_id=None, status="missing")
+    return await set_publish(
+        guild_id=guild_id,
+        panel_id=panel_id,
+        channel_id=int(message.channel.id),
+        message_id=int(message.id),
+        status="published",
+    )
 
 
 @router.post("/{guild_id}/tickets/v2/blacklist")
