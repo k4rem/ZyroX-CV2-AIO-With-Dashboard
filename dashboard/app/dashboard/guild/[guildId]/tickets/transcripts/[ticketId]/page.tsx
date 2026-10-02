@@ -27,6 +27,12 @@ export default async function TranscriptPage({ params }: { params: { guildId: st
         <aside className="space-y-2 text-small text-fg-2">
           <p className="text-caption uppercase tracking-wide text-fg-3">Timeline</p>
           {(detail.events || []).map((event: { id: string; kind?: string; actor_name?: string; payload?: Record<string, unknown> }) => <p key={event.id}>{eventLabel(event)}</p>)}
+          {(detail.notes || []).length > 0 && (
+            <div className="border border-line-subtle p-2">
+              <p className="text-caption uppercase tracking-wide text-fg-3">Staff notes · INTERNAL — NOT VISIBLE TO MEMBER</p>
+              {(detail.notes || []).map((note: { id: string; body: string }) => <p key={note.id} className="text-small text-fg-2">{note.body}</p>)}
+            </div>
+          )}
           {html && (
             <a className="inline-block text-accent" href={`data:text/html;charset=utf-8,${encodeURIComponent(html)}`} download={`ticket-${detail.number}.html`}>Download</a>
           )}

@@ -58,9 +58,47 @@ def _view_with(button: discord.ui.Button, extra: discord.ui.View | None) -> disc
     return view
 
 
+def select_panel_view(panel: dict) -> discord.ui.View | None:
+    options = []
+    for option in (panel.get("options") or [])[:25]:
+        label = str(option.get("label") or "").strip()
+        if not label or not option.get("id"):
+            continue
+        description = str(option.get("description") or "").strip()[:100]
+        options.append(
+            discord.SelectOption(
+                label=label[:100],
+                value=str(option["id"]),
+                description=description or None,
+                emoji=_button_emoji(str(option.get("emoji") or "")),
+            )
+        )
+    if not options:
+        return None
+    view = discord.ui.View(timeout=None)
+    view.add_item(
+        discord.ui.Select(
+            placeholder="Open a ticket",
+            custom_id=f"cls-ticket:pick:{panel['id']}",
+            options=options,
+            min_values=1,
+            max_values=1,
+        )
+    )
+    return view
+
+
 async def panel_message_args(guild_id: int, panel: dict):
-    content, embeds, view, files = await render_message(guild_id, panel_payload(panel), {})
-    return content, embeds, _view_with(open_button(panel), view), files
+    shown = panel
+    if shown.get("panel_type") == "select" and "options" not in shown:
+        from cls_platform.tickets.advanced import panel_advanced
+
+        shown = {**shown, **await panel_advanced(shown["id"])}
+    content, embeds, view, files = await render_message(guild_id, panel_payload(shown), {})
+    select = select_panel_view(shown) if shown.get("panel_type") == "select" else None
+    if select is not None:
+        return content, embeds, select, files
+    return content, embeds, _view_with(open_button(shown), view), files
 
 
 def discord_overwrites(guild, opener, staff_roles, extras, deny_roles=None):
@@ -96,7 +134,14 @@ def discord_overwrites(guild, opener, staff_roles, extras, deny_roles=None):
     return overwrites
 
 
-def control_view(ticket_id: str, *, closed: bool) -> discord.ui.View:
+def close_request_view(ticket_id: str) -> discord.ui.View:
+    view = discord.ui.View(timeout=None)
+    view.add_item(discord.ui.Button(label="Close ticket", style=discord.ButtonStyle.success, custom_id=f"cls-t:confirm-close:{ticket_id}"))
+    view.add_item(discord.ui.Button(label="Keep open", custom_id=f"cls-t:keep:{ticket_id}"))
+    return view
+
+
+def control_view(ticket_id: str, *, closed: bool, close_mode: str = "direct", tags: list[dict] | None = None) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
     if closed:
         view.add_item(discord.ui.Button(label="Reopen", custom_id=f"cls-t:reopen:{ticket_id}"))
@@ -106,9 +151,31 @@ def control_view(ticket_id: str, *, closed: bool) -> discord.ui.View:
     view.add_item(discord.ui.Button(label="Claim", custom_id=f"cls-t:claim:{ticket_id}"))
     view.add_item(discord.ui.Button(label="Unclaim", custom_id=f"cls-t:unclaim:{ticket_id}"))
     view.add_item(discord.ui.Button(label="Close", style=discord.ButtonStyle.danger, custom_id=f"cls-t:close:{ticket_id}"))
+    if close_mode == "request":
+        view.add_item(discord.ui.Button(label="Ask to close", custom_id=f"cls-t:ask-close:{ticket_id}"))
     view.add_item(discord.ui.Button(label="Add member", custom_id=f"cls-t:add:{ticket_id}"))
     view.add_item(discord.ui.Button(label="Remove member", custom_id=f"cls-t:remove:{ticket_id}"))
     view.add_item(discord.ui.Button(label="Transfer", custom_id=f"cls-t:transfer:{ticket_id}"))
+    view.add_item(
+        discord.ui.Select(
+            placeholder="Priority",
+            custom_id=f"cls-t:priority:{ticket_id}",
+            row=3,
+            options=[
+                discord.SelectOption(label="Low", value="low"),
+                discord.SelectOption(label="Normal", value="normal"),
+                discord.SelectOption(label="High", value="high"),
+                discord.SelectOption(label="Urgent", value="urgent"),
+            ],
+        )
+    )
+    tag_options = [
+        discord.SelectOption(label=str(tag.get("name") or "Tag")[:100], value=str(tag["id"]))
+        for tag in (tags or [])[:25]
+        if tag.get("id") and tag.get("name")
+    ]
+    if tag_options:
+        view.add_item(discord.ui.Select(placeholder="Tag", custom_id=f"cls-t:tag:{ticket_id}", options=tag_options, row=4))
     return view
 
 

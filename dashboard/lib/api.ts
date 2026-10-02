@@ -129,6 +129,14 @@ export const api = {
   getTicketBlocklist: (guildId: string) => request<{ blocked: any[] }>(`/guilds/${guildId}/tickets/v2/blacklist`),
   searchTicketMembers: (guildId: string, query: string) => request<{ members: any[] }>(`/guilds/${guildId}/tickets/v2/members?q=${encodeURIComponent(query)}`),
   getTicketTranscripts: (guildId: string) => request<{ transcripts: any[] }>(`/guilds/${guildId}/tickets/v2/transcripts`),
+  getTicketTags: (guildId: string) => request<{ tags: Array<{ id: string; name: string; position: number }> }>(`/guilds/${guildId}/tickets/v2/tags`),
+  createTicketTag: (guildId: string, data: { name: string; position?: number }) => request<any>(`/guilds/${guildId}/tickets/v2/tags`, { method: "POST", body: JSON.stringify(data) }),
+  updateTicketTag: (guildId: string, tagId: string, data: { name: string; position?: number }) => request<any>(`/guilds/${guildId}/tickets/v2/tags/${tagId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteTicketTag: (guildId: string, tagId: string) => request<any>(`/guilds/${guildId}/tickets/v2/tags/${tagId}`, { method: "DELETE" }),
+  getTicketMetrics: (guildId: string, days: number) => request<any>(`/guilds/${guildId}/tickets/v2/metrics?days=${days}`),
+  getTicketReplies: (guildId: string) => request<{ replies: Array<{ id: string; name: string; content: string }> }>(`/guilds/${guildId}/tickets/v2/replies`),
+  createTicketReply: (guildId: string, data: { name: string; content: string }) => request<any>(`/guilds/${guildId}/tickets/v2/replies`, { method: "POST", body: JSON.stringify(data) }),
+  deleteTicketReply: (guildId: string, replyId: string) => request<any>(`/guilds/${guildId}/tickets/v2/replies/${replyId}`, { method: "DELETE" }),
   blacklistTicketUser: (guildId: string, data: string | { user_id: string; reason?: string; display_name?: string; avatar?: string }) =>
     request<any>(`/guilds/${guildId}/tickets/v2/blacklist`, { method: "POST", body: JSON.stringify(typeof data === "string" ? { user_id: data } : data) }),
   unblacklistTicketUser: (guildId: string, userId: string) =>

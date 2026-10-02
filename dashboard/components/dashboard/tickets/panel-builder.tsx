@@ -67,6 +67,9 @@ export function PanelBuilder({
   const [requiredRole, setRequiredRole] = useState(String((panel.required_role_ids || [])[0] || ""));
   const [blockedRole, setBlockedRole] = useState(String((panel.blocked_role_ids || [])[0] || ""));
   const [questions, setQuestions] = useState<Question[]>(questionsFrom(panel.questions));
+  const [panelType, setPanelType] = useState(panel.panel_type === "select" ? "select" : "button");
+  const [options, setOptions] = useState<Array<Record<string, any>>>(panel.options || []);
+  const [rules, setRules] = useState<Array<Record<string, any>>>(panel.rules || []);
   const [busy, setBusy] = useState(false);
   const channelName = channels.find((channel) => channel.id === channelId)?.name;
   const synced = panel.published_at ? new Date(panel.published_at).toLocaleString() : "";
@@ -84,7 +87,10 @@ export function PanelBuilder({
     blocked_role_ids: blockedRole ? [blockedRole] : [],
     questions,
     payload: message,
-  }), [categoryId, channelId, title, message, buttonLabel, emoji, style, requiredRole, blockedRole, questions]);
+    panel_type: panelType,
+    options,
+    rules,
+  }), [categoryId, channelId, title, message, buttonLabel, emoji, style, requiredRole, blockedRole, questions, panelType, options, rules]);
 
   function move(index: number, direction: -1 | 1) {
     const next = questions.slice();
@@ -171,6 +177,33 @@ export function PanelBuilder({
                 </div>
               </div>
             ))}
+          </div>
+          <div className="space-y-2 border-t border-line-subtle pt-3">
+            <p className="text-small text-fg-1">Panel type</p>
+            <Select value={panelType} onValueChange={setPanelType} options={[{ value: "button", label: "Button" }, { value: "select", label: "Select menu" }]} />
+            {panelType === "select" && options.map((option, index) => (
+              <div key={index} className="space-y-1 border border-line-subtle p-2">
+                <Input value={option.label || ""} aria-label={`Option ${index + 1}`} placeholder="Billing" onChange={(event) => setOptions(options.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} />
+                <Input value={option.description || ""} aria-label={`Option description ${index + 1}`} placeholder="Description" onChange={(event) => setOptions(options.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} />
+                <EmojiPicker value={option.emoji || ""} emojis={emojis} onChange={(value) => setOptions(options.map((item, itemIndex) => itemIndex === index ? { ...item, emoji: value } : item))} />
+                <Select value={option.category_id || ""} onValueChange={(value) => setOptions(options.map((item, itemIndex) => itemIndex === index ? { ...item, category_id: value } : item))} placeholder="Team" options={categories.map((item) => ({ value: item.id, label: item.name }))} />
+                <button type="button" className="text-caption text-fg-3" onClick={() => setOptions(options.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>
+              </div>
+            ))}
+            {panelType === "select" && <Button type="button" size="sm" variant="ghost" disabled={options.length >= 25} onClick={() => setOptions([...options, { label: "", description: "", emoji: "", category_id: categoryId, questions: [] }])}>Add option</Button>}
+          </div>
+          <div className="space-y-2 border-t border-line-subtle pt-3">
+            <p className="text-small text-fg-1">Routing</p>
+            {rules.map((rule, index) => (
+              <div key={index} className="grid gap-1">
+                <Input value={rule.question_label || ""} aria-label={`Route question ${index + 1}`} placeholder="Issue type" onChange={(event) => setRules(rules.map((item, itemIndex) => itemIndex === index ? { ...item, question_label: event.target.value } : item))} />
+                <Select value={rule.operator || "equals"} onValueChange={(value) => setRules(rules.map((item, itemIndex) => itemIndex === index ? { ...item, operator: value } : item))} options={[{ value: "equals", label: "Equals" }, { value: "contains", label: "Contains" }]} />
+                <Input value={rule.value || ""} aria-label={`Route answer ${index + 1}`} placeholder="Billing" onChange={(event) => setRules(rules.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))} />
+                <Select value={rule.category_id || ""} onValueChange={(value) => setRules(rules.map((item, itemIndex) => itemIndex === index ? { ...item, category_id: value } : item))} placeholder="Route to" options={categories.map((item) => ({ value: item.id, label: item.name }))} />
+                <button type="button" className="text-caption text-fg-3" onClick={() => setRules(rules.filter((_, itemIndex) => itemIndex !== index))}>Remove rule</button>
+              </div>
+            ))}
+            <Button type="button" size="sm" variant="ghost" disabled={rules.length >= 12} onClick={() => setRules([...rules, { question_label: questions[0]?.label || "Issue type", operator: "equals", value: "", category_id: categoryId }])}>Add rule</Button>
           </div>
         </aside>
         <MessageComposer guildId={guildId} message={message} onChange={setMessage} emojis={emojis} values={{}} selection={selection} onSelect={setSelection} showPreview={false} />

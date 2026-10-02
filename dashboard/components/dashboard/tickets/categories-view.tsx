@@ -63,6 +63,14 @@ export function CategoriesView({
       name_format: category.name_format || "ticket-{number}-{username}",
       required_role_ids: category.required_role_ids || [],
       blocked_role_ids: category.blocked_role_ids || [],
+      close_mode: category.close_mode || "direct",
+      close_timeout_minutes: category.close_timeout_minutes ?? "",
+      hours_mode: category.hours_mode || "always",
+      hours_timezone: category.hours_timezone || "UTC",
+      hours_days: category.hours_days ?? 127,
+      hours_start: category.hours_start || "09:00",
+      hours_end: category.hours_end || "17:00",
+      hours_outside: category.hours_outside || "allow",
     });
   }
 
@@ -73,6 +81,9 @@ export function CategoriesView({
         ...draft,
         discord_category_id: draft.discord_category_id || null,
         clear_discord_category: !draft.discord_category_id,
+        close_timeout_minutes: draft.close_timeout_minutes === "" || draft.close_timeout_minutes == null ? null : Number(draft.close_timeout_minutes),
+        clear_close_timeout: draft.close_timeout_minutes === "" || draft.close_timeout_minutes == null,
+        hours_days: Number(draft.hours_days ?? 127),
       });
       toast.success("Team updated");
       setEditing(null);
@@ -110,7 +121,7 @@ export function CategoriesView({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-small text-fg-1">{category.name}</p>
-                    <p className="text-caption text-fg-3">{parent} · {support} · {count.open} open / {count.total} total · {category.ping_staff === false ? "No open ping" : "Pings support on open"}</p>
+                    <p className="text-caption text-fg-3">{parent} · {support} · {count.open} open / {count.total} total · {category.hours_mode === "scheduled" ? (category.support_open ? "Open now" : "Closed now") : "Always available"}{category.support_next && !category.support_open ? ` · Next ${new Date(category.support_next).toLocaleString()}` : ""}</p>
                   </div>
                   <Button type="button" size="sm" variant="secondary" onClick={() => open ? setEditing(null) : begin(category)}>{open ? "Close" : "Edit"}</Button>
                 </div>
@@ -130,6 +141,24 @@ export function CategoriesView({
                     <RolePicker roles={roles} value={(draft.required_role_ids || [])[0] || ""} onChange={(id) => setDraft({ ...draft, required_role_ids: [id] })} />
                     <p className="text-caption text-fg-3">Blocked role for this team</p>
                     <RolePicker roles={roles} value={(draft.blocked_role_ids || [])[0] || ""} onChange={(id) => setDraft({ ...draft, blocked_role_ids: [id] })} />
+                    <Select value={draft.close_mode || "direct"} onValueChange={(value) => setDraft({ ...draft, close_mode: value })} options={[{ value: "direct", label: "Direct close" }, { value: "request", label: "Ask the member to confirm" }]} />
+                    <Input value={draft.close_timeout_minutes ?? ""} aria-label="Close request timeout minutes" placeholder="Timeout minutes, blank for no automatic close" onChange={(event) => setDraft({ ...draft, close_timeout_minutes: event.target.value, clear_close_timeout: event.target.value === "" })} />
+                    <Select value={draft.hours_mode || "always"} onValueChange={(value) => setDraft({ ...draft, hours_mode: value })} options={[{ value: "always", label: "Always available" }, { value: "scheduled", label: "Scheduled hours" }]} />
+                    {draft.hours_mode === "scheduled" && (
+                      <div className="grid gap-1 sm:grid-cols-2">
+                        <Input value={draft.hours_timezone || "UTC"} aria-label="Timezone" placeholder="Asia/Riyadh" onChange={(event) => setDraft({ ...draft, hours_timezone: event.target.value })} />
+                        <Input value={draft.hours_start || ""} aria-label="Opens" placeholder="09:00" onChange={(event) => setDraft({ ...draft, hours_start: event.target.value })} />
+                        <Input value={draft.hours_end || ""} aria-label="Closes" placeholder="17:00" onChange={(event) => setDraft({ ...draft, hours_end: event.target.value })} />
+                        <Select value={draft.hours_outside || "allow"} onValueChange={(value) => setDraft({ ...draft, hours_outside: value })} options={[{ value: "allow", label: "Allow with offline notice" }, { value: "block", label: "Block new tickets" }]} />
+                        <div className="flex flex-wrap gap-1 sm:col-span-2">
+                          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, index) => {
+                            const bit = 1 << index;
+                            const on = (Number(draft.hours_days) & bit) !== 0;
+                            return <button key={day} type="button" className={`border px-2 py-0.5 text-caption ${on ? "border-line text-fg-1" : "border-line-subtle text-fg-3"}`} onClick={() => setDraft({ ...draft, hours_days: Number(draft.hours_days) ^ bit })}>{day}</button>;
+                          })}
+                        </div>
+                      </div>
+                    )}
                     <Button type="button" onClick={() => void save()}>Save team</Button>
                   </div>
                 )}

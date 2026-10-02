@@ -337,6 +337,15 @@ class CategoryUpdate(BaseModel):
     ping_staff: bool | None = None
     required_role_ids: list[str] | None = None
     blocked_role_ids: list[str] | None = None
+    close_mode: str | None = None
+    close_timeout_minutes: int | None = None
+    clear_close_timeout: bool = False
+    hours_mode: str | None = None
+    hours_timezone: str | None = None
+    hours_days: int | None = None
+    hours_start: str | None = None
+    hours_end: str | None = None
+    hours_outside: str | None = None
 
 
 @router.patch("/{guild_id}/tickets/v2/categories/{category_id}")
@@ -353,8 +362,21 @@ async def tickets_category_update(guild_id: int, category_id: str, body: Categor
             required_role_ids=_ids(body.required_role_ids),
             blocked_role_ids=_ids(body.blocked_role_ids),
             discord_category_set=body.clear_discord_category or body.discord_category_id is not None,
+            close_mode=body.close_mode,
+            close_timeout_minutes=None if body.clear_close_timeout else body.close_timeout_minutes,
+            close_timeout_set=body.clear_close_timeout or body.close_timeout_minutes is not None,
+            hours={
+                "hours_mode": body.hours_mode,
+                "hours_timezone": body.hours_timezone,
+                "hours_days": body.hours_days,
+                "hours_start": body.hours_start,
+                "hours_end": body.hours_end,
+                "hours_outside": body.hours_outside,
+            },
         )
     except TicketError as exc:
+        if str(exc) == "timezone":
+            raise HTTPException(status_code=422, detail="That timezone is not recognized.") from exc
         raise HTTPException(status_code=404, detail="Category not found") from exc
 
 
@@ -371,6 +393,37 @@ class PanelSaveBody(BaseModel):
     required_role_ids: list[str] | None = None
     blocked_role_ids: list[str] | None = None
     payload: dict | None = None
+    panel_type: str | None = None
+    options: list[dict] | None = None
+    rules: list[dict] | None = None
+
+
+def _ticket_detail(exc: TicketError) -> str:
+    return {
+        "priority": "Choose Low, Normal, High, or Urgent.",
+        "tag_missing": "That tag is no longer available.",
+        "tag_name": "A tag needs a name.",
+        "note_empty": "Write a note before saving.",
+        "note_forbidden": "You can only delete your own note.",
+        "reply": "A saved reply needs a name and some text.",
+        "timezone": "That timezone is not recognized.",
+        "missing": "This ticket is no longer available.",
+    }.get(str(exc), "That ticket action could not be completed.")
+
+
+async def _shown_panel(guild_id: int, panel_id: str) -> dict | None:
+    from cls_platform.tickets.advanced import panel_advanced
+
+    panel = _public_panel(await load_panel(panel_id))
+    if panel is None or panel["guild_id"] != guild_id:
+        return None
+    extra = await panel_advanced(panel_id)
+    panel.update(extra)
+    rules = []
+    for rule in extra["rules"]:
+        rules.append(f"When {rule['question_label']} {rule['operator']} {rule['value']}")
+    panel["routing_summary"] = rules
+    return panel
 
 
 def _public_panel(panel: dict | None) -> dict | None:
@@ -390,7 +443,7 @@ async def tickets_panel_get(guild_id: int, panel_id: str):
     panel = await load_panel(panel_id)
     if panel is None or panel["guild_id"] != guild_id:
         raise HTTPException(status_code=404, detail="Panel not found")
-    return _public_panel(panel)
+    return await _shown_panel(guild_id, panel_id)
 
 
 @router.put("/{guild_id}/tickets/v2/panels/{panel_id}")
@@ -412,9 +465,12 @@ async def tickets_panel_save(guild_id: int, panel_id: str, body: PanelSaveBody):
             payload=body.payload,
             channel_set=body.clear_channel or body.channel_id is not None,
         )
+        from cls_platform.tickets.advanced import save_panel_advanced
+
+        await save_panel_advanced(guild_id=guild_id, panel_id=panel_id, panel_type=body.panel_type, options=body.options, rules=body.rules)
     except TicketError as exc:
         raise HTTPException(status_code=404, detail="Panel not found") from exc
-    return _public_panel(await load_panel(panel_id))
+    return await _shown_panel(guild_id, panel_id)
 
 
 @router.post("/{guild_id}/tickets/v2/panels/{panel_id}/duplicate")
@@ -475,6 +531,11 @@ class ActionBody(BaseModel):
     reason: str = ""
     category_id: str | None = None
     user_id: str | None = None
+    priority: str | None = None
+    tag_ids: list[str] | None = None
+    note: str | None = None
+    note_id: str | None = None
+    reply_id: str | None = None
 
 
 @router.post("/{guild_id}/tickets/v2/{ticket_id}/action")
@@ -495,11 +556,101 @@ async def tickets_action(guild_id: int, ticket_id: str, body: ActionBody, reques
             reason=body.reason,
             category_id=body.category_id,
             user_id=int(body.user_id) if body.user_id and str(body.user_id).isdigit() else None,
+            priority=body.priority,
+            tag_ids=body.tag_ids,
+            note=body.note,
+            note_id=body.note_id,
+            reply_id=body.reply_id,
         )
     except TicketError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_ticket_detail(exc)) from exc
     except DeliveryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class TagBody(BaseModel):
+    name: str
+    position: int | None = None
+
+
+class ReplyBody(BaseModel):
+    name: str
+    content: str
+
+
+@router.get("/{guild_id}/tickets/v2/tags")
+async def tickets_tags(guild_id: int):
+    from cls_platform.tickets.advanced import list_tags
+
+    return {"tags": await list_tags(guild_id)}
+
+
+@router.post("/{guild_id}/tickets/v2/tags")
+async def tickets_tag_create(guild_id: int, body: TagBody):
+    from cls_platform.tickets.advanced import save_tag
+
+    try:
+        return await save_tag(guild_id=guild_id, tag_id=None, name=body.name, position=body.position)
+    except TicketError as exc:
+        raise HTTPException(status_code=422, detail=_ticket_detail(exc)) from exc
+
+
+@router.patch("/{guild_id}/tickets/v2/tags/{tag_id}")
+async def tickets_tag_update(guild_id: int, tag_id: str, body: TagBody):
+    from cls_platform.tickets.advanced import save_tag
+
+    try:
+        return await save_tag(guild_id=guild_id, tag_id=tag_id, name=body.name, position=body.position)
+    except TicketError as exc:
+        raise HTTPException(status_code=422, detail=_ticket_detail(exc)) from exc
+
+
+@router.delete("/{guild_id}/tickets/v2/tags/{tag_id}")
+async def tickets_tag_delete(guild_id: int, tag_id: str):
+    from cls_platform.tickets.advanced import archive_tag
+
+    try:
+        return await archive_tag(guild_id=guild_id, tag_id=tag_id)
+    except TicketError as exc:
+        raise HTTPException(status_code=404, detail="That tag is no longer available.") from exc
+
+
+@router.get("/{guild_id}/tickets/v2/metrics")
+async def tickets_metrics(guild_id: int, days: int = 7):
+    from datetime import datetime, timezone
+
+    from cls_platform.tickets.advanced import metrics
+
+    window = 30 if days >= 30 else 7
+    return await metrics(guild_id, datetime.now(timezone.utc), window)
+
+
+@router.get("/{guild_id}/tickets/v2/replies")
+async def tickets_replies(guild_id: int):
+    from cls_platform.tickets.advanced import list_replies
+
+    return {"replies": await list_replies(guild_id)}
+
+
+@router.post("/{guild_id}/tickets/v2/replies")
+async def tickets_reply_create(guild_id: int, body: ReplyBody):
+    from cls_platform.tickets.advanced import save_reply
+
+    try:
+        return await save_reply(guild_id=guild_id, reply_id=None, name=body.name, content=body.content)
+    except TicketError as exc:
+        raise HTTPException(status_code=422, detail=_ticket_detail(exc)) from exc
+
+
+@router.delete("/{guild_id}/tickets/v2/replies/{reply_id}")
+async def tickets_reply_delete(guild_id: int, reply_id: str):
+    from cls_platform.tickets.advanced import delete_reply
+
+    try:
+        await delete_reply(guild_id=guild_id, reply_id=reply_id)
+    except TicketError as exc:
+        raise HTTPException(status_code=404, detail="That saved reply is no longer available.") from exc
+    return {"ok": True}
 
 
 @router.get("/{guild_id}/tickets/v2/{ticket_id}")

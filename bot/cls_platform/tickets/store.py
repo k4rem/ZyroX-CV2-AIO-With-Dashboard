@@ -26,6 +26,14 @@ class TicketCategory(Base):
     ping_staff: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     required_role_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False, default=list)
     blocked_role_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False, default=list)
+    close_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="direct", server_default="direct")
+    close_timeout_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hours_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="always", server_default="always")
+    hours_timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC", server_default="UTC")
+    hours_days: Mapped[int] = mapped_column(Integer, nullable=False, default=127, server_default="127")
+    hours_start: Mapped[str] = mapped_column(String(5), nullable=False, default="09:00", server_default="09:00")
+    hours_end: Mapped[str] = mapped_column(String(5), nullable=False, default="17:00", server_default="17:00")
+    hours_outside: Mapped[str] = mapped_column(String(16), nullable=False, default="allow", server_default="allow")
 
 
 class TicketPanel(Base):
@@ -47,6 +55,7 @@ class TicketPanel(Base):
     button_emoji: Mapped[str] = mapped_column(String(80), nullable=False, default="")
     button_style: Mapped[str] = mapped_column(String(16), nullable=False, default="primary")
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    panel_type: Mapped[str] = mapped_column(String(16), nullable=False, default="button", server_default="button")
 
 
 class TicketQuestion(Base):
@@ -85,6 +94,73 @@ class Ticket(Base):
     degraded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     opener_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
     opener_avatar: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    priority: Mapped[str] = mapped_column(String(16), nullable=False, default="normal", server_default="normal")
+    close_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TicketTag(Base):
+    __tablename__ = "ticket_tags_v2"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    name: Mapped[str] = mapped_column(String(40), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class TicketTagLink(Base):
+    __tablename__ = "ticket_tag_links_v2"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tickets_v2.id"))
+    tag_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("ticket_tags_v2.id", ondelete="SET NULL"), nullable=True)
+    name: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class TicketNote(Base):
+    __tablename__ = "ticket_notes_v2"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tickets_v2.id"))
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    author_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TicketPanelOption(Base):
+    __tablename__ = "ticket_panel_options_v2"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    panel_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("ticket_panels_v2.id"))
+    label: Mapped[str] = mapped_column(String(80), nullable=False)
+    description: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    emoji: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    category_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    questions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+
+
+class TicketRoutingRule(Base):
+    __tablename__ = "ticket_routing_rules_v2"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    panel_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("ticket_panels_v2.id"))
+    question_label: Mapped[str] = mapped_column(String(80), nullable=False)
+    operator: Mapped[str] = mapped_column(String(16), nullable=False, default="equals")
+    value: Mapped[str] = mapped_column(String(80), nullable=False)
+    category_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class TicketReply(Base):
+    __tablename__ = "ticket_replies_v2"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class TicketEvent(Base):
@@ -233,6 +309,7 @@ async def load_panel(panel_id: str) -> dict | None:
             "publish_status": panel.publish_status,
             "button_emoji": panel.button_emoji or "",
             "button_style": panel.button_style or "primary",
+            "panel_type": panel.panel_type or "button",
             "published_at": panel.published_at.isoformat() if panel.published_at else None,
             "updated_at": panel.updated_at.isoformat() if panel.updated_at else None,
             "preview": panel_preview(panel.title, panel.message, panel.button_label, str(panel.id)),
@@ -264,7 +341,27 @@ def _category_dict(row: TicketCategory) -> dict:
         "ping_staff": row.ping_staff,
         "required_role_ids": [snowflake_to_str(item) for item in (row.required_role_ids or [])],
         "blocked_role_ids": [snowflake_to_str(item) for item in (row.blocked_role_ids or [])],
+        "close_mode": row.close_mode or "direct",
+        "close_timeout_minutes": row.close_timeout_minutes,
+        "hours_mode": row.hours_mode or "always",
+        "hours_timezone": row.hours_timezone or "UTC",
+        "hours_days": row.hours_days if row.hours_days is not None else 127,
+        "hours_start": row.hours_start or "09:00",
+        "hours_end": row.hours_end or "17:00",
+        "hours_outside": row.hours_outside or "allow",
     }
+
+
+def _category_status(row: TicketCategory) -> dict:
+    item = _category_dict(row)
+    from cls_platform.tickets.advanced import support_status
+
+    state = support_status(item)
+    item["support_open"] = state["open"]
+    item["support_next"] = state["next_open"]
+    item["support_notice"] = state["notice"]
+    item["support_invalid_timezone"] = state["invalid_timezone"]
+    return item
 
 
 async def create_panel(*, guild_id: int, category_id: str, channel_id: int | None, title: str, message: str, button_label: str, questions: list[dict], required_role_ids: list[int] | None = None, blocked_role_ids: list[int] | None = None, payload: dict | None = None, button_emoji: str = "", button_style: str = "primary") -> dict:
@@ -562,7 +659,7 @@ async def workspace(guild_id: int) -> dict:
             "cooldown_seconds": settings.cooldown_seconds if settings else 60,
             "max_open": settings.max_open if settings else 1,
             "blacklist": [snowflake_to_str(user_id) for user_id in blocked],
-            "categories": [_category_dict(row) for row in categories],
+            "categories": [_category_status(row) for row in categories],
             "panels": [
                 {
                     "id": str(row.id),
@@ -645,6 +742,13 @@ async def transcript(guild_id: int, ticket_id: str) -> dict:
                 for row in messages
             ],
             "html": html_row.html if html_row else None,
+            "priority": ticket.priority or "normal",
+            "tags": [
+                link.name
+                for link in (
+                    await session.execute(select(TicketTagLink).where(TicketTagLink.ticket_id == ticket.id))
+                ).scalars().all()
+            ],
         }
 
 
@@ -826,6 +930,10 @@ async def load_ticket(guild_id: int, ticket_id: str) -> dict | None:
             "degraded": ticket.degraded,
             "generation": ticket.activity_generation,
             "opened_at": ticket.opened_at,
+            "priority": ticket.priority or "normal",
+            "close_mode": category.close_mode if category else "direct",
+            "close_timeout_minutes": category.close_timeout_minutes if category else None,
+            "opener_name": ticket.opener_name or "",
         }
 
 
@@ -921,7 +1029,7 @@ def _questions(panel_id, questions: list[dict]) -> list[TicketQuestion]:
     return rows
 
 
-async def update_category(*, guild_id: int, category_id: str, name: str | None = None, discord_category_id: int | None = None, staff_role_ids: list[int] | None = None, name_format: str | None = None, ping_staff: bool | None = None, required_role_ids: list[int] | None = None, blocked_role_ids: list[int] | None = None, discord_category_set: bool = False) -> dict:
+async def update_category(*, guild_id: int, category_id: str, name: str | None = None, discord_category_id: int | None = None, staff_role_ids: list[int] | None = None, name_format: str | None = None, ping_staff: bool | None = None, required_role_ids: list[int] | None = None, blocked_role_ids: list[int] | None = None, discord_category_set: bool = False, close_mode: str | None = None, close_timeout_minutes: int | None = None, close_timeout_set: bool = False, hours: dict | None = None) -> dict:
     async with session_scope() as session:
         row = await session.get(TicketCategory, uuid.UUID(category_id))
         if row is None or row.guild_id != guild_id:
@@ -940,6 +1048,31 @@ async def update_category(*, guild_id: int, category_id: str, name: str | None =
             row.required_role_ids = required_role_ids
         if blocked_role_ids is not None:
             row.blocked_role_ids = blocked_role_ids
+        if close_mode in {"direct", "request"}:
+            row.close_mode = close_mode
+        if close_timeout_set:
+            row.close_timeout_minutes = close_timeout_minutes
+        if hours:
+            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+            mode = hours.get("hours_mode")
+            if mode in {"always", "scheduled"}:
+                row.hours_mode = mode
+            zone_name = hours.get("hours_timezone")
+            if zone_name:
+                try:
+                    ZoneInfo(str(zone_name))
+                except ZoneInfoNotFoundError as exc:
+                    raise TicketError("timezone") from exc
+                row.hours_timezone = str(zone_name)[:64]
+            if hours.get("hours_days") is not None:
+                row.hours_days = int(hours["hours_days"]) & 127
+            if hours.get("hours_start"):
+                row.hours_start = str(hours["hours_start"])[:5]
+            if hours.get("hours_end"):
+                row.hours_end = str(hours["hours_end"])[:5]
+            if hours.get("hours_outside") in {"allow", "block"}:
+                row.hours_outside = hours["hours_outside"]
         return _category_dict(row)
 
 
@@ -1015,7 +1148,7 @@ async def delete_panel(*, guild_id: int, panel_id: str) -> dict:
         return {"channel_id": channel_id, "message_id": message_id}
 
 
-def _queue_row(ticket: Ticket, category: TicketCategory | None) -> dict:
+def _queue_row(ticket: Ticket, category: TicketCategory | None, tags: list[dict] | None = None) -> dict:
     status = "claimed" if ticket.status == "open" and ticket.assignee_id else ticket.status
     return {
         "id": str(ticket.id),
@@ -1033,6 +1166,9 @@ def _queue_row(ticket: Ticket, category: TicketCategory | None) -> dict:
         "closed_at": ticket.closed_at.isoformat() if ticket.closed_at else None,
         "last_activity_at": (ticket.last_activity_at or ticket.opened_at).isoformat() if (ticket.last_activity_at or ticket.opened_at) else None,
         "degraded": bool(ticket.degraded),
+        "priority": ticket.priority or "normal",
+        "tags": tags or [],
+        "close_requested": bool(ticket.close_requested_at),
     }
 
 
@@ -1045,7 +1181,16 @@ async def list_queue(guild_id: int) -> list[dict]:
             row.id: row
             for row in (await session.execute(select(TicketCategory).where(TicketCategory.guild_id == guild_id))).scalars().all()
         }
-        return [_queue_row(ticket, categories.get(ticket.category_id)) for ticket in tickets]
+        links = (
+            await session.execute(select(TicketTagLink).where(TicketTagLink.ticket_id.in_([ticket.id for ticket in tickets] or [uuid.uuid4()])))
+        ).scalars().all()
+        grouped: dict[uuid.UUID, list[dict]] = {}
+        for link in links:
+            grouped.setdefault(link.ticket_id, []).append({"id": str(link.tag_id) if link.tag_id else None, "name": link.name})
+        rows = [_queue_row(ticket, categories.get(ticket.category_id), grouped.get(ticket.id, [])) for ticket in tickets]
+        rank = {"urgent": 0, "high": 1, "normal": 2, "low": 3}
+        rows.sort(key=lambda row: (0 if row["raw_status"] == "open" else 1, rank.get(row["priority"], 2), -row["number"]))
+        return rows
 
 
 async def ticket_detail(guild_id: int, ticket_id: str) -> dict:
@@ -1065,8 +1210,12 @@ async def ticket_detail(guild_id: int, ticket_id: str) -> dict:
         ).scalars().all()
         opened = next((event for event in events if event.kind == "opened"), None)
         answers = opened.payload if opened and isinstance(opened.payload, dict) else {}
+        links = (await session.execute(select(TicketTagLink).where(TicketTagLink.ticket_id == ticket.id))).scalars().all()
+        notes = (
+            await session.execute(select(TicketNote).where(TicketNote.ticket_id == ticket.id, TicketNote.guild_id == guild_id).order_by(TicketNote.created_at))
+        ).scalars().all()
         return {
-            **_queue_row(ticket, category),
+            **_queue_row(ticket, category, [{"id": str(link.tag_id) if link.tag_id else None, "name": link.name} for link in links]),
             "channel_id": _sid(ticket.channel_id),
             "answers": {str(key): str(value) for key, value in answers.items()},
             "participants": [snowflake_to_str(row.user_id) for row in people],
@@ -1093,6 +1242,15 @@ async def ticket_detail(guild_id: int, ticket_id: str) -> dict:
                     "created_at": row.created_at.isoformat() if row.created_at else None,
                 }
                 for row in messages
+            ],
+            "notes": [
+                {
+                    "id": str(row.id),
+                    "author_id": snowflake_to_str(row.author_id),
+                    "body": row.body,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                }
+                for row in notes
             ],
         }
 

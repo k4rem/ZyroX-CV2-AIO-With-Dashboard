@@ -23,6 +23,14 @@ test("status and question labels stay human", () => {
   assert.equal(questionKindLabel("short"), "Short");
 });
 
+test("priority and tag filters keep the existing queue filters", () => {
+  const tagged = rows.map((row, index) => ({ ...row, priority: index === 0 ? "high" : "normal", tags: index === 0 ? [{ id: "1", name: "Billing" }] : [] }));
+  assert.equal(filterTickets(tagged, { status: "all", categoryId: "all", assignee: "all", query: "", priority: "high" }).length, 1);
+  assert.equal(filterTickets(tagged, { status: "claimed", categoryId: "bill", assignee: "all", query: "", tag: "Billing" })[0].id, "a");
+  assert.equal(eventLabel({ kind: "priority_changed", payload: { label: "Normal → High" } }), "Priority changed: Normal → High");
+  assert.equal(eventLabel({ kind: "routing_fallback" }), "Routing fallback");
+});
+
 test("timeline reads actors and transfer names", () => {
   assert.equal(eventLabel({ kind: "claimed", actor_name: "Karim" }), "Claimed by Karim");
   assert.equal(eventLabel({ kind: "transferred", payload: { from: "Billing", to: "Technical" } }), "Transferred Billing → Technical");

@@ -35,4 +35,8 @@ def parse_custom_id(custom_id: str) -> tuple[str, str, str]:
         return "open", "open", rest.split(":", 1)[1]
     if rest.startswith("modal:"):
         return "modal", "modal", rest.split(":", 1)[1]
+    if rest.startswith("pick:"):
+        return "pick", "pick", rest.split(":", 1)[1]
+    if rest.startswith("omodal:"):
+        return "omodal", "omodal", rest.split(":", 1)[1]
     return "open", "open", rest

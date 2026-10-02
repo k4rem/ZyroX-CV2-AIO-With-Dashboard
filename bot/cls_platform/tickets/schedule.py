@@ -34,6 +34,20 @@ async def arm_inactivity(*, guild_id: int, ticket_id: str, generation: int, warn
     )
 
 
+async def arm_close_request(*, guild_id: int, ticket_id: str, minutes: int) -> None:
+    key = f"ticket-close-request:{ticket_id}"
+    await cancel_pending(key)
+    if minutes <= 0:
+        return
+    now = datetime.now(timezone.utc)
+    await enqueue_job(
+        "ticket_close_request",
+        now + timedelta(minutes=minutes),
+        {"guild_id": guild_id, "ticket_id": ticket_id},
+        dedupe_key=key,
+    )
+
+
 def payload_generation(payload: dict | None) -> int:
     value = (payload or {}).get("generation")
     if value is None:

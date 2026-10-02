@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { ageLabel, filterTickets, ticketStatusLabel, type TicketRow } from "@/lib/ticketsModel";
+import { ageLabel, filterTickets, priorityLabel, ticketStatusLabel, type TicketRow } from "@/lib/ticketsModel";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { TicketsNav } from "@/components/dashboard/tickets/tickets-nav";
 import { TicketDetail } from "@/components/dashboard/tickets/ticket-detail";
@@ -24,6 +24,10 @@ export function QueueView({
   const [categoryId, setCategoryId] = useState("all");
   const [assignee, setAssignee] = useState("all");
   const [query, setQuery] = useState("");
+  const [priority, setPriority] = useState("all");
+  const [tag, setTag] = useState("all");
+  const [metrics, setMetrics] = useState<Record<string, any> | null>(null);
+  const [range, setRange] = useState(7);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, any> | null>(null);
   const [narrow, setNarrow] = useState(false);
@@ -37,6 +41,10 @@ export function QueueView({
     const timer = window.setInterval(() => void refresh().catch(() => undefined), 12000);
     return () => window.clearInterval(timer);
   }, [guildId]);
+
+  useEffect(() => {
+    api.getTicketMetrics(guildId, range).then(setMetrics).catch(() => setMetrics(null));
+  }, [guildId, range, rows]);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 1023px)");
@@ -55,17 +63,27 @@ export function QueueView({
   }, [guildId, selectedId, rows]);
 
   const assignees = useMemo(() => Array.from(new Set(rows.map((row) => row.assignee_name).filter(Boolean))) as string[], [rows]);
-  const visible = filterTickets(rows, { status, categoryId, assignee, query });
+  const tags = useMemo(() => Array.from(new Set(rows.flatMap((row) => (row.tags || []).map((item) => item.name)))), [rows]);
+  const visible = filterTickets(rows, { status, categoryId, assignee, query, priority, tag });
 
   return (
     <div>
       <TicketsNav guildId={guildId} />
       <PageHeader title="Queue" description="Open tickets and the people waiting on them." />
+      {metrics && (
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-2 border border-line-subtle px-3 py-2 text-small">
+          <p className="text-fg-2">{metrics.open} open · {metrics.unassigned} unassigned · {metrics.opened_today} opened today · {metrics.closed_today} closed today</p>
+          <p className="text-caption text-fg-3">First claim {metrics.median_first_claim_minutes == null ? "—" : `${metrics.median_first_claim_minutes}m median`} · Resolution {metrics.average_resolution_minutes == null ? "—" : `${metrics.average_resolution_minutes}m average`}</p>
+          <Select value={String(range)} onValueChange={(value) => setRange(Number(value))} options={[{ value: "7", label: "7 days" }, { value: "30", label: "30 days" }]} />
+        </div>
+      )}
       <div className="mb-3 grid gap-2 sm:grid-cols-4">
         <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search number, opener, or reason" aria-label="Search tickets" />
         <Select value={status} onValueChange={setStatus} options={[{ value: "all", label: "Any status" }, { value: "open", label: "Open" }, { value: "claimed", label: "Claimed" }, { value: "closed", label: "Closed" }]} />
         <Select value={categoryId} onValueChange={setCategoryId} options={[{ value: "all", label: "Any team" }, ...categories.map((item) => ({ value: item.id, label: item.name }))]} />
         <Select value={assignee} onValueChange={setAssignee} options={[{ value: "all", label: "Any assignee" }, { value: "unassigned", label: "Unassigned" }, ...assignees.map((name) => ({ value: name, label: name }))]} />
+        <Select value={priority} onValueChange={setPriority} options={[{ value: "all", label: "Any priority" }, { value: "urgent", label: "Urgent" }, { value: "high", label: "High" }, { value: "normal", label: "Normal" }, { value: "low", label: "Low" }]} />
+        <Select value={tag} onValueChange={setTag} options={[{ value: "all", label: "Any tag" }, ...tags.map((name) => ({ value: name, label: name }))]} />
       </div>
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0">
@@ -83,7 +101,7 @@ export function QueueView({
                         <span className="truncate">{ticket.opener_name || "Member"}</span>
                         <span className="text-fg-3">{ticketStatusLabel(ticket.status)}</span>
                       </span>
-                      <span className="block truncate text-caption text-fg-3">{ticket.category_name || "Team"} · {ticket.assignee_name || "Unassigned"}</span>
+                      <span className="block truncate text-caption text-fg-3">{priorityLabel(ticket.priority)} · {ticket.category_name || "Team"} · {ticket.assignee_name || "Unassigned"}{(ticket.tags || []).length ? ` · ${(ticket.tags || []).map((item) => item.name).join(", ")}` : ""}</span>
                     </span>
                     <span className="text-end text-caption text-fg-3">
                       <span className="block">{ageLabel(ticket.opened_at)}</span>

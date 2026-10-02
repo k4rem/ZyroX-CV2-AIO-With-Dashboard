@@ -10,10 +10,27 @@ from discord.ext import commands
 
 from cls_platform.logging.store import record_event
 from cls_platform.messages.deliver import DeliveryError
-from cls_platform.tickets.deliver import control_view, discord_overwrites, opening_embed, publish_panel
+from cls_platform.tickets.advanced import (
+    add_note,
+    category_public,
+    delete_note,
+    known_categories,
+    list_replies,
+    list_tags,
+    load_option,
+    mark_close_request,
+    panel_advanced,
+    reject_close_request,
+    render_reply,
+    route_category,
+    set_priority,
+    set_ticket_tags,
+    support_status,
+)
+from cls_platform.tickets.deliver import close_request_view, control_view, discord_overwrites, opening_embed, publish_panel
 from cls_platform.tickets.html_transcript import render_html
 from cls_platform.tickets.naming import parse_custom_id
-from cls_platform.tickets.schedule import arm_inactivity, inactivity_still_due, payload_generation
+from cls_platform.tickets.schedule import arm_close_request, arm_inactivity, inactivity_still_due, payload_generation
 from cls_platform.tickets.store import (
     TicketError,
     add_participant,
@@ -52,6 +69,12 @@ _REFUSAL = {
     "already_claimed": "Another staff member already claimed this ticket.",
     "is_opener": "The ticket opener stays in the channel.",
     "missing": "This ticket is no longer available.",
+    "priority": "Choose Low, Normal, High, or Urgent.",
+    "tag_missing": "That tag is no longer available.",
+    "note_empty": "Write a note before saving.",
+    "note_forbidden": "You can only delete your own note.",
+    "reply": "A saved reply needs a name and some text.",
+    "timezone": "That timezone is not recognized.",
 }
 
 
@@ -67,6 +90,7 @@ class TicketsV2(commands.Cog):
         from cls_platform.services.scheduler import register_job_handler
 
         register_job_handler("ticket_inactivity", self.handle_inactivity)
+        register_job_handler("ticket_close_request", self.handle_close_request)
 
     async def _log(self, guild_id: int, event_type: str, actor_id: int | None, channel_id: int | None, summary: str):
         try:
@@ -75,7 +99,7 @@ class TicketsV2(commands.Cog):
                 category="bot_actions",
                 event_type=event_type,
                 actor_id=actor_id,
-                actor_confidence="confirmed" if actor_id else "unknown",
+                actor_confidence="certain" if actor_id else "unknown",
                 channel_id=channel_id,
                 metadata={"summary": summary},
             )
@@ -116,6 +140,28 @@ class TicketsV2(commands.Cog):
             return
         await self._finish_close(guild, ticket, actor_id=None, reason="No recent activity", auto=True)
 
+    async def handle_close_request(self, job):
+        payload = job.payload or {}
+        guild_id = int(payload.get("guild_id") or 0)
+        ticket_id = str(payload.get("ticket_id") or "")
+        ticket = await load_ticket(guild_id, ticket_id)
+        if ticket is None or ticket["status"] != "open" or not ticket.get("close_timeout_minutes"):
+            return
+        from cls_platform.tickets.advanced import close_request_expired
+        from cls_platform.tickets.store import Ticket
+        from cls_platform.database import session_scope
+        import uuid
+
+        async with session_scope() as session:
+            row = await session.get(Ticket, uuid.UUID(ticket_id))
+            requested = row.close_requested_at if row is not None else None
+        if not close_request_expired(requested, ticket.get("close_timeout_minutes"), datetime.now(timezone.utc)):
+            return
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            return
+        await self._finish_close(guild, ticket, actor_id=None, reason="Close request timed out", auto=True)
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.guild is None or not message.channel:
@@ -147,12 +193,47 @@ class TicketsV2(commands.Cog):
         kind, action, ident = parse_custom_id(custom_id)
         if not kind or interaction.guild is None or not isinstance(interaction.user, discord.Member):
             return
-        if kind in {"open", "modal"}:
+        if kind in {"open", "modal", "pick", "omodal"}:
             await self._open(interaction, kind, ident)
             return
         await self._control(interaction, action, ident)
 
     async def _open(self, interaction: discord.Interaction, kind: str, panel_id: str):
+        if kind == "omodal":
+            option = await load_option(panel_id)
+            if option is None:
+                await interaction.response.send_message("This option is no longer available.", ephemeral=True)
+                return
+            panel = await load_panel(option["panel_id"])
+            if panel is None:
+                await interaction.response.send_message("This panel is not available.", ephemeral=True)
+                return
+            answers = {}
+            for row in (interaction.data or {}).get("components") or []:
+                for component in row.get("components") or []:
+                    answers[str(component.get("custom_id") or "Answer")] = str(component.get("value") or "")
+            await self._spawn(interaction, panel, answers, option.get("category_id"))
+            return
+        if kind == "pick":
+            panel = await load_panel(panel_id)
+            if panel is None or panel["guild_id"] != interaction.guild.id:
+                await interaction.response.send_message("This panel is not available.", ephemeral=True)
+                return
+            chosen = str(((interaction.data or {}).get("values") or [""])[0])
+            option = await load_option(chosen)
+            if option is None or option["panel_id"] != panel["id"]:
+                await interaction.response.send_message("That option is no longer on this panel.", ephemeral=True)
+                return
+            questions = option.get("questions") or []
+            if questions:
+                modal = discord.ui.Modal(title=(option["label"] or "Ticket")[:45], custom_id=f"cls-ticket:omodal:{option['id']}")
+                for question in questions[:5]:
+                    style = discord.TextStyle.paragraph if question.get("kind") == "paragraph" else discord.TextStyle.short
+                    modal.add_item(discord.ui.TextInput(label=str(question.get("label") or "Question")[:45], custom_id=str(question.get("label") or "Question")[:45], style=style, required=bool(question.get("required", True)), placeholder=question.get("placeholder") or None))
+                await interaction.response.send_modal(modal)
+                return
+            await self._spawn(interaction, panel, {}, option.get("category_id"))
+            return
         panel = await load_panel(panel_id)
         if panel is None or panel["guild_id"] != interaction.guild.id:
             await interaction.response.send_message("This panel is not available.", ephemeral=True)
@@ -191,14 +272,37 @@ class TicketsV2(commands.Cog):
             for component in row.get("components") or []:
                 key = labels.get(str(component.get("custom_id") or ""), str(component.get("custom_id") or "Answer"))
                 answers[key] = str(component.get("value") or "")
+        await self._spawn(interaction, panel, answers, None)
+        return
+
+    async def _spawn(self, interaction: discord.Interaction, panel: dict, answers: dict, option_category_id: str | None):
         if interaction.response.is_done():
             await interaction.followup.send("Opening your ticket…", ephemeral=True)
         else:
             await interaction.response.defer(ephemeral=True)
+        extra = await panel_advanced(panel["id"])
+        known = await known_categories(interaction.guild.id)
+        category_id, route_status = route_category(
+            rules=extra["rules"],
+            answers=answers,
+            default_category_id=panel["category_id"],
+            known_category_ids=known,
+        )
+        if route_status == "default" and option_category_id:
+            if str(option_category_id) in known:
+                category_id = str(option_category_id)
+            else:
+                route_status = "fallback"
+        hours = await category_public(interaction.guild.id, category_id)
+        state = support_status(hours or {})
+        if hours and not state["open"] and hours.get("hours_outside") == "block":
+            await interaction.followup.send(state["notice"] or "Support is currently offline.", ephemeral=True)
+            return
+        notice = state.get("notice") if hours and not state["open"] else None
         try:
             opened = await open_ticket(
                 guild_id=interaction.guild.id,
-                category_id=panel["category_id"],
+                category_id=category_id,
                 opener_id=interaction.user.id,
                 opener_name=interaction.user.display_name,
                 opener_avatar=str(interaction.user.display_avatar.url) if interaction.user.display_avatar else "",
@@ -225,10 +329,11 @@ class TicketsV2(commands.Cog):
                 reason=f"CLS ticket {opened['number']}",
             )
             mentions = " ".join(role.mention for role in staff_roles) if opened.get("ping_staff") and staff_roles else ""
+            tags = await list_tags(interaction.guild.id)
             control = await channel.send(
                 content=mentions or None,
                 embed=opening_embed(number=opened["number"], opener=interaction.user, category=opened["category_name"], answers=answers),
-                view=control_view(opened["id"], closed=False),
+                view=control_view(opened["id"], closed=False, close_mode=(hours or {}).get("close_mode") or "direct", tags=tags),
                 allowed_mentions=discord.AllowedMentions(everyone=False, users=False, roles=bool(mentions)),
             )
             await bind_channel(guild_id=interaction.guild.id, ticket_id=opened["id"], channel_id=channel.id, control_message_id=control.id)
@@ -242,6 +347,10 @@ class TicketsV2(commands.Cog):
             await interaction.followup.send("The ticket channel could not be created.", ephemeral=True)
             return
         await self._log(interaction.guild.id, "ticket_opened", interaction.user.id, channel.id, f"Ticket {opened['number']} opened")
+        if route_status == "fallback":
+            await record_ticket_event(guild_id=interaction.guild.id, ticket_id=opened["id"], kind="routing_fallback", actor_id=None, payload={"category_id": panel["category_id"]})
+        if notice:
+            await channel.send(notice)
         await self._arm(interaction.guild.id, opened["id"])
         await interaction.followup.send(f"Your ticket is open: {channel.mention}", ephemeral=True)
 
@@ -253,9 +362,62 @@ class TicketsV2(commands.Cog):
         if action in {"add-pick", "remove-pick", "transfer-pick", "delete-yes"}:
             await self._follow(interaction, ticket, action)
             return
+        if action in {"confirm-close", "keep"}:
+            if interaction.user.id != int(ticket["opener_id"]):
+                await interaction.response.send_message("Only the person who opened this ticket can answer that.", ephemeral=True)
+                return
+            if action == "keep":
+                await reject_close_request(guild_id=interaction.guild.id, ticket_id=ticket_id, actor_id=interaction.user.id)
+                await interaction.response.send_message("This ticket stays open.", ephemeral=True)
+                return
+            await interaction.response.defer(ephemeral=True)
+            await self._finish_close(interaction.guild, ticket, interaction.user.id, "Member confirmed close", auto=False)
+            await interaction.followup.send("Ticket closed.", ephemeral=True)
+            return
         opener_close = action in {"close", "close-reason"} and interaction.user.id == ticket["opener_id"]
         if not self._staff(interaction.user, ticket["staff_role_ids"]) and not opener_close:
             await interaction.response.send_message("Only the support team can do that.", ephemeral=True)
+            return
+        if action == "ask-close":
+            marked = await mark_close_request(guild_id=interaction.guild.id, ticket_id=ticket_id, actor_id=interaction.user.id, message="")
+            channel = interaction.guild.get_channel(int(ticket["channel_id"])) if ticket.get("channel_id") else None
+            if channel is not None:
+                await channel.send("Can this ticket be closed?", view=close_request_view(ticket_id))
+            if marked.get("timeout_minutes"):
+                await arm_close_request(guild_id=interaction.guild.id, ticket_id=ticket_id, minutes=int(marked["timeout_minutes"]))
+            await self._log(interaction.guild.id, "ticket_close_requested", interaction.user.id, ticket.get("channel_id"), f"Ticket {ticket['number']} close requested")
+            await interaction.response.send_message("The member can confirm or keep the ticket open.", ephemeral=True)
+            return
+        if action == "priority":
+            chosen = str(((interaction.data or {}).get("values") or ["normal"])[0])
+            try:
+                changed = await set_priority(guild_id=interaction.guild.id, ticket_id=ticket_id, priority=chosen, actor_id=interaction.user.id)
+            except TicketError as exc:
+                await interaction.response.send_message(_refusal(exc), ephemeral=True)
+                return
+            await self._log(interaction.guild.id, "ticket_priority", interaction.user.id, ticket.get("channel_id"), f"Ticket {ticket['number']} priority {changed['from']} → {changed['to']}")
+            await self._refresh_controls(interaction.guild, ticket_id)
+            await interaction.response.send_message(f"Priority changed: {changed['from']} → {changed['to']}", ephemeral=True)
+            return
+        if action == "tag":
+            chosen = str(((interaction.data or {}).get("values") or [""])[0])
+            from cls_platform.tickets.advanced import tags_for
+            import uuid as _uuid
+
+            current = (await tags_for(interaction.guild.id, [_uuid.UUID(ticket_id)])).get(_uuid.UUID(ticket_id), [])
+            ids = [item["id"] for item in current if item.get("id")]
+            if chosen in ids:
+                ids = [item for item in ids if item != chosen]
+            else:
+                ids.append(chosen)
+            try:
+                saved = await set_ticket_tags(guild_id=interaction.guild.id, ticket_id=ticket_id, tag_ids=ids, actor_id=interaction.user.id)
+            except TicketError as exc:
+                await interaction.response.send_message(_refusal(exc), ephemeral=True)
+                return
+            names = ", ".join(item["name"] for item in saved) or "none"
+            await self._refresh_controls(interaction.guild, ticket_id)
+            await interaction.response.send_message(f"Tags: {names}", ephemeral=True)
             return
         if action == "close":
             modal = discord.ui.Modal(title="Close ticket", custom_id=f"cls-t:close-reason:{ticket_id}")
@@ -414,7 +576,8 @@ class TicketsV2(commands.Cog):
         except discord.HTTPException:
             return
         closed = ticket["status"] != "open"
-        await message.edit(view=control_view(ticket_id, closed=closed))
+        tags = await list_tags(guild.id)
+        await message.edit(view=control_view(ticket_id, closed=closed, close_mode=ticket.get("close_mode") or "direct", tags=tags))
 
     async def _write_transcript(self, guild, ticket: dict, actor_id: int | None, *, deliver: bool):
         stored = await transcript(guild.id, ticket["id"])
@@ -481,7 +644,7 @@ async def setup(bot):
     await bot.add_cog(TicketsV2(bot))
 
 
-async def apply_dashboard_action(bot, *, guild_id: int, ticket_id: str, action: str, actor_id: int, reason: str | None = None, category_id: str | None = None, user_id: int | None = None) -> dict:
+async def apply_dashboard_action(bot, *, guild_id: int, ticket_id: str, action: str, actor_id: int, reason: str | None = None, category_id: str | None = None, user_id: int | None = None, priority: str | None = None, tag_ids: list[str] | None = None, note: str | None = None, note_id: str | None = None, reply_id: str | None = None) -> dict:
     """Dashboard controls use the same claim, close, transfer, and permission paths as Discord."""
     cog = bot.get_cog("TicketsV2")
     if cog is None:
@@ -521,6 +684,37 @@ async def apply_dashboard_action(bot, *, guild_id: int, ticket_id: str, action: 
             raise TicketError("missing")
         await remove_participant(guild_id=guild_id, ticket_id=ticket_id, user_id=user_id, actor_id=actor_id)
         await cog._sync_access(guild, await load_ticket(guild_id, ticket_id))
+    elif action == "priority":
+        changed = await set_priority(guild_id=guild_id, ticket_id=ticket_id, priority=priority or "", actor_id=actor_id)
+        await cog._log(guild_id, "ticket_priority", actor_id, ticket.get("channel_id"), f"Ticket {ticket['number']} priority {changed['from']} → {changed['to']}")
+    elif action == "tags":
+        await set_ticket_tags(guild_id=guild_id, ticket_id=ticket_id, tag_ids=tag_ids or [], actor_id=actor_id)
+    elif action == "note":
+        await add_note(guild_id=guild_id, ticket_id=ticket_id, author_id=actor_id, body=note or "")
+    elif action == "note_delete":
+        if not note_id:
+            raise TicketError("missing")
+        await delete_note(guild_id=guild_id, ticket_id=ticket_id, note_id=note_id, actor_id=actor_id, allow_any=True)
+    elif action == "ask_close":
+        marked = await mark_close_request(guild_id=guild_id, ticket_id=ticket_id, actor_id=actor_id, message=reason or "")
+        channel = guild.get_channel(int(ticket["channel_id"])) if ticket.get("channel_id") else None
+        if channel is not None:
+            text = "Can this ticket be closed?"
+            if reason:
+                text = f"Can this ticket be closed?\n{reason[:300]}"
+            await channel.send(text, view=close_request_view(ticket_id))
+        if marked.get("timeout_minutes"):
+            await arm_close_request(guild_id=guild_id, ticket_id=ticket_id, minutes=int(marked["timeout_minutes"]))
+        await cog._log(guild_id, "ticket_close_requested", actor_id, ticket.get("channel_id"), f"Ticket {ticket['number']} close requested")
+    elif action == "reply":
+        replies = await list_replies(guild_id)
+        chosen = next((item for item in replies if item["id"] == reply_id), None)
+        if chosen is None:
+            raise TicketError("missing")
+        channel = guild.get_channel(int(ticket["channel_id"])) if ticket.get("channel_id") else None
+        if channel is None:
+            raise DeliveryError("The ticket channel is not available.")
+        await channel.send(render_reply(chosen["content"], number=int(ticket["number"]), opener=ticket.get("opener_name") or "member"))
     else:
         raise TicketError("missing")
     if action != "close":

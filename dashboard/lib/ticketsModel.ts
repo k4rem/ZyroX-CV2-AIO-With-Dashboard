@@ -11,6 +11,8 @@ export type TicketRow = {
   opened_at?: string | null;
   closed_at?: string | null;
   last_activity_at?: string | null;
+  priority?: string;
+  tags?: Array<{ id?: string | null; name: string }>;
 };
 
 export type TicketFilters = {
@@ -18,7 +20,16 @@ export type TicketFilters = {
   categoryId: string;
   assignee: string;
   query: string;
+  priority?: string;
+  tag?: string;
 };
+
+export function priorityLabel(priority: string | undefined): string {
+  if (priority === "low") return "Low";
+  if (priority === "high") return "High";
+  if (priority === "urgent") return "Urgent";
+  return "Normal";
+}
 
 export function ticketStatusLabel(status: string): string {
   if (status === "claimed") return "Claimed";
@@ -51,8 +62,10 @@ export function filterTickets(rows: TicketRow[], filters: TicketFilters): Ticket
     if (filters.categoryId && filters.categoryId !== "all" && row.category_id !== filters.categoryId) return false;
     if (filters.assignee === "unassigned" && (row.assignee_name || "").trim()) return false;
     if (filters.assignee && filters.assignee !== "all" && filters.assignee !== "unassigned" && (row.assignee_name || "") !== filters.assignee) return false;
+    if (filters.priority && filters.priority !== "all" && (row.priority || "normal") !== filters.priority) return false;
+    if (filters.tag && filters.tag !== "all" && !(row.tags || []).some((tag) => tag.name === filters.tag || tag.id === filters.tag)) return false;
     if (!query) return true;
-    const haystack = [row.number, row.opener_name, row.close_reason, row.category_name, row.assignee_name].join(" ").toLowerCase();
+    const haystack = [row.number, row.opener_name, row.close_reason, row.category_name, row.assignee_name, ...(row.tags || []).map((tag) => tag.name)].join(" ").toLowerCase();
     return haystack.includes(query);
   });
 }
@@ -90,6 +103,16 @@ export function eventLabel(event: { kind?: string; actor_name?: string; payload?
       return "Closed automatically";
     case "channel_failed":
       return "Channel setup failed";
+    case "priority_changed":
+      return `Priority changed: ${typeof payload.label === "string" ? payload.label : `${from || "Normal"} → ${to || "Normal"}`}`;
+    case "tags_changed":
+      return `Tags: ${Array.isArray(payload.tags) ? payload.tags.join(", ") || "none" : "updated"}`;
+    case "close_requested":
+      return "Close requested";
+    case "close_request_rejected":
+      return "Member kept the ticket open";
+    case "routing_fallback":
+      return "Routing fallback";
     default:
       return "Updated";
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -36,6 +36,24 @@ export function SettingsView({
   const [reason, setReason] = useState("");
   const [member, setMember] = useState<MemberChoice | null>(null);
   const [query, setQuery] = useState("");
+  const [tags, setTags] = useState<Array<{ id: string; name: string }>>([]);
+  const [tagName, setTagName] = useState("");
+  const [replies, setReplies] = useState<Array<{ id: string; name: string; content: string }>>([]);
+  const [replyName, setReplyName] = useState("");
+  const [replyBody, setReplyBody] = useState("");
+
+  async function loadAdvanced() {
+    const [tagBody, replyBodyResult] = await Promise.all([api.getTicketTags(guildId), api.getTicketReplies(guildId)]);
+    setTags(tagBody.tags || []);
+    setReplies(replyBodyResult.replies || []);
+  }
+
+  useEffect(() => {
+    void Promise.all([api.getTicketTags(guildId), api.getTicketReplies(guildId)]).then(([tagBody, replyBodyResult]) => {
+      setTags(tagBody.tags || []);
+      setReplies(replyBodyResult.replies || []);
+    }).catch(() => undefined);
+  }, [guildId]);
 
   async function save() {
     try {
@@ -137,6 +155,31 @@ export function SettingsView({
             ))}
           </ul>
         )}
+      </section>
+      <section className="min-w-0 space-y-3 border border-line-subtle p-3 lg:col-span-2">
+        <h2 className="text-small text-fg-1">Tags</h2>
+        <div className="flex gap-2">
+          <Input value={tagName} aria-label="Tag name" placeholder="Billing" onChange={(event) => setTagName(event.target.value)} />
+          <Button type="button" onClick={() => void api.createTicketTag(guildId, { name: tagName, position: tags.length }).then(() => { setTagName(""); return loadAdvanced(); }).catch((err) => toast.error(explain(err)))}>Add tag</Button>
+        </div>
+        {tags.map((tag, index) => (
+          <div key={tag.id} className="flex flex-wrap items-center gap-2">
+            <Input defaultValue={tag.name} aria-label={`Rename ${tag.name}`} onBlur={(event) => { if (event.target.value !== tag.name) void api.updateTicketTag(guildId, tag.id, { name: event.target.value, position: index }).then(loadAdvanced); }} />
+            <Button type="button" size="sm" variant="ghost" disabled={index === 0} onClick={() => void api.updateTicketTag(guildId, tag.id, { name: tag.name, position: index - 1 }).then(loadAdvanced)}>Up</Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => void api.deleteTicketTag(guildId, tag.id).then(loadAdvanced)}>Delete</Button>
+          </div>
+        ))}
+        <h2 className="text-small text-fg-1">Saved replies</h2>
+        <p className="text-caption text-fg-3">{"{number}"} and {"{opener}"} are filled in when the reply is sent. Choosing a reply does not send it.</p>
+        <Input value={replyName} aria-label="Reply name" placeholder="Greeting" onChange={(event) => setReplyName(event.target.value)} />
+        <Input value={replyBody} aria-label="Reply content" placeholder="Hello {opener}, this is ticket {number}." onChange={(event) => setReplyBody(event.target.value)} />
+        <Button type="button" onClick={() => void api.createTicketReply(guildId, { name: replyName, content: replyBody }).then(() => { setReplyName(""); setReplyBody(""); return loadAdvanced(); }).catch((err) => toast.error(explain(err)))}>Save reply</Button>
+        {replies.map((reply) => (
+          <div key={reply.id} className="flex items-start justify-between gap-2 border border-line-subtle px-2 py-1">
+            <p className="text-small text-fg-2"><span className="text-fg-1">{reply.name}. </span>{reply.content}</p>
+            <Button type="button" size="sm" variant="ghost" onClick={() => void api.deleteTicketReply(guildId, reply.id).then(loadAdvanced)}>Delete</Button>
+          </div>
+        ))}
       </section>
     </div>
   );
