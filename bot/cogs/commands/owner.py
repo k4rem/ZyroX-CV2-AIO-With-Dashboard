@@ -30,7 +30,6 @@ from core import Cog, zyrox, Context
 import sqlite3
 import os
 import requests
-import numpy as np
 from io import BytesIO
 from utils.config import OWNER_IDS, BOT_OWNER_IDS
 from discord.errors import Forbidden
@@ -136,7 +135,9 @@ class Owner(commands.Cog):
         self.client = client
         self.staff = set()
         self.np_cache = []
-        self.db_path = 'db/np.db'
+        from cls_platform.sqlite_paths import sqlite_path
+
+        self.db_path = str(sqlite_path("np.db"))
         self.stop_tour = False
         self.bot_owner_ids = BOT_OWNER_IDS
         self.client.loop.create_task(self.setup_database())

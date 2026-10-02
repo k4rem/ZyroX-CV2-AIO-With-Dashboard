@@ -72,6 +72,8 @@ class FastGreet(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
+        # Retired. Welcome V2 is the only join welcome. The historical database stays on disk.
+        return
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.execute("""
                 SELECT channel_id FROM greet_channels WHERE guild_id = ?

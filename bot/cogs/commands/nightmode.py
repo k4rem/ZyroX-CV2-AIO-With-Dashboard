@@ -19,12 +19,11 @@ import os
 from utils.Tools import *
 from utils.cv2 import CV2
 from discord.ui import TextDisplay, Separator, ActionRow, LayoutView, Container
+from cls_platform.config import ROOT_OWNER_ID
+from cls_platform.sqlite_paths import sqlite_path
 from utils.config import OWNER_IDS_STR
 
-# Database setup
-db_folder = "db"
-db_file = "anti.db"
-db_path = os.path.join(db_folder, db_file)
+db_path = str(sqlite_path("anti.db"))
 
 
 class Nightmode(commands.Cog):
@@ -46,14 +45,9 @@ class Nightmode(commands.Cog):
         await self.db.commit()
 
     async def is_extra_owner(self, user, guild):
-        async with self.db.execute(
-            """
-            SELECT owner_id FROM extraowners WHERE guild_id = ? AND owner_id = ?
-        """,
-            (guild.id, user.id),
-        ) as cursor:
-            extra_owner = await cursor.fetchone()
-        return extra_owner is not None
+        # anti.db extraowners is not authority. Root is.
+        del guild
+        return ROOT_OWNER_ID is not None and int(user.id) == int(ROOT_OWNER_ID)
 
     @commands.hybrid_group(
         name="nightmode",

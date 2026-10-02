@@ -115,8 +115,16 @@ class BasicView(discord.ui.View):
 class AutoRole(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.bot.loop.create_task(self.create_table())
         self.color = 0xFF0000
+
+    async def cog_check(self, ctx):
+        await ctx.send("Join roles are managed from the CLS OS dashboard, under Role Automation → Join Roles.")
+        return False
+
+    async def cog_command_error(self, ctx, error):
+        if isinstance(error, commands.CheckFailure):
+            return
+        raise error
 
     async def create_table(self):
         async with aiosqlite.connect(DATABASE_PATH) as db:

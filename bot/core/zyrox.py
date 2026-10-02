@@ -21,7 +21,6 @@ import jishaku
 import asyncio
 import typing
 from typing import List
-import aiosqlite
 from utils.config import OWNER_IDS, BotName
 from utils import getConfig, updateConfig
 from .Context import Context
@@ -109,25 +108,12 @@ class zyrox(commands.AutoShardedBot):
             return msg
 
     async def get_prefix(self, message: discord.Message):
+        # db/np.db is not an authorization source. A row there does not bypass the prefix.
         if message.guild:
-            guild_id = message.guild.id
-            async with aiosqlite.connect('db/np.db') as db:
-                async with db.execute("SELECT id FROM np WHERE id = ?", (message.author.id,)) as cursor:
-                    row = await cursor.fetchone()
-            data = await getConfig(guild_id)
+            data = await getConfig(message.guild.id)
             prefix = data["prefix"]
-            if row:
-                return commands.when_mentioned_or(prefix, '')(self, message)
-            else:
-                return commands.when_mentioned_or(prefix)(self, message)
-        else:
-            async with aiosqlite.connect('db/np.db') as db:
-                async with db.execute("SELECT id FROM np WHERE id = ?", (message.author.id,)) as cursor:
-                    row = await cursor.fetchone()
-            if row:
-                return commands.when_mentioned_or('?', '')(self, message)
-            else:
-                return commands.when_mentioned_or('')(self, message)
+            return commands.when_mentioned_or(prefix)(self, message)
+        return commands.when_mentioned_or("")(self, message)
 
     async def on_message_edit(self, before, after):
         ctx: Context = await self.get_context(after, cls=Context)

@@ -200,6 +200,7 @@ async def patch_guild_automod(guild_id: int, data: AutomodUpdate):
 
 @router.get("/{guild_id}/tickets", response_model=TicketConfig, summary="Get Ticket config", description="Retrieves the support ticket system setup, categories, and staff roles.")
 async def get_guild_tickets(guild_id: int):
+    raise HTTPException(status_code=410, detail="Tickets are managed from the CLS OS dashboard.")
     """
     Retrieves the ticket system configuration for a specific guild.
     """
@@ -270,6 +271,7 @@ async def get_guild_tickets(guild_id: int):
 
 @router.patch("/{guild_id}/tickets", summary="Update Ticket config", description="Updates the ticket system configuration, including categories and embed details.")
 async def patch_guild_tickets(guild_id: int, data: TicketUpdate):
+    raise HTTPException(status_code=410, detail="Tickets are managed from the CLS OS dashboard.")
     """
     Updates the ticket system configuration for a specific guild.
     """
@@ -420,6 +422,7 @@ async def patch_guild_leveling(guild_id: int, data: LevelingUpdate):
 
 @router.get("/{guild_id}/welcome", response_model=WelcomeConfig, summary="Get Welcome config", description="Retrieves the greet/welcome messages setup.")
 async def get_guild_welcome(guild_id: int):
+    raise HTTPException(status_code=410, detail="Welcome is managed from the CLS OS dashboard.")
     import aiosqlite
     import json
     
@@ -452,6 +455,7 @@ async def get_guild_welcome(guild_id: int):
 
 @router.patch("/{guild_id}/welcome", summary="Update Welcome config", description="Updates welcome/greet configuration.")
 async def patch_guild_welcome(guild_id: int, data: WelcomeUpdate):
+    raise HTTPException(status_code=410, detail="Welcome is managed from the CLS OS dashboard.")
     import aiosqlite
     import json
     
@@ -627,6 +631,7 @@ async def delete_guild_vanityroles(guild_id: int, vanity: str):
 
 @router.get("/{guild_id}/autorole", response_model=AutoRoleConfig, summary="Get AutoRole config")
 async def get_guild_autorole(guild_id: int):
+    raise HTTPException(status_code=410, detail="Join roles are managed from the CLS OS dashboard, under Role Automation → Join Roles.")
     import aiosqlite
     
     async with aiosqlite.connect("db/autorole.db") as db:
@@ -661,6 +666,7 @@ async def get_guild_autorole(guild_id: int):
 
 @router.patch("/{guild_id}/autorole", summary="Update AutoRole config")
 async def patch_guild_autorole(guild_id: int, data: AutoRoleUpdate):
+    raise HTTPException(status_code=410, detail="Join roles are managed from the CLS OS dashboard, under Role Automation → Join Roles.")
     import aiosqlite
     
     async with aiosqlite.connect("db/autorole.db") as db:
@@ -699,6 +705,7 @@ async def patch_guild_autorole(guild_id: int, data: AutoRoleUpdate):
 
 @router.delete("/{guild_id}/welcome", summary="Delete Welcome config")
 async def delete_guild_welcome(guild_id: int):
+    raise HTTPException(status_code=410, detail="Welcome is managed from the CLS OS dashboard.")
     import aiosqlite
     async with aiosqlite.connect("db/welcome.db") as db:
         await db.execute("DELETE FROM welcome WHERE guild_id = ?", (guild_id,))
@@ -1122,6 +1129,7 @@ async def get_guild_roles(guild_id: int, bot: "zyrox" = Depends(get_bot)):
 
 @router.get("/{guild_id}/autoreact", response_model=AutoReactConfig, summary="Get AutoReact config")
 async def get_guild_autoreact(guild_id: int):
+    raise HTTPException(status_code=410, detail="Auto react is managed from the CLS OS dashboard.")
     import aiosqlite
     async with aiosqlite.connect("db/autoreact.db") as db:
         await db.execute("""
@@ -1204,6 +1212,7 @@ async def patch_guild_invcrole(guild_id: int, data: InvcUpdate):
 
 @router.get("/{guild_id}/autoreact", response_model=AutoReactConfig, summary="Get AutoReact config")
 async def get_guild_autoreact(guild_id: int):
+    raise HTTPException(status_code=410, detail="Auto react is managed from the CLS OS dashboard.")
     import aiosqlite
     async with aiosqlite.connect("db/autoreact.db") as db:
         await db.execute("""
@@ -1223,6 +1232,7 @@ async def get_guild_autoreact(guild_id: int):
 
 @router.patch("/{guild_id}/autoreact", summary="Update AutoReact config")
 async def patch_guild_autoreact(guild_id: int, data: AutoReactUpdate):
+    raise HTTPException(status_code=410, detail="Auto react is managed from the CLS OS dashboard.")
     db = await db_manager.get_connection("db/autoreact.db")
     await db.execute("""
         CREATE TABLE IF NOT EXISTS autoreact (
@@ -1277,6 +1287,7 @@ async def get_guild_invites(guild_id: int):
 
 @router.get("/{guild_id}/reactionroles", response_model=RRConfig, summary="Get Reaction Roles config")
 async def get_guild_rr(guild_id: int):
+    raise HTTPException(status_code=410, detail="Role menus are managed from the CLS OS dashboard.")
     db = await db_manager.get_connection("rr.db")
     await db.execute("""
         CREATE TABLE IF NOT EXISTS reaction_roles (
@@ -1313,6 +1324,7 @@ async def get_guild_rr(guild_id: int):
 
 @router.patch("/{guild_id}/reactionroles", summary="Update Reaction Roles config")
 async def patch_guild_rr(guild_id: int, data: RRUpdate):
+    raise HTTPException(status_code=410, detail="Role menus are managed from the CLS OS dashboard.")
     db = await db_manager.get_connection("rr.db")
     await db.execute("""
         CREATE TABLE IF NOT EXISTS reaction_roles (

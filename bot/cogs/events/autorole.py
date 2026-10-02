@@ -43,6 +43,7 @@ class Autorole2(Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
+        return
         data = await self.get_autorole(member.guild.id)
         bot_roles = data["bots"]
         human_roles = data["humans"]

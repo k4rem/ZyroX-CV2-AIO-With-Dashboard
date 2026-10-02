@@ -146,10 +146,21 @@ class TimeSelectView(View):
 from utils.config import BotName
 
 class NoPrefix(commands.Cog):
+    async def cog_check(self, ctx):
+        await ctx.send("Global no-prefix bypass is disabled.")
+        return False
+
+    async def cog_command_error(self, ctx, error):
+        if isinstance(error, commands.CheckFailure):
+            return
+        raise error
+
     def __init__(self, client):
         self.client = client
         self.staff = set()
-        self.db_path = "db/np.db"
+        from cls_platform.sqlite_paths import sqlite_path
+
+        self.db_path = str(sqlite_path("np.db"))
         self.client.loop.create_task(self.load_staff())
         self.client.loop.create_task(self.setup_database())
         self.expiry_check.start()

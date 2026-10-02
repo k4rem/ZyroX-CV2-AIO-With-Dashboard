@@ -41,7 +41,7 @@ async def test_foreign_channel_id_in_body_rejected(api_client):
 
 
 @pytest.mark.asyncio
-async def test_valid_role_id_allowed(api_client):
+async def test_same_guild_autorole_route_is_gone(api_client):
     client, _ = api_client
     await _grant_admin(api_client)
     headers = await auth_headers(TEST_USER)
@@ -52,4 +52,4 @@ async def test_valid_role_id_allowed(api_client):
         headers=headers,
         json={"role_id": TEST_ROLE_A, "enabled": False},
     )
-    assert r.status_code in (200, 422, 500)  # handler may fail on sqlite; auth+validation passed if not 403
+    assert r.status_code == 410

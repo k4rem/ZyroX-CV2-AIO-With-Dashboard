@@ -62,7 +62,15 @@ class VariableButton(Button):
 class Welcomer(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.bot.loop.create_task(self._create_table())
+
+    async def cog_check(self, ctx):
+        await ctx.send("Welcome is managed from the CLS OS dashboard.")
+        return False
+
+    async def cog_command_error(self, ctx, error):
+        if isinstance(error, commands.CheckFailure):
+            return
+        raise error
 
     async def _create_table(self):
         async with aiosqlite.connect("db/welcome.db") as db:
